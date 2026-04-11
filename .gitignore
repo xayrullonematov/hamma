@@ -1,0 +1,79 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Visual Studio Code related
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Android related
+**/android/**/generated/
+**/android/captures/
+**/android/gradle/
+**/android/local.properties
+**/android/bundle/
+**/android/app/src/main/res/raw/google_services.json
+
+# iOS related
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/ephemeral/
+**/ios/DerivedData/
+**/ios/Pods/
+**/ios/.generated/
+**/ios/.symlinks/
+**/ios/Config/
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# Environment Secrets
+.env*
+*.secret
+*.jks
+*.keystore
+google-services.json
+GoogleService-Info.plist
+
+# GitHub Actions
+# No specific ignores needed for GH Actions usually, but ensuring secrets are out is key.
