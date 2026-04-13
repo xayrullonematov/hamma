@@ -2,51 +2,70 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'ai_provider.dart';
+
 class AiApiConfig {
   const AiApiConfig({
+    required this.provider,
     required this.baseUrl,
     required this.apiKey,
     required this.model,
   });
 
-  const AiApiConfig.placeholder()
-      : baseUrl = 'https://api.openai.com/v1',
-        apiKey = 'YOUR_OPENAI_API_KEY',
-        model = 'gpt-4.1-mini';
+  factory AiApiConfig.forProvider({
+    required AiProvider provider,
+    required String apiKey,
+  }) {
+    switch (provider) {
+      case AiProvider.openAi:
+        return AiApiConfig(
+          provider: provider,
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey: apiKey,
+          // Beta: single cheap model — upgrade to gpt-4o when scaling
+          model: 'gpt-4.1-mini',
+        );
+      case AiProvider.gemini:
+        return AiApiConfig(
+          provider: provider,
+          baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+          apiKey: apiKey,
+          // Beta: single cheap model — free tier has quota limits
+          model: 'gemini-2.5-flash',
+        );
+    }
+  }
 
+  final AiProvider provider;
   final String baseUrl;
   final String apiKey;
   final String model;
 
-  AiApiConfig copyWith({
-    String? baseUrl,
-    String? apiKey,
-    String? model,
-  }) {
-    return AiApiConfig(
-      baseUrl: baseUrl ?? this.baseUrl,
-      apiKey: apiKey ?? this.apiKey,
-      model: model ?? this.model,
-    );
-  }
-
-  bool get isConfigured {
-    return apiKey.isNotEmpty && apiKey != 'YOUR_OPENAI_API_KEY';
-  }
+  bool get isConfigured => apiKey.trim().isNotEmpty;
 }
 
 class AiCommandService {
   const AiCommandService({
-    this.config = const AiApiConfig.placeholder(),
+    required this.config,
   });
 
-  final AiApiConfig config;
-
-  AiCommandService withApiKey(String apiKey) {
+  factory AiCommandService.forProvider({
+    required AiProvider provider,
+    required String apiKey,
+  }) {
     return AiCommandService(
-      config: config.copyWith(apiKey: apiKey),
+      config: AiApiConfig.forProvider(
+        provider: provider,
+        apiKey: apiKey,
+      ),
     );
   }
+
+  static const _systemInstruction =
+      'Convert user request into safe Linux shell commands. '
+      'Return ONLY a JSON array of commands. No explanations.';
+
+  final AiApiConfig config;
 
   Future<List<String>> generateCommands(String prompt) async {
     final trimmedPrompt = prompt.trim();
@@ -55,8 +74,8 @@ class AiCommandService {
     }
 
     if (!config.isConfigured) {
-      throw const AiCommandServiceException(
-        'AI API key is not configured. Update AiApiConfig before generating commands.',
+      throw AiCommandServiceException(
+        '${config.provider.label} API key is not set. Update it in Settings before generating commands.',
       );
     }
 
@@ -64,64 +83,19 @@ class AiCommandService {
     client.connectionTimeout = const Duration(seconds: 15);
 
     try {
-      final request = await client
-          .postUrl(Uri.parse('${config.baseUrl}/chat/completions'))
-          .timeout(const Duration(seconds: 15));
-
-      request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${config.apiKey}');
-
-      request.write(
-        jsonEncode({
-          'model': config.model,
-          'temperature': 0.2,
-          'messages': [
-            {
-              'role': 'system',
-              'content': 'Convert user request into safe Linux shell commands. '
-                  'Return ONLY a JSON array of commands. No explanations.',
-            },
-            {
-              'role': 'user',
-              'content': trimmedPrompt,
-            },
-          ],
-        }),
-      );
-
-      final response =
-          await request.close().timeout(const Duration(seconds: 30));
-      final responseBody = await response.transform(utf8.decoder).join();
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw AiCommandServiceException(
-          _extractErrorMessage(responseBody) ??
-              'AI request failed with status ${response.statusCode}.',
-        );
+      switch (config.provider) {
+        case AiProvider.openAi:
+          return await _generateWithOpenAi(client, trimmedPrompt);
+        case AiProvider.gemini:
+          return await _generateWithGemini(client, trimmedPrompt);
       }
-
-      final content = _extractAssistantContent(responseBody);
-      if (content == null || content.trim().isEmpty) {
-        throw const AiCommandServiceException(
-          'AI returned an empty response.',
-        );
-      }
-
-      final commands = _parseCommands(content);
-      if (commands.isEmpty) {
-        throw const AiCommandServiceException(
-          'AI returned no commands.',
-        );
-      }
-
-      return commands;
     } on TimeoutException {
       throw const AiCommandServiceException(
         'AI request timed out. Try again.',
       );
     } on SocketException {
       throw const AiCommandServiceException(
-        'Network error while contacting the AI API.',
+        'Network error while contacting the AI provider.',
       );
     } on FormatException {
       throw const AiCommandServiceException(
@@ -132,7 +106,123 @@ class AiCommandService {
     }
   }
 
-  String? _extractAssistantContent(String responseBody) {
+  Future<List<String>> _generateWithOpenAi(
+    HttpClient client,
+    String prompt,
+  ) async {
+    final request = await client
+        .postUrl(Uri.parse('${config.baseUrl}/chat/completions'))
+        .timeout(const Duration(seconds: 15));
+
+    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer ${config.apiKey}',
+    );
+
+    request.write(
+      jsonEncode({
+        'model': config.model,
+        'temperature': 0.2,
+        'messages': [
+          {
+            'role': 'system',
+            'content': _systemInstruction,
+          },
+          {
+            'role': 'user',
+            'content': prompt,
+          },
+        ],
+      }),
+    );
+
+    final response = await request.close().timeout(const Duration(seconds: 30));
+    final responseBody = await response.transform(utf8.decoder).join();
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AiCommandServiceException(
+        _extractErrorMessage(responseBody) ??
+            _providerErrorMessage(
+              provider: config.provider,
+              statusCode: response.statusCode,
+            ),
+      );
+    }
+
+    final content = _extractOpenAiContent(responseBody);
+    if (content == null || content.trim().isEmpty) {
+      throw const AiCommandServiceException(
+        'OpenAI returned an empty response.',
+      );
+    }
+
+    final commands = _parseCommands(content);
+    if (commands.isEmpty) {
+      throw const AiCommandServiceException(
+        'OpenAI returned no commands.',
+      );
+    }
+
+    return commands;
+  }
+
+  Future<List<String>> _generateWithGemini(
+    HttpClient client,
+    String prompt,
+  ) async {
+    final request = await client
+        .postUrl(Uri.parse('${config.baseUrl}/models/${config.model}:generateContent'))
+        .timeout(const Duration(seconds: 15));
+
+    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+    request.headers.set('x-goog-api-key', config.apiKey);
+
+    request.write(
+      jsonEncode({
+        'contents': [
+          {
+            'parts': [
+              {
+                'text': '$_systemInstruction\n\nUser request: $prompt',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    final response = await request.close().timeout(const Duration(seconds: 30));
+    final responseBody = await response.transform(utf8.decoder).join();
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AiCommandServiceException(
+        _extractErrorMessage(responseBody) ??
+            _providerErrorMessage(
+              provider: config.provider,
+              statusCode: response.statusCode,
+            ),
+      );
+    }
+
+    final content = _extractGeminiContent(responseBody);
+    if (content == null || content.trim().isEmpty) {
+      throw const AiCommandServiceException(
+        'Gemini returned an empty response.',
+      );
+    }
+
+    final commands = _parseCommands(content);
+    if (commands.isEmpty) {
+      throw const AiCommandServiceException(
+        'Gemini returned no commands.',
+      );
+    }
+
+    return commands;
+  }
+
+  String? _extractOpenAiContent(String responseBody) {
     final decoded = jsonDecode(responseBody);
     if (decoded is! Map<String, dynamic>) {
       return null;
@@ -168,11 +258,52 @@ class AiCommandService {
           }
         }
       }
+
       final combined = buffer.toString().trim();
       return combined.isEmpty ? null : combined;
     }
 
     return null;
+  }
+
+  String? _extractGeminiContent(String responseBody) {
+    final decoded = jsonDecode(responseBody);
+    if (decoded is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final candidates = decoded['candidates'];
+    if (candidates is! List || candidates.isEmpty) {
+      return null;
+    }
+
+    final firstCandidate = candidates.first;
+    if (firstCandidate is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final content = firstCandidate['content'];
+    if (content is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final parts = content['parts'];
+    if (parts is! List || parts.isEmpty) {
+      return null;
+    }
+
+    final buffer = StringBuffer();
+    for (final part in parts) {
+      if (part is Map<String, dynamic>) {
+        final text = part['text'];
+        if (text is String) {
+          buffer.write(text);
+        }
+      }
+    }
+
+    final combined = buffer.toString().trim();
+    return combined.isEmpty ? null : combined;
   }
 
   List<String> _parseCommands(String rawContent) {
@@ -236,6 +367,31 @@ class AiCommandService {
     }
 
     return null;
+  }
+
+  String _providerErrorMessage({
+    required AiProvider provider,
+    required int statusCode,
+  }) {
+    // Fix 1: Gemini returns 403 for both invalid key AND quota exceeded.
+    // OpenAI uses 401 for invalid key and 429 for quota — keep separate.
+    if (provider == AiProvider.gemini) {
+      if (statusCode == 401 || statusCode == 403) {
+        return 'Gemini rejected the request. Check your API key or free-tier quota.';
+      }
+      if (statusCode == 429) {
+        return 'Gemini free-tier limit reached. Try again later or switch to OpenAI in Settings.';
+      }
+    } else {
+      if (statusCode == 401 || statusCode == 403) {
+        return '${provider.label} rejected the API key. Check the key and try again.';
+      }
+      if (statusCode == 429) {
+        return '${provider.label} quota limit reached. Check your plan or try again later.';
+      }
+    }
+
+    return '${provider.label} request failed with status $statusCode.';
   }
 }
 

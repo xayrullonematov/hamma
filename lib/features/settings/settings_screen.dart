@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../../core/ai/ai_provider.dart';
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
+    required this.initialProvider,
     required this.initialApiKey,
-    required this.onSaveApiKey,
+    required this.onSaveAiSettings,
   });
 
+  final AiProvider initialProvider;
   final String initialApiKey;
-  final Future<void> Function(String apiKey) onSaveApiKey;
+  final Future<void> Function(AiProvider provider, String apiKey) onSaveAiSettings;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -16,12 +20,14 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _apiKeyController;
+  late AiProvider _selectedProvider;
   bool _isSaving = false;
   String _status = '';
 
   @override
   void initState() {
     super.initState();
+    _selectedProvider = widget.initialProvider;
     _apiKeyController = TextEditingController(text: widget.initialApiKey);
   }
 
@@ -36,17 +42,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() {
       _isSaving = true;
-      _status = apiKey.isEmpty ? 'Clearing API key' : 'Saving API key';
+      _status = apiKey.isEmpty ? 'Clearing API key' : 'Saving AI settings';
     });
 
     try {
-      await widget.onSaveApiKey(apiKey);
+      await widget.onSaveAiSettings(_selectedProvider, apiKey);
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _status = apiKey.isEmpty ? 'API key cleared.' : 'API key saved.';
+        _status = apiKey.isEmpty ? 'API key cleared.' : 'AI settings saved.';
       });
     } catch (error) {
       if (!mounted) {
@@ -54,7 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       setState(() {
-        _status = 'Failed to save API key: $error';
+        _status = 'Failed to save AI settings: $error';
       });
     } finally {
       if (mounted) {
@@ -76,15 +82,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-              TextField(
-                controller: _apiKeyController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Enter API Key',
-                  helperText: 'Leave blank to clear the saved API key.',
-                  border: OutlineInputBorder(),
-                ),
+            DropdownButtonFormField<AiProvider>(
+              value: _selectedProvider,
+              decoration: const InputDecoration(
+                labelText: 'AI Provider',
+                border: OutlineInputBorder(),
               ),
+              items: AiProvider.values.map((provider) {
+                return DropdownMenuItem<AiProvider>(
+                  value: provider,
+                  child: Text(provider.label),
+                );
+              }).toList(),
+              onChanged: _isSaving
+                  ? null
+                  : (provider) {
+                      if (provider == null) {
+                        return;
+                      }
+
+                      setState(() {
+                        _selectedProvider = provider;
+                      });
+                    },
+            ),
+            const SizedBox(height: 8),
+            Text(_selectedProvider.helperText),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _apiKeyController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Enter API Key',
+                helperText: 'Leave blank to clear the saved API key.',
+                border: OutlineInputBorder(),
+              ),
+            ),
             const SizedBox(height: 12),
             FilledButton(
               onPressed: _isSaving ? null : _save,

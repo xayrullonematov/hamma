@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/ai/ai_command_service.dart';
+import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
 import '../../core/ssh/ssh_service.dart';
 
@@ -8,10 +9,12 @@ class AiAssistantScreen extends StatefulWidget {
   const AiAssistantScreen({
     super.key,
     required this.sshService,
+    required this.provider,
     required this.apiKey,
   });
 
   final SshService sshService;
+  final AiProvider provider;
   final String apiKey;
 
   @override
@@ -50,14 +53,21 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   @override
   void initState() {
     super.initState();
-    _aiCommandService = const AiCommandService().withApiKey(widget.apiKey);
+    _aiCommandService = AiCommandService.forProvider(
+      provider: widget.provider,
+      apiKey: widget.apiKey,
+    );
   }
 
   @override
   void didUpdateWidget(covariant AiAssistantScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.apiKey != widget.apiKey) {
-      _aiCommandService = const AiCommandService().withApiKey(widget.apiKey);
+    if (oldWidget.apiKey != widget.apiKey ||
+        oldWidget.provider != widget.provider) {
+      _aiCommandService = AiCommandService.forProvider(
+        provider: widget.provider,
+        apiKey: widget.apiKey,
+      );
     }
   }
 
@@ -81,7 +91,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
     if (widget.apiKey.trim().isEmpty) {
       setState(() {
-        _status = 'Set your API key in Settings before generating commands.';
+        _status =
+            'Set your ${widget.provider.label} API key in Settings before generating commands.';
       });
       return;
     }
@@ -342,6 +353,29 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI Assistant'),
+        // Fix 4: provider badge in app bar — user always knows which AI is active
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.secondaryContainer,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  widget.provider.label,
+                  style: TextStyle(
+                    color: theme.colorScheme.onSecondaryContainer,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),

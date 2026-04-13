@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../ai_assistant/ai_assistant_screen.dart';
@@ -11,13 +12,16 @@ class ServerDashboardScreen extends StatefulWidget {
   const ServerDashboardScreen({
     super.key,
     required this.server,
+    required this.aiProvider,
     required this.apiKey,
-    required this.onSaveApiKey,
+    required this.onSaveAiSettings,
   });
 
   final ServerProfile server;
+  final AiProvider aiProvider;
   final String apiKey;
-  final Future<void> Function(String apiKey) onSaveApiKey;
+  final Future<void> Function(AiProvider provider, String apiKey)
+      onSaveAiSettings;
 
   @override
   State<ServerDashboardScreen> createState() => _ServerDashboardScreenState();
@@ -27,6 +31,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   static const _connectionTestCommand = 'uname -a';
 
   final SshService _sshService = SshService();
+  late AiProvider _aiProvider;
   late String _apiKey;
 
   bool _isBusy = false;
@@ -41,12 +46,16 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _aiProvider = widget.aiProvider;
     _apiKey = widget.apiKey;
   }
 
   @override
   void didUpdateWidget(covariant ServerDashboardScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.aiProvider != widget.aiProvider) {
+      _aiProvider = widget.aiProvider;
+    }
     if (oldWidget.apiKey != widget.apiKey) {
       _apiKey = widget.apiKey;
     }
@@ -58,13 +67,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _saveApiKey(String apiKey) async {
-    await widget.onSaveApiKey(apiKey);
+  Future<void> _saveAiSettings(AiProvider provider, String apiKey) async {
+    await widget.onSaveAiSettings(provider, apiKey);
     if (!mounted) {
       return;
     }
 
     setState(() {
+      _aiProvider = provider;
       _apiKey = apiKey;
     });
   }
@@ -309,8 +319,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => SettingsScreen(
+          initialProvider: _aiProvider,
           initialApiKey: _apiKey,
-          onSaveApiKey: _saveApiKey,
+          onSaveAiSettings: _saveAiSettings,
         ),
       ),
     );
@@ -452,6 +463,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                         MaterialPageRoute<void>(
                           builder: (_) => AiAssistantScreen(
                             sshService: _sshService,
+                            provider: _aiProvider,
                             apiKey: _apiKey,
                           ),
                         ),

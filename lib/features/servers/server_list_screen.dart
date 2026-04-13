@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/storage/saved_servers_storage.dart';
 import '../settings/settings_screen.dart';
@@ -9,13 +10,16 @@ import 'server_form_screen.dart';
 class ServerListScreen extends StatefulWidget {
   const ServerListScreen({
     super.key,
+    required this.aiProvider,
     required this.apiKey,
-    required this.onSaveApiKey,
+    required this.onSaveAiSettings,
     this.startupWarning,
   });
 
+  final AiProvider aiProvider;
   final String apiKey;
-  final Future<void> Function(String apiKey) onSaveApiKey;
+  final Future<void> Function(AiProvider provider, String apiKey)
+      onSaveAiSettings;
   final String? startupWarning;
 
   @override
@@ -214,8 +218,9 @@ class _ServerListScreenState extends State<ServerListScreen> {
       MaterialPageRoute<void>(
         builder: (_) => ServerDashboardScreen(
           server: server,
+          aiProvider: widget.aiProvider,
           apiKey: widget.apiKey,
-          onSaveApiKey: widget.onSaveApiKey,
+          onSaveAiSettings: widget.onSaveAiSettings,
         ),
       ),
     );
@@ -225,8 +230,9 @@ class _ServerListScreenState extends State<ServerListScreen> {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => SettingsScreen(
+          initialProvider: widget.aiProvider,
           initialApiKey: widget.apiKey,
-          onSaveApiKey: widget.onSaveApiKey,
+          onSaveAiSettings: widget.onSaveAiSettings,
         ),
       ),
     );

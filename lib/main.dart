@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/ai/ai_provider.dart';
 import 'core/storage/api_key_storage.dart';
 import 'features/servers/server_list_screen.dart';
 
@@ -7,21 +8,24 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   const apiKeyStorage = ApiKeyStorage();
-  String savedApiKey = '';
-  String? apiKeyStartupWarning;
+  var savedSettings = const AiSettings(
+    provider: AiProvider.openAi,
+    apiKey: '',
+  );
+  String? aiSettingsStartupWarning;
 
   try {
-    savedApiKey = await apiKeyStorage.loadApiKey() ?? '';
+    savedSettings = await apiKeyStorage.loadSettings();
   } catch (error) {
-    apiKeyStartupWarning =
-        'Could not load the saved API key. You can continue and re-save it in Settings.\n$error';
+    aiSettingsStartupWarning =
+        'Could not load the saved AI settings. You can continue and re-save them in Settings.\n$error';
   }
 
   runApp(
     AiServerApp(
       apiKeyStorage: apiKeyStorage,
-      initialApiKey: savedApiKey,
-      initialApiKeyLoadError: apiKeyStartupWarning,
+      initialSettings: savedSettings,
+      initialAiSettingsLoadError: aiSettingsStartupWarning,
     ),
   );
 }
@@ -30,30 +34,37 @@ class AiServerApp extends StatefulWidget {
   const AiServerApp({
     super.key,
     required this.apiKeyStorage,
-    required this.initialApiKey,
-    this.initialApiKeyLoadError,
+    required this.initialSettings,
+    this.initialAiSettingsLoadError,
   });
 
   final ApiKeyStorage apiKeyStorage;
-  final String initialApiKey;
-  final String? initialApiKeyLoadError;
+  final AiSettings initialSettings;
+  final String? initialAiSettingsLoadError;
 
   @override
   State<AiServerApp> createState() => _AiServerAppState();
 }
 
 class _AiServerAppState extends State<AiServerApp> {
+  late AiProvider _aiProvider;
   late String _apiKey;
 
   @override
   void initState() {
     super.initState();
-    _apiKey = widget.initialApiKey;
+    _aiProvider = widget.initialSettings.provider;
+    _apiKey = widget.initialSettings.apiKey;
   }
 
-  Future<void> _saveApiKey(String apiKey) async {
-    await widget.apiKeyStorage.saveApiKey(apiKey);
+  Future<void> _saveAiSettings(AiProvider provider, String apiKey) async {
+    await widget.apiKeyStorage.saveSettings(
+      provider: provider,
+      apiKey: apiKey,
+    );
+
     setState(() {
+      _aiProvider = provider;
       _apiKey = apiKey;
     });
   }
@@ -67,9 +78,10 @@ class _AiServerAppState extends State<AiServerApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1F6F5F)),
       ),
       home: ServerListScreen(
+        aiProvider: _aiProvider,
         apiKey: _apiKey,
-        onSaveApiKey: _saveApiKey,
-        startupWarning: widget.initialApiKeyLoadError,
+        onSaveAiSettings: _saveAiSettings,
+        startupWarning: widget.initialAiSettingsLoadError,
       ),
     );
   }
