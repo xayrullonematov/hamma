@@ -448,6 +448,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                           builder: (_) => TerminalScreen(
                             sshService: _sshService,
                             serverName: _server.name,
+                            aiProvider: _aiProvider,
+                            apiKey: _apiKey,
                           ),
                         ),
                       );

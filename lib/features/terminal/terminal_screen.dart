@@ -6,17 +6,23 @@ import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:xterm/xterm.dart';
 
+import '../../core/ai/ai_provider.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../ai_assistant/ai_copilot_sheet.dart';
 
 class TerminalScreen extends StatefulWidget {
   const TerminalScreen({
     super.key,
     required this.sshService,
     required this.serverName,
+    required this.aiProvider,
+    required this.apiKey,
   });
 
   final SshService sshService;
   final String serverName;
+  final AiProvider aiProvider;
+  final String apiKey;
 
   @override
   State<TerminalScreen> createState() => _TerminalScreenState();
@@ -78,6 +84,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
         }
 
         setState(() {
+          _session = null;
           _status = 'Shell closed';
         });
         _terminal.write('\r\n[session closed]\r\n');
@@ -93,6 +100,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       }
 
       setState(() {
+        _session = null;
         _status = 'Failed to open shell';
       });
       _terminal.write('Failed to open shell.\r\n$error\r\n');
@@ -117,11 +125,48 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _session?.resizeTerminal(width, height, pixelWidth, pixelHeight);
   }
 
+  Future<void> _sendCommandToShell(String command) async {
+    final session = _session;
+    if (session == null) {
+      throw StateError('Terminal shell is not connected.');
+    }
+
+    session.write(Uint8List.fromList(utf8.encode('$command\n')));
+  }
+
+  Future<void> _openCopilot() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: false,
+      builder: (_) {
+        return FractionallySizedBox(
+          heightFactor: 0.82,
+          child: AiCopilotSheet(
+            provider: widget.aiProvider,
+            apiKey: widget.apiKey,
+            canRunCommands: () => _session != null,
+            onRunCommand: _sendCommandToShell,
+            executionUnavailableMessage:
+                'Terminal shell is disconnected. Reconnect before running commands.',
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Terminal: ${widget.serverName}'),
+        actions: [
+          IconButton(
+            onPressed: _openCopilot,
+            icon: const Icon(Icons.smart_toy_outlined),
+            tooltip: 'AI Copilot',
+          ),
+        ],
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -144,6 +189,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openCopilot,
+        child: const Icon(Icons.smart_toy_outlined),
       ),
     );
   }
