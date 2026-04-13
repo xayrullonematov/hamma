@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/storage/saved_servers_storage.dart';
 import '../settings/settings_screen.dart';
+import 'server_dashboard_screen.dart';
 import 'server_form_screen.dart';
-import 'server_test_screen.dart';
 
 class ServerListScreen extends StatefulWidget {
   const ServerListScreen({
@@ -212,7 +212,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
   void _openServer(ServerProfile server) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ServerTestScreen(
+        builder: (_) => ServerDashboardScreen(
           server: server,
           apiKey: widget.apiKey,
           onSaveApiKey: widget.onSaveApiKey,

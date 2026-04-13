@@ -5,11 +5,10 @@ import '../../core/ssh/ssh_service.dart';
 import '../ai_assistant/ai_assistant_screen.dart';
 import '../quick_actions/quick_actions.dart';
 import '../settings/settings_screen.dart';
-import '../terminal/terminal_test_command.dart';
 import '../terminal/terminal_screen.dart';
 
-class ServerTestScreen extends StatefulWidget {
-  const ServerTestScreen({
+class ServerDashboardScreen extends StatefulWidget {
+  const ServerDashboardScreen({
     super.key,
     required this.server,
     required this.apiKey,
@@ -21,17 +20,21 @@ class ServerTestScreen extends StatefulWidget {
   final Future<void> Function(String apiKey) onSaveApiKey;
 
   @override
-  State<ServerTestScreen> createState() => _ServerTestScreenState();
+  State<ServerDashboardScreen> createState() => _ServerDashboardScreenState();
 }
 
-class _ServerTestScreenState extends State<ServerTestScreen> {
+class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
+  static const _connectionTestCommand = 'uname -a';
+
   final SshService _sshService = SshService();
   late String _apiKey;
 
   bool _isBusy = false;
+  bool _isShowingMessage = false; // Fix 2: snackbar spam guard
   String? _activeQuickActionId;
-  String _status = 'Not connected';
-  String _output = 'Press Connect to start managing this server.';
+  String? _status;
+  String _quickActionOutput = 'Quick action results will appear here.';
+  ConnectionTestState _connectionTestState = ConnectionTestState.idle;
 
   ServerProfile get _server => widget.server;
 
@@ -42,7 +45,7 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
   }
 
   @override
-  void didUpdateWidget(covariant ServerTestScreen oldWidget) {
+  void didUpdateWidget(covariant ServerDashboardScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.apiKey != widget.apiKey) {
       _apiKey = widget.apiKey;
@@ -68,17 +71,20 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
 
   Future<void> _connect() async {
     if (!_server.isValid) {
+      _showMessage('Saved server profile is incomplete');
       setState(() {
-        _status = 'Saved server profile is incomplete';
-        _output = 'Edit this server from the saved servers list and try again.';
+        _status = null;
+        _connectionTestState = ConnectionTestState.failed;
       });
       return;
     }
 
+    final buttonLabel = _sshService.isConnected ? 'Reconnecting' : 'Connecting';
+
     setState(() {
       _isBusy = true;
-      _status = 'Connecting to ${_server.host}:${_server.port}';
-      _output = '';
+      _status = '$buttonLabel to ${_server.host}:${_server.port}';
+      _connectionTestState = ConnectionTestState.idle;
     });
 
     try {
@@ -91,43 +97,57 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
       );
 
       setState(() {
-        _status = 'Connected to ${_server.name}';
-        _output = 'Connection established. Press "Run Test Command" to execute '
-            '`$kTerminalTestCommand`.';
+        _status = null;
+        _connectionTestState = ConnectionTestState.idle;
       });
     } catch (error) {
+      _showMessage(error.toString());
       setState(() {
-        _status = 'Connection failed';
-        _output = error.toString();
+        _status = null;
+        _connectionTestState = ConnectionTestState.failed;
       });
     } finally {
-      setState(() {
-        _isBusy = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
     }
   }
 
-  Future<void> _runTestCommand() async {
+  Future<void> _runConnectionTest() async {
     setState(() {
       _isBusy = true;
-      _status = 'Running `$kTerminalTestCommand`';
+      _status = 'Running connection test';
     });
 
     try {
-      final output = await _sshService.execute(kTerminalTestCommand);
+      await _sshService.execute(_connectionTestCommand);
       setState(() {
-        _status = 'Command finished';
-        _output = output.isEmpty ? '(no output)' : output;
+        _status = null;
+        _connectionTestState = ConnectionTestState.connected;
       });
     } catch (error) {
-      await _handleExecutionError(
-        failureStatus: 'Command failed',
-        error: error,
-      );
-    } finally {
+      final message = error.toString();
+      if (_looksLikeDisconnect(message)) {
+        await _sshService.disconnect();
+      }
+      _showMessage(message);
+
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
-        _isBusy = false;
+        _status = null;
+        _connectionTestState = ConnectionTestState.failed;
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
     }
   }
 
@@ -148,19 +168,18 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
     try {
       final output = await _sshService.execute(action.command);
       setState(() {
-        _status = '"${action.label}" finished';
-        _output = output.isEmpty ? '(no output)' : output;
+        _status = null;
+        _quickActionOutput = output.isEmpty ? '(no output)' : output;
       });
     } catch (error) {
-      await _handleExecutionError(
-        failureStatus: '"${action.label}" failed',
-        error: error,
-      );
+      await _handleQuickActionError(error: error);
     } finally {
-      setState(() {
-        _isBusy = false;
-        _activeQuickActionId = null;
-      });
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+          _activeQuickActionId = null;
+        });
+      }
     }
   }
 
@@ -243,8 +262,7 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
         false;
   }
 
-  Future<void> _handleExecutionError({
-    required String failureStatus,
+  Future<void> _handleQuickActionError({
     required Object error,
   }) async {
     final message = error.toString();
@@ -255,8 +273,9 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
       }
 
       setState(() {
-        _status = 'SSH connection lost. Reconnect to continue.';
-        _output = message;
+        _status = null;
+        _connectionTestState = ConnectionTestState.failed;
+        _quickActionOutput = message;
       });
       return;
     }
@@ -266,8 +285,8 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
     }
 
     setState(() {
-      _status = failureStatus;
-      _output = message;
+      _status = null;
+      _quickActionOutput = message;
     });
   }
 
@@ -297,9 +316,66 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
     );
   }
 
+  // Fix 2: debounced snackbar — no spam on repeated failures
+  void _showMessage(String message) {
+    if (!mounted || message.trim().isEmpty || _isShowingMessage) {
+      return;
+    }
+
+    _isShowingMessage = true;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)))
+        .closed
+        .then((_) {
+      _isShowingMessage = false;
+    });
+  }
+
+  // Fix 1: reflect connected state even before a test is run
+  String _displayStatus() {
+    if (_status != null && _status!.isNotEmpty) {
+      return _status!;
+    }
+
+    switch (_connectionTestState) {
+      case ConnectionTestState.idle:
+        return _sshService.isConnected
+            ? 'Connected (not verified)'
+            : 'Connection not tested';
+      case ConnectionTestState.connected:
+        return 'Connection verified';
+      case ConnectionTestState.failed:
+        return 'Connection failed';
+    }
+  }
+
+  Color _connectionBadgeColor(BuildContext context) {
+    switch (_connectionTestState) {
+      case ConnectionTestState.idle:
+        return Theme.of(context).colorScheme.secondary;
+      case ConnectionTestState.connected:
+        return Colors.green.shade700;
+      case ConnectionTestState.failed:
+        return Colors.red.shade700;
+    }
+  }
+
+  String _connectionBadgeLabel() {
+    switch (_connectionTestState) {
+      case ConnectionTestState.idle:
+        return 'Not Tested';
+      case ConnectionTestState.connected:
+        return 'Connected';
+      case ConnectionTestState.failed:
+        return 'Failed';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final connectButtonLabel = _sshService.isConnected ? 'Reconnect' : 'Connect';
 
     return Scaffold(
       appBar: AppBar(
@@ -315,17 +391,41 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
               style: theme.textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            Text(_status, style: theme.textTheme.bodyLarge),
+            Text(_displayStatus(), style: theme.textTheme.bodyLarge),
             const SizedBox(height: 16),
             FilledButton(
               onPressed: _isBusy ? null : _connect,
-              child: const Text('Connect'),
+              child: Text(connectButtonLabel),
             ),
             const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed:
-                  _isBusy || !_sshService.isConnected ? null : _runTestCommand,
-              child: const Text('Run Test Command'),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed:
+                        _isBusy || !_sshService.isConnected ? null : _runConnectionTest,
+                    child: const Text('Connection Test'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _connectionBadgeColor(context).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    _connectionBadgeLabel(),
+                    style: TextStyle(
+                      color: _connectionBadgeColor(context),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             OutlinedButton(
@@ -391,6 +491,8 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
               }).toList(),
             ),
             const SizedBox(height: 16),
+            Text('Quick Action Output', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 12),
             Expanded(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -401,7 +503,7 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
                   padding: const EdgeInsets.all(12),
                   child: SingleChildScrollView(
                     child: SelectableText(
-                      _output,
+                      _quickActionOutput,
                       style: const TextStyle(
                         color: Color(0xFFE2E8F0),
                         fontFamily: 'monospace',
@@ -416,4 +518,10 @@ class _ServerTestScreenState extends State<ServerTestScreen> {
       ),
     );
   }
+}
+
+enum ConnectionTestState {
+  idle,
+  connected,
+  failed,
 }
