@@ -83,7 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DropdownButtonFormField<AiProvider>(
-              value: _selectedProvider,
+              initialValue: _selectedProvider,
               decoration: const InputDecoration(
                 labelText: 'AI Provider',
                 border: OutlineInputBorder(),
