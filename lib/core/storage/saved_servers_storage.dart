@@ -6,14 +6,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/server_profile.dart';
 
 class SavedServersStorage {
-  static const _androidOptions = AndroidOptions(
-    encryptedSharedPreferences: true,
-  );
-
   const SavedServersStorage({
     FlutterSecureStorage? secureStorage,
-  }) : _secureStorage = secureStorage ??
-            const FlutterSecureStorage(aOptions: _androidOptions);
+  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _savedServersStorageKey = 'saved_servers';
 

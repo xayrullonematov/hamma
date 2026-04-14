@@ -13,14 +13,9 @@ class AiSettings {
 }
 
 class ApiKeyStorage {
-  static const _androidOptions = AndroidOptions(
-    encryptedSharedPreferences: true,
-  );
-
   const ApiKeyStorage({
     FlutterSecureStorage? secureStorage,
-  }) : _secureStorage = secureStorage ??
-            const FlutterSecureStorage(aOptions: _androidOptions);
+  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _apiKeyStorageKey = 'ai_api_key';
   static const _providerStorageKey = 'ai_provider';
