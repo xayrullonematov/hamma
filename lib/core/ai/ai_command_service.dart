@@ -62,12 +62,21 @@ class AiCommandService {
   }
 
   static const _systemInstruction =
-      'Convert user request into safe Linux shell commands. '
-      'Return ONLY a JSON array of commands. No explanations.';
+      'Convert user request into a safe ordered Linux shell plan. '
+      'Return ONLY a JSON array. '
+      'Each item must be either a string command or an object with '
+      '"title", "command", and optional "description". '
+      'Use one shell command per step. '
+      'Do not include markdown, code fences, or explanations outside JSON.';
+  static const _chatInstruction =
+      'You are a concise Linux and server operations assistant. '
+      'Explain errors, logs, Linux concepts, and debugging strategies clearly. '
+      'Reply in plain language only. '
+      'Do not return JSON, shell commands, command lists, or step plans.';
 
   final AiApiConfig config;
 
-  Future<List<String>> generateCommands(String prompt) async {
+  Future<List<AiCommandStep>> generateCommandPlan(String prompt) async {
     final trimmedPrompt = prompt.trim();
     if (trimmedPrompt.isEmpty) {
       throw const AiCommandServiceException('Prompt cannot be empty.');
@@ -85,9 +94,9 @@ class AiCommandService {
     try {
       switch (config.provider) {
         case AiProvider.openAi:
-          return await _generateWithOpenAi(client, trimmedPrompt);
+          return await _generatePlanWithOpenAi(client, trimmedPrompt);
         case AiProvider.gemini:
-          return await _generateWithGemini(client, trimmedPrompt);
+          return await _generatePlanWithGemini(client, trimmedPrompt);
       }
     } on TimeoutException {
       throw const AiCommandServiceException(
@@ -106,7 +115,47 @@ class AiCommandService {
     }
   }
 
-  Future<List<String>> _generateWithOpenAi(
+  Future<List<String>> generateCommands(String prompt) async {
+    final plan = await generateCommandPlan(prompt);
+    return plan.map((step) => step.command).toList();
+  }
+
+  Future<String> generateChatResponse(String prompt) async {
+    final trimmedPrompt = prompt.trim();
+    if (trimmedPrompt.isEmpty) {
+      throw const AiCommandServiceException('Prompt cannot be empty.');
+    }
+
+    if (!config.isConfigured) {
+      throw AiCommandServiceException(
+        '${config.provider.label} API key is not set. Update it in Settings before using chat.',
+      );
+    }
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 15);
+
+    try {
+      switch (config.provider) {
+        case AiProvider.openAi:
+          return await _chatWithOpenAi(client, trimmedPrompt);
+        case AiProvider.gemini:
+          return await _chatWithGemini(client, trimmedPrompt);
+      }
+    } on TimeoutException {
+      throw const AiCommandServiceException(
+        'AI request timed out. Try again.',
+      );
+    } on SocketException {
+      throw const AiCommandServiceException(
+        'Network error while contacting the AI provider.',
+      );
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<List<AiCommandStep>> _generatePlanWithOpenAi(
     HttpClient client,
     String prompt,
   ) async {
@@ -157,17 +206,17 @@ class AiCommandService {
       );
     }
 
-    final commands = _parseCommands(content);
-    if (commands.isEmpty) {
+    final plan = _parseCommandPlan(content);
+    if (plan.isEmpty) {
       throw const AiCommandServiceException(
         'OpenAI returned no commands.',
       );
     }
 
-    return commands;
+    return plan;
   }
 
-  Future<List<String>> _generateWithGemini(
+  Future<List<AiCommandStep>> _generatePlanWithGemini(
     HttpClient client,
     String prompt,
   ) async {
@@ -212,14 +261,118 @@ class AiCommandService {
       );
     }
 
-    final commands = _parseCommands(content);
-    if (commands.isEmpty) {
+    final plan = _parseCommandPlan(content);
+    if (plan.isEmpty) {
       throw const AiCommandServiceException(
         'Gemini returned no commands.',
       );
     }
 
-    return commands;
+    return plan;
+  }
+
+  Future<String> _chatWithOpenAi(
+    HttpClient client,
+    String prompt,
+  ) async {
+    final request = await client
+        .postUrl(Uri.parse('${config.baseUrl}/chat/completions'))
+        .timeout(const Duration(seconds: 15));
+
+    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer ${config.apiKey}',
+    );
+
+    request.write(
+      jsonEncode({
+        'model': config.model,
+        'temperature': 0.4,
+        'messages': [
+          {
+            'role': 'system',
+            'content': _chatInstruction,
+          },
+          {
+            'role': 'user',
+            'content': prompt,
+          },
+        ],
+      }),
+    );
+
+    final response = await request.close().timeout(const Duration(seconds: 30));
+    final responseBody = await response.transform(utf8.decoder).join();
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AiCommandServiceException(
+        _extractErrorMessage(responseBody) ??
+            _providerErrorMessage(
+              provider: config.provider,
+              statusCode: response.statusCode,
+            ),
+      );
+    }
+
+    final content = _extractOpenAiContent(responseBody);
+    if (content == null || content.trim().isEmpty) {
+      throw const AiCommandServiceException(
+        'OpenAI returned an empty response.',
+      );
+    }
+
+    return content.trim();
+  }
+
+  Future<String> _chatWithGemini(
+    HttpClient client,
+    String prompt,
+  ) async {
+    final request = await client
+        .postUrl(
+          Uri.parse('${config.baseUrl}/models/${config.model}:generateContent'),
+        )
+        .timeout(const Duration(seconds: 15));
+
+    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+    request.headers.set('x-goog-api-key', config.apiKey);
+
+    request.write(
+      jsonEncode({
+        'contents': [
+          {
+            'parts': [
+              {
+                'text': '$_chatInstruction\n\nUser request: $prompt',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    final response = await request.close().timeout(const Duration(seconds: 30));
+    final responseBody = await response.transform(utf8.decoder).join();
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw AiCommandServiceException(
+        _extractErrorMessage(responseBody) ??
+            _providerErrorMessage(
+              provider: config.provider,
+              statusCode: response.statusCode,
+            ),
+      );
+    }
+
+    final content = _extractGeminiContent(responseBody);
+    if (content == null || content.trim().isEmpty) {
+      throw const AiCommandServiceException(
+        'Gemini returned an empty response.',
+      );
+    }
+
+    return content.trim();
   }
 
   String? _extractOpenAiContent(String responseBody) {
@@ -306,11 +459,11 @@ class AiCommandService {
     return combined.isEmpty ? null : combined;
   }
 
-  List<String> _parseCommands(String rawContent) {
+  List<AiCommandStep> _parseCommandPlan(String rawContent) {
     final trimmed = rawContent.trim();
 
     try {
-      return _decodeCommandArray(trimmed);
+      return _decodeCommandPlanArray(trimmed);
     } on FormatException {
       final start = trimmed.indexOf('[');
       final end = trimmed.lastIndexOf(']');
@@ -321,11 +474,11 @@ class AiCommandService {
       }
 
       final jsonSlice = trimmed.substring(start, end + 1);
-      return _decodeCommandArray(jsonSlice);
+      return _decodeCommandPlanArray(jsonSlice);
     }
   }
 
-  List<String> _decodeCommandArray(String content) {
+  List<AiCommandStep> _decodeCommandPlanArray(String content) {
     final decoded = jsonDecode(content);
     if (decoded is! List) {
       throw const AiCommandServiceException(
@@ -333,19 +486,53 @@ class AiCommandService {
       );
     }
 
-    final commands = decoded
-        .whereType<String>()
-        .map((command) => command.trim())
-        .where((command) => command.isNotEmpty)
-        .toList();
+    final steps = <AiCommandStep>[];
+    for (var index = 0; index < decoded.length; index++) {
+      final item = decoded[index];
 
-    if (commands.length != decoded.length) {
+      if (item is String) {
+        final command = item.trim();
+        if (command.isEmpty) {
+          throw const AiCommandServiceException(
+            'AI returned an empty command entry.',
+          );
+        }
+        steps.add(
+          AiCommandStep(
+            title: 'Step ${index + 1}',
+            command: command,
+          ),
+        );
+        continue;
+      }
+
+      if (item is Map<String, dynamic>) {
+        final command = (item['command'] ?? '').toString().trim();
+        if (command.isEmpty) {
+          throw const AiCommandServiceException(
+            'AI returned a plan step without a command.',
+          );
+        }
+
+        final title = (item['title'] ?? '').toString().trim();
+        final description = (item['description'] ?? '').toString().trim();
+
+        steps.add(
+          AiCommandStep(
+            title: title.isEmpty ? 'Step ${index + 1}' : title,
+            command: command,
+            description: description.isEmpty ? null : description,
+          ),
+        );
+        continue;
+      }
+
       throw const AiCommandServiceException(
-        'AI returned non-string command entries.',
+        'AI returned an unsupported plan step entry.',
       );
     }
 
-    return commands;
+    return steps;
   }
 
   String? _extractErrorMessage(String responseBody) {
@@ -402,4 +589,16 @@ class AiCommandServiceException implements Exception {
 
   @override
   String toString() => message;
+}
+
+class AiCommandStep {
+  const AiCommandStep({
+    required this.title,
+    required this.command,
+    this.description,
+  });
+
+  final String title;
+  final String command;
+  final String? description;
 }

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/ssh/ssh_service.dart';
-import '../ai_assistant/ai_assistant_screen.dart';
+import '../ai_assistant/ai_copilot_sheet.dart';
 import '../quick_actions/quick_actions.dart';
 import '../settings/settings_screen.dart';
 import '../terminal/terminal_screen.dart';
@@ -340,7 +340,83 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         .closed
         .then((_) {
       _isShowingMessage = false;
-    });
+        });
+  }
+
+  String _getDashboardCopilotContext() {
+    final parts = <String>[
+      'Server: ${_server.name}',
+      'Host: ${_server.host}:${_server.port}',
+      'User: ${_server.username}',
+      'Connection state: ${_sshService.isConnected ? 'connected' : 'disconnected'}',
+    ];
+
+    if (_status != null && _status!.trim().isNotEmpty) {
+      parts.add('Dashboard status: ${_status!.trim()}');
+    }
+
+    final quickActionOutput = _quickActionOutput.trim();
+    if (quickActionOutput.isNotEmpty &&
+        quickActionOutput != 'Quick action results will appear here.') {
+      parts.add('Last quick action output:\n$quickActionOutput');
+    }
+
+    return parts.join('\n\n');
+  }
+
+  Future<String?> _runCopilotCommand(String command) async {
+    if (!_sshService.isConnected) {
+      throw StateError('SSH is disconnected. Reconnect before running commands.');
+    }
+
+    try {
+      final output = await _sshService.execute(command);
+      if (!mounted) {
+        return output;
+      }
+
+      setState(() {
+        _status = null;
+        _quickActionOutput = output.isEmpty ? '(no output)' : output;
+      });
+
+      return output;
+    } catch (error) {
+      final message = error.toString();
+      if (_looksLikeDisconnect(message)) {
+        await _sshService.disconnect();
+        if (mounted) {
+          setState(() {
+            _status = null;
+            _connectionTestState = ConnectionTestState.failed;
+          });
+        }
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _openCopilot() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: false,
+      builder: (_) {
+        return FractionallySizedBox(
+          heightFactor: 0.82,
+          child: AiCopilotSheet(
+            provider: _aiProvider,
+            apiKey: _apiKey,
+            executionTarget: AiCopilotExecutionTarget.dashboard,
+            canRunCommands: () => _sshService.isConnected,
+            getContext: _getDashboardCopilotContext,
+            onRunCommand: _runCopilotCommand,
+            executionUnavailableMessage:
+                'SSH is disconnected. Reconnect before running commands.',
+          ),
+        );
+      },
+    );
   }
 
   // Fix 1: reflect connected state even before a test is run
@@ -460,17 +536,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             OutlinedButton(
               onPressed: _isBusy
                   ? null
-                  : () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => AiAssistantScreen(
-                            sshService: _sshService,
-                            provider: _aiProvider,
-                            apiKey: _apiKey,
-                          ),
-                        ),
-                      );
-                    },
+                  : _openCopilot,
               child: const Text('AI Assistant'),
             ),
             const SizedBox(height: 12),
