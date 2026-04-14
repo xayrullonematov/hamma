@@ -47,6 +47,11 @@ class AiServerApp extends StatefulWidget {
 }
 
 class _AiServerAppState extends State<AiServerApp> {
+  static const _scaffoldBackground = Color(0xFF0F172A);
+  static const _surface = Color(0xFF1E293B);
+  static const _primary = Color(0xFF3B82F6);
+  static const _textMuted = Color(0xFF94A3B8);
+
   late AiProvider _aiProvider;
   late String _apiKey;
 
@@ -71,11 +76,106 @@ class _AiServerAppState extends State<AiServerApp> {
 
   @override
   Widget build(BuildContext context) {
+    const colorScheme = ColorScheme(
+      brightness: Brightness.dark,
+      primary: _primary,
+      onPrimary: Colors.white,
+      secondary: Color(0xFF10B981),
+      onSecondary: Colors.white,
+      error: Color(0xFFEF4444),
+      onError: Colors.white,
+      surface: _surface,
+      onSurface: Color(0xFFF8FAFC),
+    );
+
     return MaterialApp(
       title: 'AI Server V2',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1F6F5F)),
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorScheme: colorScheme,
+        scaffoldBackgroundColor: _scaffoldBackground,
+        cardColor: _surface,
+        canvasColor: _scaffoldBackground,
+        dialogTheme: const DialogThemeData(
+          backgroundColor: _surface,
+        ),
+        snackBarTheme: const SnackBarThemeData(
+          backgroundColor: _surface,
+          contentTextStyle: TextStyle(color: Colors.white),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: _scaffoldBackground,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          centerTitle: false,
+        ),
+        cardTheme: const CardThemeData(
+          color: _surface,
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(24)),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFF162033),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: const BorderSide(color: _primary, width: 1.2),
+          ),
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+          backgroundColor: _primary,
+          foregroundColor: Colors.white,
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: Color(0xFF334155)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: _primary,
+          ),
+        ),
+        textTheme: const TextTheme(
+          headlineSmall: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+          titleLarge: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+          titleMedium: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+          bodyLarge: TextStyle(
+            color: Colors.white,
+          ),
+          bodyMedium: TextStyle(
+            color: Colors.white,
+          ),
+          bodySmall: TextStyle(
+            color: _textMuted,
+          ),
+        ),
       ),
       home: ServerListScreen(
         aiProvider: _aiProvider,

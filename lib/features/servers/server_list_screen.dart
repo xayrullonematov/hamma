@@ -27,6 +27,11 @@ class ServerListScreen extends StatefulWidget {
 }
 
 class _ServerListScreenState extends State<ServerListScreen> {
+  static const _cardColor = Color(0xFF1E293B);
+  static const _cardAccent = Color(0xFF3B82F6);
+  static const _subtitleColor = Color(0xFF94A3B8);
+  static const _shadowColor = Color(0x33000000);
+
   final SavedServersStorage _savedServersStorage = const SavedServersStorage();
 
   bool _isLoading = true;
@@ -240,6 +245,8 @@ class _ServerListScreenState extends State<ServerListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Saved Servers'),
@@ -293,40 +300,200 @@ class _ServerListScreenState extends State<ServerListScreen> {
                     ),
                   ),
                 )
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _servers.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final server = _servers[index];
-                    return Card(
-                      child: ListTile(
-                        onTap: () => _openServer(server),
-                        title: Text(server.name),
-                        subtitle: Text(
-                          '${server.username}@${server.host}:${server.port}',
-                        ),
-                        trailing: Wrap(
-                          spacing: 8,
+              : CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        child: Row(
                           children: [
-                            IconButton(
-                              onPressed: () => _editServer(server),
-                              icon: const Icon(Icons.edit_outlined),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Server Dashboard',
+                                    style: theme.textTheme.headlineSmall,
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Direct SSH access to your saved infrastructure.',
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                ],
+                              ),
                             ),
-                            IconButton(
-                              onPressed: () => _deleteServer(server),
-                              icon: const Icon(Icons.delete_outline),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF162033),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                '${_servers.length} saved',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    );
-                  },
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      sliver: SliverList.separated(
+                        itemCount: _servers.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 14),
+                        itemBuilder: (context, index) {
+                          final server = _servers[index];
+                          return _ServerDashboardCard(
+                            server: server,
+                            onOpen: () => _openServer(server),
+                            onEdit: () => _editServer(server),
+                            onDelete: () => _deleteServer(server),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addServer,
         icon: const Icon(Icons.add),
         label: const Text('Add Server'),
+      ),
+    );
+  }
+}
+
+class _ServerDashboardCard extends StatelessWidget {
+  const _ServerDashboardCard({
+    required this.server,
+    required this.onOpen,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ServerProfile server;
+  final VoidCallback onOpen;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(24),
+        child: Ink(
+          decoration: BoxDecoration(
+            color: _ServerListScreenState._cardColor,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: const [
+              BoxShadow(
+                color: _ServerListScreenState._shadowColor,
+                blurRadius: 18,
+                offset: Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: _ServerListScreenState._cardAccent.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(
+                    Icons.dns_outlined,
+                    color: _ServerListScreenState._cardAccent,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        server.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '${server.username}@${server.host}:${server.port}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: _ServerListScreenState._subtitleColor,
+                          fontFamily: 'monospace',
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF162033),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Direct SSH',
+                          style: TextStyle(
+                            color: _ServerListScreenState._subtitleColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  children: [
+                    IconButton(
+                      onPressed: onEdit,
+                      icon: const Icon(Icons.edit_outlined),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFF162033),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    IconButton(
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete_outline),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFF162033),
+                        foregroundColor: const Color(0xFFFCA5A5),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

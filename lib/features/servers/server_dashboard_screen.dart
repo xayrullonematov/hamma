@@ -29,13 +29,21 @@ class ServerDashboardScreen extends StatefulWidget {
 
 class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   static const _connectionTestCommand = 'uname -a';
+  static const _surfaceColor = Color(0xFF1E293B);
+  static const _panelColor = Color(0xFF162033);
+  static const _terminalColor = Color(0xFF0B1120);
+  static const _mutedColor = Color(0xFF94A3B8);
+  static const _slateColor = Color(0xFF64748B);
+  static const _successColor = Color(0xFF22C55E);
+  static const _dangerColor = Color(0xFFEF4444);
+  static const _shadowColor = Color(0x22000000);
 
   final SshService _sshService = SshService();
   late AiProvider _aiProvider;
   late String _apiKey;
 
   bool _isBusy = false;
-  bool _isShowingMessage = false; // Fix 2: snackbar spam guard
+  bool _isShowingMessage = false;
   String? _activeQuickActionId;
   String? _status;
   String _quickActionOutput = 'Quick action results will appear here.';
@@ -327,7 +335,6 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     );
   }
 
-  // Fix 2: debounced snackbar — no spam on repeated failures
   void _showMessage(String message) {
     if (!mounted || message.trim().isEmpty || _isShowingMessage) {
       return;
@@ -340,7 +347,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         .closed
         .then((_) {
       _isShowingMessage = false;
-        });
+    });
   }
 
   String _getDashboardCopilotContext() {
@@ -419,7 +426,6 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     );
   }
 
-  // Fix 1: reflect connected state even before a test is run
   String _displayStatus() {
     if (_status != null && _status!.isNotEmpty) {
       return _status!;
@@ -428,35 +434,85 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     switch (_connectionTestState) {
       case ConnectionTestState.idle:
         return _sshService.isConnected
-            ? 'Connected (not verified)'
-            : 'Connection not tested';
+            ? 'SSH session is open. Run a connection test to verify the session.'
+            : 'Connect to enable terminal, AI, and quick actions.';
       case ConnectionTestState.connected:
-        return 'Connection verified';
+        return 'SSH verified and ready for server actions.';
       case ConnectionTestState.failed:
-        return 'Connection failed';
+        return 'Connection failed. Reconnect and try again.';
     }
   }
 
-  Color _connectionBadgeColor(BuildContext context) {
-    switch (_connectionTestState) {
-      case ConnectionTestState.idle:
-        return Theme.of(context).colorScheme.secondary;
-      case ConnectionTestState.connected:
-        return Colors.green.shade700;
-      case ConnectionTestState.failed:
-        return Colors.red.shade700;
+  Color _connectionBadgeColor() {
+    if (_connectionTestState == ConnectionTestState.failed) {
+      return _dangerColor;
     }
+    if (_sshService.isConnected) {
+      return _successColor;
+    }
+    return _slateColor;
   }
 
   String _connectionBadgeLabel() {
-    switch (_connectionTestState) {
-      case ConnectionTestState.idle:
-        return 'Not Tested';
-      case ConnectionTestState.connected:
-        return 'Connected';
-      case ConnectionTestState.failed:
-        return 'Failed';
+    if (_connectionTestState == ConnectionTestState.failed) {
+      return 'Failed';
     }
+    if (_sshService.isConnected) {
+      return 'Connected';
+    }
+    return 'Untested';
+  }
+
+  IconData _connectionBadgeIcon() {
+    if (_connectionTestState == ConnectionTestState.failed) {
+      return Icons.error_outline_rounded;
+    }
+    if (_sshService.isConnected) {
+      return Icons.cloud_done_outlined;
+    }
+    return Icons.shield_outlined;
+  }
+
+  IconData _quickActionIcon(String actionId) {
+    switch (actionId) {
+      case 'restart-server':
+        return Icons.restart_alt_rounded;
+      case 'system-info':
+        return Icons.memory_rounded;
+      case 'disk-usage':
+        return Icons.storage_rounded;
+      case 'running-processes':
+        return Icons.view_list_rounded;
+      default:
+        return Icons.terminal_rounded;
+    }
+  }
+
+  void _openTerminal() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => TerminalScreen(
+          sshService: _sshService,
+          serverName: _server.name,
+          aiProvider: _aiProvider,
+          apiKey: _apiKey,
+        ),
+      ),
+    );
+  }
+
+  BoxDecoration _sectionDecoration() {
+    return BoxDecoration(
+      color: _surfaceColor,
+      borderRadius: BorderRadius.circular(24),
+      boxShadow: const [
+        BoxShadow(
+          color: _shadowColor,
+          blurRadius: 18,
+          offset: Offset(0, 10),
+        ),
+      ],
+    );
   }
 
   @override
@@ -467,134 +523,407 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_server.name),
+        actions: [
+          IconButton(
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: 'Settings',
+          ),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              '${_server.username}@${_server.host}:${_server.port}',
-              style: theme.textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(_displayStatus(), style: theme.textTheme.bodyLarge),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: _isBusy ? null : _connect,
-              child: Text(connectButtonLabel),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed:
-                        _isBusy || !_sshService.isConnected ? null : _runConnectionTest,
-                    child: const Text('Connection Test'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _connectionBadgeColor(context).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    _connectionBadgeLabel(),
-                    style: TextStyle(
-                      color: _connectionBadgeColor(context),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: _isBusy || !_sshService.isConnected
-                  ? null
-                  : () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => TerminalScreen(
-                            sshService: _sshService,
-                            serverName: _server.name,
-                            aiProvider: _aiProvider,
-                            apiKey: _apiKey,
-                          ),
+            Container(
+              decoration: _sectionDecoration(),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: _connectionBadgeColor().withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(18),
                         ),
-                      );
-                    },
-              child: const Text('Open Terminal'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: _isBusy
-                  ? null
-                  : _openCopilot,
-              child: const Text('AI Assistant'),
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton(
-              onPressed: _isBusy ? null : _openSettings,
-              child: const Text('Settings'),
-            ),
-            const SizedBox(height: 20),
-            Text('Quick Actions', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 12,
-              runSpacing: 12,
-              children: kQuickActions.map((action) {
-                final isRunning = _activeQuickActionId == action.id;
-
-                return SizedBox(
-                  width: 180,
-                  child: OutlinedButton(
-                    onPressed: _isBusy || !_sshService.isConnected
-                        ? null
-                        : () => _runQuickAction(action),
-                    child: isRunning
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(action.label),
+                        child: Icon(
+                          _connectionBadgeIcon(),
+                          color: _connectionBadgeColor(),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _server.name,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '${_server.username}@${_server.host}:${_server.port}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: _mutedColor,
+                                fontFamily: 'monospace',
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _connectionBadgeColor().withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: _connectionBadgeColor(),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _connectionBadgeLabel(),
+                              style: TextStyle(
+                                color: _connectionBadgeColor(),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-            Text('Quick Action Output', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 12),
-            Expanded(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      _quickActionOutput,
-                      style: const TextStyle(
-                        color: Color(0xFFE2E8F0),
-                        fontFamily: 'monospace',
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: _panelColor,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      _displayStatus(),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.white,
                       ),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed:
+                          _isBusy || !_sshService.isConnected ? null : _runConnectionTest,
+                      icon: const Icon(Icons.verified_outlined),
+                      label: const Text('Connection Test'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: _sectionDecoration(),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Main Actions',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _isBusy ? null : _connect,
+                          icon: const Icon(Icons.power_settings_new_rounded),
+                          label: Text(connectButtonLabel),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _isBusy || !_sshService.isConnected
+                              ? null
+                              : _openTerminal,
+                          icon: const Icon(Icons.terminal_rounded),
+                          label: const Text('Open Terminal'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isBusy ? null : _openCopilot,
+                          icon: const Icon(Icons.smart_toy_outlined),
+                          label: const Text('AI Assistant'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isBusy ? null : _openSettings,
+                          icon: const Icon(Icons.settings_outlined),
+                          label: const Text('Settings'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: _sectionDecoration(),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Quick Actions',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      const Spacer(),
+                      Text(
+                        _sshService.isConnected ? 'Live SSH' : 'Disconnected',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: _mutedColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: kQuickActions.length,
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: 1.24,
+                    ),
+                    itemBuilder: (context, index) {
+                      final action = kQuickActions[index];
+                      final isRunning = _activeQuickActionId == action.id;
+                      final isEnabled = !_isBusy && _sshService.isConnected;
+
+                      return _QuickActionTile(
+                        label: action.label,
+                        command: action.command,
+                        icon: _quickActionIcon(action.id),
+                        isRunning: isRunning,
+                        isEnabled: isEnabled,
+                        onTap: isEnabled ? () => _runQuickAction(action) : null,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: _sectionDecoration(),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Quick Action Output',
+                    style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: _terminalColor,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF020617),
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(20),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const _TerminalDot(color: Color(0xFFEF4444)),
+                              const SizedBox(width: 8),
+                              const _TerminalDot(color: Color(0xFFF59E0B)),
+                              const SizedBox(width: 8),
+                              const _TerminalDot(color: Color(0xFF22C55E)),
+                              const SizedBox(width: 12),
+                              Text(
+                                'terminal-output',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: _mutedColor,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(
+                          height: 280,
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: SingleChildScrollView(
+                              child: SelectableText(
+                                _quickActionOutput,
+                                style: const TextStyle(
+                                  color: Color(0xFFE2E8F0),
+                                  fontFamily: 'monospace',
+                                  height: 1.45,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _QuickActionTile extends StatelessWidget {
+  const _QuickActionTile({
+    required this.label,
+    required this.command,
+    required this.icon,
+    required this.isRunning,
+    required this.isEnabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final String command;
+  final IconData icon;
+  final bool isRunning;
+  final bool isEnabled;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: isEnabled || isRunning ? 1 : 0.58,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: _ServerDashboardScreenState._panelColor,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6).withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: isRunning
+                        ? const Padding(
+                            padding: EdgeInsets.all(10),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            icon,
+                            color: const Color(0xFF3B82F6),
+                          ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    command,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: _ServerDashboardScreenState._mutedColor,
+                          fontFamily: 'monospace',
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TerminalDot extends StatelessWidget {
+  const _TerminalDot({
+    required this.color,
+  });
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
       ),
     );
   }
