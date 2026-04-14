@@ -17,6 +17,10 @@ class ServerFormScreen extends StatefulWidget {
 }
 
 class _ServerFormScreenState extends State<ServerFormScreen> {
+  static const _surfaceColor = Color(0xFF1E293B);
+  static const _mutedColor = Color(0xFF94A3B8);
+  static const _shadowColor = Color(0x22000000);
+
   final _formKey = GlobalKey<FormState>();
 
   late final TextEditingController _nameController;
@@ -73,98 +77,206 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
     return '${DateTime.now().microsecondsSinceEpoch}-$random';
   }
 
+  InputDecoration _fieldDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Server' : 'Add Server'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SafeArea(
+        top: false,
         child: Form(
           key: _formKey,
           child: ListView(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
             children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
+              _FormSectionCard(
+                title: 'Server Details',
+                subtitle: 'Basic connection information for this host.',
+                icon: Icons.dns_outlined,
+                child: Column(
+                  children: [
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: _fieldDecoration('Name'),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Enter a server name.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _hostController,
+                      decoration: _fieldDecoration('Host / IP'),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Enter a host or IP.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _portController,
+                      keyboardType: TextInputType.number,
+                      decoration: _fieldDecoration('Port'),
+                      validator: (value) {
+                        final port = int.tryParse(value?.trim() ?? '');
+                        if (port == null || port <= 0 || port > 65535) {
+                          return 'Enter a port between 1 and 65535.';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Enter a server name.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _hostController,
-                decoration: const InputDecoration(
-                  labelText: 'Host / IP',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Enter a host or IP.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _portController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Port',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  final port = int.tryParse(value?.trim() ?? '');
-                  if (port == null || port <= 0 || port > 65535) {
-                    return 'Enter a port between 1 and 65535.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _usernameController,
-                decoration: const InputDecoration(
-                  labelText: 'Username',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Enter a username.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Enter a password.';
-                  }
-                  return null;
-                },
               ),
               const SizedBox(height: 16),
+              _FormSectionCard(
+                title: 'Authentication',
+                subtitle: 'Credentials used for direct SSH access.',
+                icon: Icons.lock_outline,
+                child: Column(
+                  children: [
+                    TextFormField(
+                      controller: _usernameController,
+                      decoration: _fieldDecoration('Username'),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Enter a username.';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: true,
+                      decoration: _fieldDecoration('Password'),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Enter a password.';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
               FilledButton(
                 onPressed: _save,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                ),
                 child: Text(_isEditing ? 'Save Changes' : 'Save Server'),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Your saved server profile stays on this device.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: _mutedColor,
+                ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _FormSectionCard extends StatelessWidget {
+  const _FormSectionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _ServerFormScreenState._surfaceColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(
+            color: _ServerFormScreenState._shadowColor,
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  icon,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: _ServerFormScreenState._mutedColor,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          child,
+        ],
       ),
     );
   }

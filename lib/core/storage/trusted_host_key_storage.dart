@@ -27,9 +27,14 @@ class TrustedHostKeyRecord {
 }
 
 class TrustedHostKeyStorage {
+  static const _androidOptions = AndroidOptions(
+    encryptedSharedPreferences: true,
+  );
+
   const TrustedHostKeyStorage({
     FlutterSecureStorage? secureStorage,
-  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+  }) : _secureStorage = secureStorage ??
+            const FlutterSecureStorage(aOptions: _androidOptions);
 
   static const _trustedHostKeyPrefix = 'trusted_host_key_';
 

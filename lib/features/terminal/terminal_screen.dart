@@ -31,10 +31,16 @@ class TerminalScreen extends StatefulWidget {
 class _TerminalScreenState extends State<TerminalScreen> {
   static const _maxContextChars = 3500;
   static const _maxContextLines = 30;
+  static const _backgroundColor = Color(0xFF0F172A);
+  static const _surfaceColor = Color(0xFF1E293B);
+  static const _panelColor = Color(0xFF162033);
+  static const _mutedColor = Color(0xFF94A3B8);
+  static const _shadowColor = Color(0x22000000);
   static final RegExp _ansiEscapePattern = RegExp(
     r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])',
   );
-  static final RegExp _controlCharPattern = RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]');
+  static final RegExp _controlCharPattern =
+      RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]');
   static final RegExp _errorPattern = RegExp(
     r'(error|failed|exception|denied|not found|permission|timed out|refused|closed)',
     caseSensitive: false,
@@ -50,6 +56,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
   String _currentInputBuffer = '';
   String? _lastUserCommand;
   String? _lastVisibleError;
+  bool _ctrlEnabled = false;
+  bool _altEnabled = false;
 
   @override
   void initState() {
@@ -101,6 +109,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
         setState(() {
           _session = null;
           _status = 'Shell closed';
+          _ctrlEnabled = false;
+          _altEnabled = false;
         });
         _handleTerminalChunk('\r\n[session closed]\r\n');
       });
@@ -117,20 +127,114 @@ class _TerminalScreenState extends State<TerminalScreen> {
       setState(() {
         _session = null;
         _status = 'Failed to open shell';
+        _ctrlEnabled = false;
+        _altEnabled = false;
       });
       _handleTerminalChunk('Failed to open shell.\r\n$error\r\n', isError: true);
     }
   }
 
   void _handleTerminalInput(String data) {
-    _trackUserInput(data);
+    _dispatchInput(data, trackInput: true);
+  }
 
+  void _dispatchInput(String data, {required bool trackInput}) {
     final session = _session;
-    if (session == null) {
+    if (session == null || data.isEmpty) {
       return;
     }
 
-    session.write(Uint8List.fromList(utf8.encode(data)));
+    final hasPendingModifier = _ctrlEnabled || _altEnabled;
+    if (trackInput && !hasPendingModifier) {
+      _trackUserInput(data);
+    }
+
+    final payload = _applyPendingModifiers(data);
+    session.write(Uint8List.fromList(utf8.encode(payload)));
+  }
+
+  String _applyPendingModifiers(String data) {
+    if (!_ctrlEnabled && !_altEnabled) {
+      return data;
+    }
+
+    var payload = data;
+
+    if (_ctrlEnabled) {
+      final ctrlPayload = _applyCtrlModifier(payload);
+      if (ctrlPayload != null) {
+        payload = ctrlPayload;
+      }
+    }
+
+    if (_altEnabled) {
+      payload = '\x1b$payload';
+    }
+
+    if (mounted) {
+      setState(() {
+        _ctrlEnabled = false;
+        _altEnabled = false;
+      });
+    }
+
+    return payload;
+  }
+
+  String? _applyCtrlModifier(String data) {
+    if (data.length != 1) {
+      return null;
+    }
+
+    final char = data.codeUnitAt(0);
+    final symbol = data;
+
+    if ((char >= 65 && char <= 90) || (char >= 97 && char <= 122)) {
+      return String.fromCharCode(char & 0x1f);
+    }
+
+    switch (symbol) {
+      case '@':
+        return String.fromCharCode(0);
+      case '[':
+        return String.fromCharCode(27);
+      case r'\':
+        return String.fromCharCode(28);
+      case ']':
+        return String.fromCharCode(29);
+      case '^':
+        return String.fromCharCode(30);
+      case '/':
+      case '-':
+      case '_':
+        return String.fromCharCode(31);
+      case '?':
+        return String.fromCharCode(127);
+      default:
+        return null;
+    }
+  }
+
+  void _toggleCtrl() {
+    setState(() {
+      _ctrlEnabled = !_ctrlEnabled;
+      if (_ctrlEnabled) {
+        _altEnabled = false;
+      }
+    });
+  }
+
+  void _toggleAlt() {
+    setState(() {
+      _altEnabled = !_altEnabled;
+      if (_altEnabled) {
+        _ctrlEnabled = false;
+      }
+    });
+  }
+
+  void _sendToolbarInput(String data, {bool trackInput = false}) {
+    _dispatchInput(data, trackInput: trackInput);
   }
 
   void _handleStdoutChunk(String data) {
@@ -254,8 +358,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
       return false;
     }
 
-    final looksLikePrompt = RegExp(r'^[^\s@]+@[^\s:]+:.*[#$]$').hasMatch(trimmed) ||
-        RegExp(r'^[A-Za-z0-9._/-]+[#$>]$').hasMatch(trimmed);
+    final looksLikePrompt =
+        RegExp(r'^[^\s@]+@[^\s:]+:.*[#$]$').hasMatch(trimmed) ||
+            RegExp(r'^[A-Za-z0-9._/-]+[#$>]$').hasMatch(trimmed);
 
     return !looksLikePrompt;
   }
@@ -276,7 +381,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
       parts.add('Recent terminal output:\n$recentOutput');
     }
 
-    return parts.isEmpty ? 'No recent terminal context available.' : parts.join('\n\n');
+    return parts.isEmpty
+        ? 'No recent terminal context available.'
+        : parts.join('\n\n');
   }
 
   void _handleTerminalResize(
@@ -325,10 +432,144 @@ class _TerminalScreenState extends State<TerminalScreen> {
     );
   }
 
+  List<_TerminalToolbarKey> _toolbarKeys() {
+    return [
+      _TerminalToolbarKey(
+        label: 'Esc',
+        onPressed: () => _sendToolbarInput('\x1b'),
+      ),
+      _TerminalToolbarKey(
+        label: 'Tab',
+        onPressed: () => _sendToolbarInput('\t'),
+      ),
+      _TerminalToolbarKey(
+        label: 'Ctrl',
+        isToggle: true,
+        isActive: _ctrlEnabled,
+        onPressed: _toggleCtrl,
+      ),
+      _TerminalToolbarKey(
+        label: 'Alt',
+        isToggle: true,
+        isActive: _altEnabled,
+        onPressed: _toggleAlt,
+      ),
+      _TerminalToolbarKey(
+        label: '/',
+        onPressed: () => _sendToolbarInput('/', trackInput: true),
+      ),
+      _TerminalToolbarKey(
+        label: '-',
+        onPressed: () => _sendToolbarInput('-', trackInput: true),
+      ),
+      _TerminalToolbarKey(
+        icon: Icons.keyboard_arrow_up_rounded,
+        semanticLabel: 'Up',
+        onPressed: () => _sendToolbarInput('\x1b[A'),
+      ),
+      _TerminalToolbarKey(
+        icon: Icons.keyboard_arrow_down_rounded,
+        semanticLabel: 'Down',
+        onPressed: () => _sendToolbarInput('\x1b[B'),
+      ),
+      _TerminalToolbarKey(
+        icon: Icons.keyboard_arrow_left_rounded,
+        semanticLabel: 'Left',
+        onPressed: () => _sendToolbarInput('\x1b[D'),
+      ),
+      _TerminalToolbarKey(
+        icon: Icons.keyboard_arrow_right_rounded,
+        semanticLabel: 'Right',
+        onPressed: () => _sendToolbarInput('\x1b[C'),
+      ),
+    ];
+  }
+
+  Widget _buildStatusHeader(ThemeData theme) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _surfaceColor,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [
+          BoxShadow(
+            color: _shadowColor,
+            blurRadius: 18,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: _session != null ? const Color(0xFF22C55E) : _mutedColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _status,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _mutedColor,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolbar() {
+    final keys = _toolbarKeys();
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: 72,
+        decoration: const BoxDecoration(
+          color: _surfaceColor,
+          boxShadow: [
+            BoxShadow(
+              color: _shadowColor,
+              blurRadius: 18,
+              offset: Offset(0, -6),
+            ),
+          ],
+        ),
+        child: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          scrollDirection: Axis.horizontal,
+          itemCount: keys.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 10),
+          itemBuilder: (context, index) {
+            final key = keys[index];
+            return _TerminalToolbarButton(
+              label: key.label,
+              icon: key.icon,
+              semanticLabel: key.semanticLabel,
+              isActive: key.isActive,
+              onPressed: key.onPressed,
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
+      backgroundColor: _backgroundColor,
       appBar: AppBar(
+        backgroundColor: _backgroundColor,
         title: Text('Terminal: ${widget.serverName}'),
         actions: [
           IconButton(
@@ -341,28 +582,110 @@ class _TerminalScreenState extends State<TerminalScreen> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: Text(_status),
-          ),
+          _buildStatusHeader(theme),
           Expanded(
-            child: ColoredBox(
-              color: const Color(0xFF0F172A),
-              child: SafeArea(
-                top: false,
-                child: TerminalView(
-                  _terminal,
-                  autofocus: true,
-                  backgroundOpacity: 1,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: ColoredBox(
+                  color: _backgroundColor,
+                  child: SafeArea(
+                    top: false,
+                    bottom: false,
+                    child: TerminalView(
+                      _terminal,
+                      autofocus: true,
+                      backgroundOpacity: 1,
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          _buildToolbar(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _openCopilot,
         child: const Icon(Icons.smart_toy_outlined),
+      ),
+    );
+  }
+}
+
+class _TerminalToolbarKey {
+  const _TerminalToolbarKey({
+    this.label,
+    this.icon,
+    this.semanticLabel,
+    this.isToggle = false,
+    this.isActive = false,
+    required this.onPressed,
+  });
+
+  final String? label;
+  final IconData? icon;
+  final String? semanticLabel;
+  final bool isToggle;
+  final bool isActive;
+  final VoidCallback onPressed;
+}
+
+class _TerminalToolbarButton extends StatelessWidget {
+  const _TerminalToolbarButton({
+    required this.label,
+    required this.icon,
+    required this.semanticLabel,
+    required this.isActive,
+    required this.onPressed,
+  });
+
+  final String? label;
+  final IconData? icon;
+  final String? semanticLabel;
+  final bool isActive;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: semanticLabel ?? label,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(10),
+          child: Ink(
+            width: 56,
+            decoration: BoxDecoration(
+              color: isActive
+                  ? const Color(0xFF3B82F6).withValues(alpha: 0.18)
+                  : _TerminalScreenState._panelColor,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Center(
+              child: icon != null
+                  ? Icon(
+                      icon,
+                      color: isActive
+                          ? const Color(0xFF3B82F6)
+                          : _TerminalScreenState._mutedColor,
+                    )
+                  : Text(
+                      label!,
+                      style: TextStyle(
+                        color: isActive
+                            ? const Color(0xFF3B82F6)
+                            : _TerminalScreenState._mutedColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+            ),
+          ),
+        ),
       ),
     );
   }
