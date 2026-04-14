@@ -83,6 +83,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DropdownButtonFormField<AiProvider>(
+              // ignore: deprecated_member_use
               value: _selectedProvider,
               decoration: const InputDecoration(
                 labelText: 'AI Provider',
