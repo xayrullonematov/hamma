@@ -1,5 +1,8 @@
 package com.example.hamma
 
-import io.flutter.embedding.android.FlutterActivity
+// 1. Change this import
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// 2. Change the class inheritance from FlutterActivity to FlutterFragmentActivity
+class MainActivity: FlutterFragmentActivity() {
+}
