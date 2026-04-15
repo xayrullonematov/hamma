@@ -6,6 +6,8 @@ import 'package:hamma/core/storage/app_lock_storage.dart';
 import 'package:hamma/main.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   testWidgets('shows saved server home screen', (tester) async {
     FlutterSecureStorage.setMockInitialValues({});
 

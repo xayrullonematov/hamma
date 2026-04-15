@@ -16,13 +16,19 @@ class ServerDashboardScreen extends StatefulWidget {
     required this.server,
     required this.aiProvider,
     required this.apiKey,
+    required this.openRouterModel,
     required this.onSaveAiSettings,
   });
 
   final ServerProfile server;
   final AiProvider aiProvider;
   final String apiKey;
-  final Future<void> Function(AiProvider provider, String apiKey)
+  final String? openRouterModel;
+  final Future<void> Function(
+    AiProvider provider,
+    String apiKey,
+    String? openRouterModel,
+  )
       onSaveAiSettings;
 
   @override
@@ -44,6 +50,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   final CustomActionsStorage _customActionsStorage = const CustomActionsStorage();
   late AiProvider _aiProvider;
   late String _apiKey;
+  late String? _openRouterModel;
 
   bool _isBusy = false;
   bool _isShowingMessage = false;
@@ -64,6 +71,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     super.initState();
     _aiProvider = widget.aiProvider;
     _apiKey = widget.apiKey;
+    _openRouterModel = widget.openRouterModel;
     _loadCustomQuickActions();
   }
 
@@ -76,6 +84,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     if (oldWidget.apiKey != widget.apiKey) {
       _apiKey = widget.apiKey;
     }
+    if (oldWidget.openRouterModel != widget.openRouterModel) {
+      _openRouterModel = widget.openRouterModel;
+    }
   }
 
   @override
@@ -84,8 +95,12 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _saveAiSettings(AiProvider provider, String apiKey) async {
-    await widget.onSaveAiSettings(provider, apiKey);
+  Future<void> _saveAiSettings(
+    AiProvider provider,
+    String apiKey,
+    String? openRouterModel,
+  ) async {
+    await widget.onSaveAiSettings(provider, apiKey, openRouterModel);
     if (!mounted) {
       return;
     }
@@ -93,6 +108,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     setState(() {
       _aiProvider = provider;
       _apiKey = apiKey;
+      _openRouterModel = openRouterModel;
     });
   }
 
@@ -361,6 +377,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         builder: (_) => SettingsScreen(
           initialProvider: _aiProvider,
           initialApiKey: _apiKey,
+          initialOpenRouterModel: _openRouterModel,
           onSaveAiSettings: _saveAiSettings,
         ),
       ),
@@ -444,8 +461,10 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         return FractionallySizedBox(
           heightFactor: 0.82,
           child: AiCopilotSheet(
+            serverId: _server.id,
             provider: _aiProvider,
             apiKey: _apiKey,
+            openRouterModel: _openRouterModel,
             executionTarget: AiCopilotExecutionTarget.dashboard,
             canRunCommands: () => _sshService.isConnected,
             getContext: _getDashboardCopilotContext,
@@ -547,6 +566,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           serverName: _server.name,
           aiProvider: _aiProvider,
           apiKey: _apiKey,
+          openRouterModel: _openRouterModel,
         ),
       ),
     );

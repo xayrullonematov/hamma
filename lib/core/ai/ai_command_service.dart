@@ -15,6 +15,7 @@ class AiApiConfig {
   factory AiApiConfig.forProvider({
     required AiProvider provider,
     required String apiKey,
+    String? openRouterModel,
   }) {
     switch (provider) {
       case AiProvider.openAi:
@@ -33,6 +34,15 @@ class AiApiConfig {
           // Beta: single cheap model — free tier has quota limits
           model: 'gemini-2.5-flash',
         );
+      case AiProvider.openRouter:
+        return AiApiConfig(
+          provider: provider,
+          baseUrl: 'https://openrouter.ai/api/v1',
+          apiKey: apiKey,
+          model: (openRouterModel?.trim().isNotEmpty ?? false)
+              ? openRouterModel!.trim()
+              : 'meta-llama/llama-3-8b-instruct',
+        );
     }
   }
 
@@ -47,17 +57,21 @@ class AiApiConfig {
 class AiCommandService {
   const AiCommandService({
     required this.config,
+    this.openRouterModel,
   });
 
   factory AiCommandService.forProvider({
     required AiProvider provider,
     required String apiKey,
+    String? openRouterModel,
   }) {
     return AiCommandService(
       config: AiApiConfig.forProvider(
         provider: provider,
         apiKey: apiKey,
+        openRouterModel: openRouterModel,
       ),
+      openRouterModel: openRouterModel,
     );
   }
 
@@ -75,6 +89,7 @@ class AiCommandService {
       'Do not return JSON, shell commands, command lists, or step plans.';
 
   final AiApiConfig config;
+  final String? openRouterModel;
 
   Future<List<AiCommandStep>> generateCommandPlan(String prompt) async {
     final trimmedPrompt = prompt.trim();
@@ -97,14 +112,16 @@ class AiCommandService {
           return await _generatePlanWithOpenAi(client, trimmedPrompt);
         case AiProvider.gemini:
           return await _generatePlanWithGemini(client, trimmedPrompt);
+        case AiProvider.openRouter:
+          return await _generatePlanWithOpenAi(client, trimmedPrompt);
       }
     } on TimeoutException {
-      throw const AiCommandServiceException(
-        'AI request timed out. Try again.',
+      throw AiCommandServiceException(
+        '${config.provider.label} request timed out. Try again.',
       );
     } on SocketException {
-      throw const AiCommandServiceException(
-        'Network error while contacting the AI provider.',
+      throw AiCommandServiceException(
+        'Network error while contacting ${config.provider.label}.',
       );
     } on FormatException {
       throw const AiCommandServiceException(
@@ -141,14 +158,16 @@ class AiCommandService {
           return await _chatWithOpenAi(client, trimmedPrompt);
         case AiProvider.gemini:
           return await _chatWithGemini(client, trimmedPrompt);
+        case AiProvider.openRouter:
+          return await _chatWithOpenAi(client, trimmedPrompt);
       }
     } on TimeoutException {
-      throw const AiCommandServiceException(
-        'AI request timed out. Try again.',
+      throw AiCommandServiceException(
+        '${config.provider.label} request timed out. Try again.',
       );
     } on SocketException {
-      throw const AiCommandServiceException(
-        'Network error while contacting the AI provider.',
+      throw AiCommandServiceException(
+        'Network error while contacting ${config.provider.label}.',
       );
     } finally {
       client.close(force: true);
@@ -201,15 +220,15 @@ class AiCommandService {
 
     final content = _extractOpenAiContent(responseBody);
     if (content == null || content.trim().isEmpty) {
-      throw const AiCommandServiceException(
-        'OpenAI returned an empty response.',
+      throw AiCommandServiceException(
+        '${config.provider.label} returned an empty response.',
       );
     }
 
     final plan = _parseCommandPlan(content);
     if (plan.isEmpty) {
-      throw const AiCommandServiceException(
-        'OpenAI returned no commands.',
+      throw AiCommandServiceException(
+        '${config.provider.label} returned no commands.',
       );
     }
 
@@ -317,8 +336,8 @@ class AiCommandService {
 
     final content = _extractOpenAiContent(responseBody);
     if (content == null || content.trim().isEmpty) {
-      throw const AiCommandServiceException(
-        'OpenAI returned an empty response.',
+      throw AiCommandServiceException(
+        '${config.provider.label} returned an empty response.',
       );
     }
 
@@ -568,6 +587,13 @@ class AiCommandService {
       }
       if (statusCode == 429) {
         return 'Gemini free-tier limit reached. Try again later or switch to OpenAI in Settings.';
+      }
+    } else if (provider == AiProvider.openRouter) {
+      if (statusCode == 401 || statusCode == 403) {
+        return 'OpenRouter rejected the API key. Check the key and try again.';
+      }
+      if (statusCode == 429) {
+        return 'OpenRouter rate limit reached. Try again later or switch models in Settings.';
       }
     } else {
       if (statusCode == 401 || statusCode == 403) {

@@ -15,6 +15,7 @@ Future<void> main() async {
   var savedSettings = const AiSettings(
     provider: AiProvider.openAi,
     apiKey: '',
+    openRouterModel: null,
   );
   String? aiSettingsStartupWarning;
   var hasAppPin = false;
@@ -80,23 +81,31 @@ class _AiServerAppState extends State<AiServerApp> {
 
   late AiProvider _aiProvider;
   late String _apiKey;
+  late String? _openRouterModel;
 
   @override
   void initState() {
     super.initState();
     _aiProvider = widget.initialSettings.provider;
     _apiKey = widget.initialSettings.apiKey;
+    _openRouterModel = widget.initialSettings.openRouterModel;
   }
 
-  Future<void> _saveAiSettings(AiProvider provider, String apiKey) async {
+  Future<void> _saveAiSettings(
+    AiProvider provider,
+    String apiKey,
+    String? openRouterModel,
+  ) async {
     await widget.apiKeyStorage.saveSettings(
       provider: provider,
       apiKey: apiKey,
+      openRouterModel: openRouterModel,
     );
 
     setState(() {
       _aiProvider = provider;
       _apiKey = apiKey;
+      _openRouterModel = openRouterModel;
     });
   }
 
@@ -116,6 +125,7 @@ class _AiServerAppState extends State<AiServerApp> {
     final serverListScreen = ServerListScreen(
       aiProvider: _aiProvider,
       apiKey: _apiKey,
+      openRouterModel: _openRouterModel,
       onSaveAiSettings: _saveAiSettings,
       startupWarning: widget.initialAiSettingsLoadError,
     );

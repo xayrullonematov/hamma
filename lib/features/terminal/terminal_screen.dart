@@ -17,12 +17,14 @@ class TerminalScreen extends StatefulWidget {
     required this.serverName,
     required this.aiProvider,
     required this.apiKey,
+    required this.openRouterModel,
   });
 
   final SshService sshService;
   final String serverName;
   final AiProvider aiProvider;
   final String apiKey;
+  final String? openRouterModel;
 
   @override
   State<TerminalScreen> createState() => _TerminalScreenState();
@@ -418,8 +420,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
         return FractionallySizedBox(
           heightFactor: 0.82,
           child: AiCopilotSheet(
+            serverId: widget.serverName,
             provider: widget.aiProvider,
             apiKey: widget.apiKey,
+            openRouterModel: widget.openRouterModel,
             executionTarget: AiCopilotExecutionTarget.terminal,
             canRunCommands: () => _session != null,
             getContext: getRecentTerminalContext,

@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/ai/ai_provider.dart';
@@ -10,13 +14,18 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     required this.initialProvider,
     required this.initialApiKey,
+    required this.initialOpenRouterModel,
     required this.onSaveAiSettings,
   });
 
   final AiProvider initialProvider;
   final String initialApiKey;
-  final Future<void> Function(AiProvider provider, String apiKey)
-      onSaveAiSettings;
+  final String? initialOpenRouterModel;
+  final Future<void> Function(
+    AiProvider provider,
+    String apiKey,
+    String? openRouterModel,
+  ) onSaveAiSettings;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -27,38 +36,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const _panelColor = Color(0xFF162033);
   static const _mutedColor = Color(0xFF94A3B8);
   static const _shadowColor = Color(0x22000000);
+  static const _openRouterModelsUrl = 'https://openrouter.ai/api/v1/models';
 
   late final TextEditingController _apiKeyController;
+  late final TextEditingController _openRouterModelController;
   final AppLockStorage _appLockStorage = const AppLockStorage();
   late AiProvider _selectedProvider;
+  String? _openRouterModel;
   bool _isSaving = false;
   bool? _hasAppPin;
+  bool _isLoadingOpenRouterModels = false;
+  bool _hasLoadedOpenRouterModels = false;
+  String? _openRouterModelsError;
+  List<String> _openRouterModels = const [];
   String _status = '';
 
   @override
   void initState() {
     super.initState();
     _selectedProvider = widget.initialProvider;
+    _openRouterModel = _normalizeOpenRouterModel(widget.initialOpenRouterModel);
     _apiKeyController = TextEditingController(text: widget.initialApiKey);
+    _openRouterModelController = TextEditingController(
+      text: _openRouterModel ?? '',
+    );
     _loadAppPinStatus();
+    if (_selectedProvider == AiProvider.openRouter) {
+      _loadOpenRouterModels();
+    }
   }
 
   @override
   void dispose() {
     _apiKeyController.dispose();
+    _openRouterModelController.dispose();
     super.dispose();
+  }
+
+  String? _normalizeOpenRouterModel(String? value) {
+    final normalized = value?.trim() ?? '';
+    return normalized.isEmpty ? null : normalized;
   }
 
   Future<void> _save() async {
     final apiKey = _apiKeyController.text.trim();
+    final resolvedOpenRouterModel = _normalizeOpenRouterModel(
+      _openRouterModelController.text,
+    );
 
     setState(() {
       _isSaving = true;
       _status = apiKey.isEmpty ? 'Clearing API key' : 'Saving AI settings';
+      _openRouterModel = resolvedOpenRouterModel;
     });
 
     try {
-      await widget.onSaveAiSettings(_selectedProvider, apiKey);
+      await widget.onSaveAiSettings(
+        _selectedProvider,
+        apiKey,
+        resolvedOpenRouterModel,
+      );
       if (!mounted) {
         return;
       }
@@ -140,6 +177,191 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _loadOpenRouterModels({bool forceRefresh = false}) async {
+    if (_isLoadingOpenRouterModels) {
+      return;
+    }
+
+    if (_hasLoadedOpenRouterModels && !forceRefresh) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingOpenRouterModels = true;
+      _openRouterModelsError = null;
+    });
+
+    try {
+      final response = await http
+          .get(Uri.parse(_openRouterModelsUrl))
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError(
+          'OpenRouter model list request failed with status ${response.statusCode}.',
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('OpenRouter model response was invalid.');
+      }
+
+      final data = decoded['data'];
+      if (data is! List) {
+        throw const FormatException('OpenRouter model response was invalid.');
+      }
+
+      final models = data
+          .whereType<Map>()
+          .map((item) => (item['id'] ?? '').toString().trim())
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList()
+        ..sort();
+
+      final selectedModel = _normalizeOpenRouterModel(_openRouterModel);
+      if (selectedModel != null && !models.contains(selectedModel)) {
+        models.insert(0, selectedModel);
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _openRouterModels = models;
+        _openRouterModelsError = null;
+        _hasLoadedOpenRouterModels = true;
+      });
+      _openRouterModelController.text = _openRouterModel ?? '';
+    } on TimeoutException {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _openRouterModelsError =
+            'OpenRouter model list request timed out. Try again.';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _openRouterModelsError = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingOpenRouterModels = false;
+        });
+      }
+    }
+  }
+
+  void _handleProviderChanged(AiProvider provider) {
+    setState(() {
+      _selectedProvider = provider;
+      _openRouterModel = _normalizeOpenRouterModel(
+        _openRouterModelController.text,
+      );
+    });
+
+    if (provider == AiProvider.openRouter) {
+      _loadOpenRouterModels();
+    }
+  }
+
+  Widget _buildOpenRouterModelSelector(ThemeData theme) {
+    if (_isLoadingOpenRouterModels) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _panelColor,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Loading OpenRouter models...',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: _mutedColor,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_openRouterModelsError != null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _panelColor,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _openRouterModelsError!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _mutedColor,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _isSaving
+                  ? null
+                  : () => _loadOpenRouterModels(forceRefresh: true),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry Model Fetch'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return DropdownMenu<String>(
+      controller: _openRouterModelController,
+      initialSelection: _openRouterModel,
+      enabled: !_isSaving,
+      enableFilter: true,
+      enableSearch: true,
+      requestFocusOnTap: true,
+      width: double.infinity,
+      label: const Text('OpenRouter Model'),
+      hintText: 'Search models',
+      helperText: 'Choose a model for command generation and chat.',
+      dropdownMenuEntries: _openRouterModels
+          .map(
+            (modelId) => DropdownMenuEntry<String>(
+              value: modelId,
+              label: modelId,
+            ),
+          )
+          .toList(),
+      onSelected: (value) {
+        setState(() {
+          _openRouterModel = _normalizeOpenRouterModel(value);
+        });
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -185,9 +407,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 return;
                               }
 
-                              setState(() {
-                                _selectedProvider = provider;
-                              });
+                              _handleProviderChanged(provider);
                             },
                     ),
                   ),
@@ -216,6 +436,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       helperText: 'Leave blank to clear the saved API key.',
                     ),
                   ),
+                  if (_selectedProvider == AiProvider.openRouter) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: _panelColor,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Text(
+                        'OpenRouter requires a specific model selection. Saved model: ${_openRouterModel ?? 'Default'}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: _mutedColor,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildOpenRouterModelSelector(theme),
+                  ],
                 ],
               ),
             ),

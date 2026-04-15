@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import '../../core/ai/ai_command_service.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
+import '../../core/storage/chat_history_storage.dart';
 
 class AiCopilotSheet extends StatefulWidget {
   const AiCopilotSheet({
     super.key,
+    required this.serverId,
     required this.provider,
     required this.apiKey,
+    required this.openRouterModel,
     required this.executionTarget,
     required this.canRunCommands,
     required this.getContext,
@@ -16,8 +19,10 @@ class AiCopilotSheet extends StatefulWidget {
     required this.executionUnavailableMessage,
   });
 
+  final String serverId;
   final AiProvider provider;
   final String apiKey;
+  final String? openRouterModel;
   final AiCopilotExecutionTarget executionTarget;
   final bool Function() canRunCommands;
   final String Function() getContext;
@@ -40,14 +45,16 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   static const _shadowColor = Color(0x22000000);
 
   late AiCommandService _aiCommandService;
+  final ChatHistoryStorage _chatHistoryStorage = const ChatHistoryStorage();
   final CommandRiskAssessor _riskAssessor = const CommandRiskAssessor();
   final TextEditingController _promptController = TextEditingController();
 
   CopilotMode _mode = CopilotMode.commandHelper;
   bool _isGenerating = false;
+  bool _isHistoryLoading = true;
   int? _runningCommandIndex;
   List<_CopilotPlanStep> _planSteps = [];
-  String _chatResponse = '';
+  List<_ChatMessage> _chatMessages = const [];
   String _commandOutput = '';
   String _status = 'Describe the issue, then generate suggested commands.';
 
@@ -59,18 +66,26 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     _aiCommandService = AiCommandService.forProvider(
       provider: widget.provider,
       apiKey: widget.apiKey,
+      openRouterModel: widget.openRouterModel,
     );
+    _loadChatHistory();
   }
 
   @override
   void didUpdateWidget(covariant AiCopilotSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.provider != widget.provider ||
-        oldWidget.apiKey != widget.apiKey) {
+        oldWidget.apiKey != widget.apiKey ||
+        oldWidget.openRouterModel != widget.openRouterModel) {
       _aiCommandService = AiCommandService.forProvider(
         provider: widget.provider,
         apiKey: widget.apiKey,
+        openRouterModel: widget.openRouterModel,
       );
+    }
+
+    if (oldWidget.serverId != widget.serverId) {
+      _loadChatHistory();
     }
   }
 
@@ -86,6 +101,127 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       step.controller.dispose();
     }
     _planSteps = [];
+  }
+
+  Future<void> _loadChatHistory() async {
+    setState(() {
+      _isHistoryLoading = true;
+    });
+
+    try {
+      final storedMessages = await _chatHistoryStorage.loadHistory(
+        serverId: widget.serverId,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      final chatMessages = storedMessages
+          .map(
+            (message) => _ChatMessage(
+              role: message['role'] ?? '',
+              content: message['content'] ?? '',
+            ),
+          )
+          .where((message) => message.role.isNotEmpty && message.content.isNotEmpty)
+          .toList();
+
+      setState(() {
+        _chatMessages = chatMessages;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _chatMessages = const [];
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isHistoryLoading = false;
+        });
+      }
+    }
+  }
+
+  void _appendChatMessage({
+    required String role,
+    required String content,
+  }) {
+    final normalizedContent = content.trim();
+    if (normalizedContent.isEmpty) {
+      return;
+    }
+
+    final updatedMessages = [
+      ..._chatMessages,
+      _ChatMessage(role: role, content: normalizedContent),
+    ];
+
+    setState(() {
+      _chatMessages = updatedMessages;
+    });
+
+    _saveChatHistory(updatedMessages);
+  }
+
+  Future<void> _saveChatHistory(List<_ChatMessage> messages) async {
+    try {
+      await _chatHistoryStorage.saveHistory(
+        serverId: widget.serverId,
+        messages: messages
+            .map(
+              (message) => {
+                'role': message.role,
+                'content': message.content,
+              },
+            )
+            .toList(),
+      );
+    } catch (_) {
+      // Ignore persistence failures to avoid interrupting the chat flow.
+    }
+  }
+
+  Future<void> _clearChatHistory() async {
+    final shouldClear = await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Clear Chat'),
+              content: const Text(
+                'Delete the saved chat history for this server?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Clear'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+
+    if (!shouldClear) {
+      return;
+    }
+
+    setState(() {
+      _chatMessages = const [];
+    });
+
+    try {
+      await _chatHistoryStorage.clearHistory(serverId: widget.serverId);
+    } catch (_) {
+      // Ignore storage failures after clearing the local UI state.
+    }
   }
 
   Future<void> _generateCommands() async {
@@ -173,6 +309,9 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       return;
     }
 
+    final existingChatMessages = List<_ChatMessage>.from(_chatMessages);
+    _appendChatMessage(role: 'user', content: prompt);
+
     setState(() {
       _isGenerating = true;
       _status = 'Generating response';
@@ -180,16 +319,19 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
     try {
       final response = await _aiCommandService.generateChatResponse(
-        _buildChatPrompt(prompt),
+        _buildChatPrompt(
+          prompt,
+          historyMessages: existingChatMessages,
+        ),
       );
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _chatResponse = response;
         _status = 'Response ready';
       });
+      _appendChatMessage(role: 'assistant', content: response);
     } catch (error) {
       if (!mounted) {
         return;
@@ -469,6 +611,11 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     final message = error.toString().trim();
     final normalized = message.toLowerCase();
 
+    if (error is AiCommandServiceException &&
+        error.message.trim().isNotEmpty) {
+      return error.message.trim();
+    }
+
     if (normalized.contains('api key is not set')) {
       return 'Set your ${widget.provider.label} API key in Settings first.';
     }
@@ -531,13 +678,46 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         'Use one shell command per step. No markdown. No code fences. No explanation outside JSON.';
   }
 
-  String _buildChatPrompt(String userPrompt) {
+  String _buildChatPrompt(
+    String userPrompt, {
+    List<_ChatMessage>? historyMessages,
+  }) {
     final contextSection = _buildContextSection();
+    final historySection = _buildChatHistorySection(
+      historyMessages ?? _chatMessages,
+    );
     return 'Explain the situation, logs, or errors based on the available session context.\n\n'
         '$contextSection'
+        '$historySection'
         'User request:\n'
         '$userPrompt\n\n'
         'Reply in plain language only. Do not return JSON, shell commands, step plans, or command lists.';
+  }
+
+  String _buildChatHistorySection(List<_ChatMessage> historyMessages) {
+    if (historyMessages.isEmpty) {
+      return '';
+    }
+
+    final recentMessages = historyMessages.length > 10
+        ? historyMessages.sublist(historyMessages.length - 10)
+        : historyMessages;
+
+    var historyText = recentMessages
+        .map(
+          (message) =>
+              '${message.role == 'user' ? 'User' : 'Assistant'}: ${message.content}',
+        )
+        .join('\n');
+
+    if (historyText.length > 1400) {
+      historyText = historyText.substring(historyText.length - 1400);
+    }
+
+    return 'Conversation so far:\n'
+        '--- BEGIN CHAT HISTORY ---\n'
+        '$historyText\n'
+        '--- END CHAT HISTORY ---\n\n';
   }
 
   String _buildContextSection() {
@@ -589,14 +769,12 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       if (mode == CopilotMode.generalChat) {
         _disposePlanSteps();
         _commandOutput = '';
-      } else {
-        _chatResponse = '';
       }
     });
   }
 
   void _submitPrompt() {
-    if (_isGenerating || _isRunningStep) {
+    if (_isGenerating || _isRunningStep || _isHistoryLoading) {
       return;
     }
 
@@ -748,40 +926,81 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   }
 
   Widget _buildGeneralChatView(ThemeData theme) {
-    final hasResponse = _chatResponse.isNotEmpty;
-
     return ListView(
       padding: const EdgeInsets.only(bottom: 8),
       children: [
         _buildStatusBanner(theme),
         const SizedBox(height: 16),
         Text(
-          'Response from ${widget.provider.label}',
+          'Conversation with ${widget.provider.label}',
           style: theme.textTheme.bodySmall?.copyWith(
             color: _mutedColor,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
-            child: _ChatBubble(
-              child: _isGenerating
-                  ? const _LoadingBubble(label: 'Thinking...')
-                  : SelectableText(
-                      hasResponse
-                          ? _chatResponse
-                          : 'Ask about logs, Linux concepts, or debugging strategy.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: hasResponse ? Colors.white : _mutedColor,
-                        height: 1.5,
-                      ),
-                    ),
+        if (_isHistoryLoading)
+          const _LoadingBubble(
+            label: 'Loading previous chat...',
+          )
+        else if (_chatMessages.isEmpty && !_isGenerating)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: _ChatBubble(
+                child: SelectableText(
+                  'Ask about logs, Linux concepts, or debugging strategy.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: _mutedColor,
+                    height: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          )
+        else
+          ..._chatMessages.map((message) {
+            final isUser = message.role == 'user';
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Align(
+                alignment:
+                    isUser ? Alignment.centerRight : Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: isUser
+                      ? _UserChatBubble(
+                          child: SelectableText(
+                            message.content,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.white,
+                              height: 1.5,
+                            ),
+                          ),
+                        )
+                      : _ChatBubble(
+                          child: SelectableText(
+                            message.content,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.white,
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                ),
+              ),
+            );
+          }),
+        if (_isGenerating)
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _LoadingBubble(label: 'Thinking...'),
             ),
           ),
-        ),
       ],
     );
   }
@@ -839,7 +1058,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
               borderRadius: BorderRadius.circular(18),
             ),
             child: IconButton(
-              onPressed: _isGenerating || _isRunningStep ? null : _submitPrompt,
+              onPressed:
+                  _isGenerating || _isRunningStep || _isHistoryLoading
+                      ? null
+                      : _submitPrompt,
               icon: _isGenerating
                   ? const SizedBox(
                       width: 18,
@@ -910,6 +1132,16 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     ],
                   ),
                   const Spacer(),
+                  IconButton(
+                    onPressed: _isHistoryLoading ||
+                            _isGenerating ||
+                            _chatMessages.isEmpty
+                        ? null
+                        : _clearChatHistory,
+                    icon: const Icon(Icons.delete_sweep_outlined),
+                    color: _mutedColor,
+                    tooltip: 'Clear chat',
+                  ),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -1021,6 +1253,16 @@ class _CopilotPlanStep {
   final String? description;
   final TextEditingController controller;
   CopilotPlanStepState state;
+}
+
+class _ChatMessage {
+  const _ChatMessage({
+    required this.role,
+    required this.content,
+  });
+
+  final String role;
+  final String content;
 }
 
 class _StepNode extends StatelessWidget {
@@ -1299,6 +1541,38 @@ class _ChatBubble extends StatelessWidget {
           topRight: Radius.circular(24),
           bottomRight: Radius.circular(24),
           bottomLeft: Radius.circular(8),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: _AiCopilotSheetState._shadowColor,
+            blurRadius: 18,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+class _UserChatBubble extends StatelessWidget {
+  const _UserChatBubble({
+    required this.child,
+  });
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _AiCopilotSheetState._panelColor,
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(24),
+          topRight: Radius.circular(24),
+          bottomRight: Radius.circular(8),
+          bottomLeft: Radius.circular(24),
         ),
         boxShadow: const [
           BoxShadow(
