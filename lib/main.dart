@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/ai/ai_provider.dart';
 import 'core/storage/api_key_storage.dart';
+import 'core/storage/app_lock_storage.dart';
+import 'features/security/app_lock_screen.dart';
 import 'features/servers/server_list_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   const apiKeyStorage = ApiKeyStorage();
+  const appLockStorage = AppLockStorage();
   var savedSettings = const AiSettings(
     provider: AiProvider.openAi,
     apiKey: '',
   );
   String? aiSettingsStartupWarning;
+  var hasAppPin = false;
 
   try {
     savedSettings = await apiKeyStorage.loadSettings();
@@ -21,12 +26,29 @@ Future<void> main() async {
         'Could not load the saved AI settings. You can continue and re-save them in Settings.\n$error';
   }
 
-  runApp(
-    AiServerApp(
-      apiKeyStorage: apiKeyStorage,
-      initialSettings: savedSettings,
-      initialAiSettingsLoadError: aiSettingsStartupWarning,
-    ),
+  try {
+    hasAppPin = await appLockStorage.hasPin();
+  } catch (_) {
+    hasAppPin = false;
+  }
+
+  await SentryFlutter.init(
+    (options) {
+      options.dsn =
+          'https://61903110a3e1bd10a89811e3c87f2f24@o4511222528802816.ingest.de.sentry.io/4511222565568592';
+      options.tracesSampleRate = 1.0;
+    },
+    appRunner: () {
+      runApp(
+        AiServerApp(
+          apiKeyStorage: apiKeyStorage,
+          appLockStorage: appLockStorage,
+          initialSettings: savedSettings,
+          initialHasAppPin: hasAppPin,
+          initialAiSettingsLoadError: aiSettingsStartupWarning,
+        ),
+      );
+    },
   );
 }
 
@@ -34,12 +56,16 @@ class AiServerApp extends StatefulWidget {
   const AiServerApp({
     super.key,
     required this.apiKeyStorage,
+    required this.appLockStorage,
     required this.initialSettings,
+    required this.initialHasAppPin,
     this.initialAiSettingsLoadError,
   });
 
   final ApiKeyStorage apiKeyStorage;
+  final AppLockStorage appLockStorage;
   final AiSettings initialSettings;
+  final bool initialHasAppPin;
   final String? initialAiSettingsLoadError;
 
   @override
@@ -86,6 +112,12 @@ class _AiServerAppState extends State<AiServerApp> {
       onError: Colors.white,
       surface: _surface,
       onSurface: Color(0xFFF8FAFC),
+    );
+    final serverListScreen = ServerListScreen(
+      aiProvider: _aiProvider,
+      apiKey: _apiKey,
+      onSaveAiSettings: _saveAiSettings,
+      startupWarning: widget.initialAiSettingsLoadError,
     );
 
     return MaterialApp(
@@ -177,12 +209,13 @@ class _AiServerAppState extends State<AiServerApp> {
           ),
         ),
       ),
-      home: ServerListScreen(
-        aiProvider: _aiProvider,
-        apiKey: _apiKey,
-        onSaveAiSettings: _saveAiSettings,
-        startupWarning: widget.initialAiSettingsLoadError,
-      ),
+      home: widget.initialHasAppPin
+          ? AppLockScreen(
+              mode: AppLockMode.verify,
+              appLockStorage: widget.appLockStorage,
+              nextScreen: serverListScreen,
+            )
+          : serverListScreen,
     );
   }
 }

@@ -3,11 +3,35 @@ class QuickAction {
     required this.id,
     required this.label,
     required this.command,
+    this.isCustom = false,
   });
 
   final String id;
   final String label;
   final String command;
+  final bool isCustom;
+
+  factory QuickAction.fromJson(Map<String, dynamic> json) {
+    final rawIsCustom = json['isCustom'];
+
+    return QuickAction(
+      id: (json['id'] ?? '').toString(),
+      label: (json['label'] ?? '').toString(),
+      command: (json['command'] ?? '').toString(),
+      isCustom: rawIsCustom is bool
+          ? rawIsCustom
+          : rawIsCustom?.toString().toLowerCase() == 'true',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'label': label,
+      'command': command,
+      'isCustom': isCustom,
+    };
+  }
 }
 
 const List<QuickAction> kQuickActions = [

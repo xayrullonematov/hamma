@@ -13,6 +13,13 @@ This project is a **smart server control app**:
 - AI-generated command suggestions
 - terminal available for power users
 
+## Current Status
+
+- MVP: complete
+- UI polish phase: 100% complete
+- Secure local credential storage: complete
+- Release stage: Beta Release Candidate
+
 ---
 
 ## Core Product Vision
@@ -83,7 +90,7 @@ Always show:
 
 ## MVP Scope
 
-### Must Have
+### Must Have (Complete)
 - Add/edit/delete saved servers
 - Direct SSH connection from device
 - Terminal screen
@@ -251,3 +258,4 @@ lib/
     widgets/
     utils/
   main.dart
+```

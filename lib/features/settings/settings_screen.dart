@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/ai/ai_provider.dart';
+import '../../core/storage/app_lock_storage.dart';
+import '../security/app_lock_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -26,8 +29,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const _shadowColor = Color(0x22000000);
 
   late final TextEditingController _apiKeyController;
+  final AppLockStorage _appLockStorage = const AppLockStorage();
   late AiProvider _selectedProvider;
   bool _isSaving = false;
+  bool? _hasAppPin;
   String _status = '';
 
   @override
@@ -35,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _selectedProvider = widget.initialProvider;
     _apiKeyController = TextEditingController(text: widget.initialApiKey);
+    _loadAppPinStatus();
   }
 
   @override
@@ -77,6 +83,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _launchFeedbackEmail() async {
+    final uri = Uri(
+      scheme: 'mailto',
+      path: 'support@example.com',
+      queryParameters: const {
+        'subject': 'Hamma Beta Feedback',
+      },
+    );
+
+    try {
+      await launchUrl(uri);
+    } catch (_) {
+      // Ignore launch failures when no email client is available.
+    }
+  }
+
+  Future<void> _loadAppPinStatus() async {
+    try {
+      final hasPin = await _appLockStorage.hasPin();
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _hasAppPin = hasPin;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _hasAppPin = false;
+      });
+    }
+  }
+
+  Future<void> _openAppLockSettings() async {
+    final hasAppPin = _hasAppPin;
+    if (hasAppPin == null) {
+      return;
+    }
+
+    final didChange = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => AppLockScreen(
+          mode: hasAppPin ? AppLockMode.remove : AppLockMode.setup,
+          appLockStorage: _appLockStorage,
+        ),
+      ),
+    );
+
+    if (didChange == true && mounted) {
+      await _loadAppPinStatus();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -91,63 +154,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: _surfaceColor,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: const [
-                  BoxShadow(
-                    color: _shadowColor,
-                    blurRadius: 20,
-                    offset: Offset(0, 10),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(20),
+            _SettingsSectionCard(
+              title: 'AI Configuration',
+              subtitle:
+                  'Choose your AI provider and manage the API key used by the copilot.',
+              icon: Icons.smart_toy_outlined,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                          Icons.smart_toy_outlined,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'AI Configuration',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Choose your AI provider and manage the API key used by the copilot.',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: _mutedColor,
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
                   Theme(
                     data: theme.copyWith(
                       canvasColor: _panelColor,
@@ -233,8 +247,159 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 20),
+            _SettingsSectionCard(
+              title: 'Security',
+              subtitle:
+                  'Protect local app access with a custom 4-digit PIN and optional biometric unlock.',
+              icon: Icons.lock_outline,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: _panelColor,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      _hasAppPin == null
+                          ? 'Checking app lock status...'
+                          : _hasAppPin!
+                              ? 'App lock is enabled. Remove the current PIN from this device.'
+                              : 'No app PIN is set. Add one to require PIN or biometric unlock on launch.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: _mutedColor,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: _hasAppPin == null ? null : _openAppLockSettings,
+                      icon: Icon(
+                        _hasAppPin == true
+                            ? Icons.lock_open_outlined
+                            : Icons.pin_outlined,
+                      ),
+                      label: Text(
+                        _hasAppPin == true ? 'Remove App PIN' : 'Set App PIN',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            _SettingsSectionCard(
+              title: 'About & Support',
+              subtitle:
+                  'Send beta feedback, report bugs, or share issues you find while using Hamma.',
+              icon: Icons.mail_outline,
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _launchFeedbackEmail,
+                  icon: const Icon(Icons.mail_outline),
+                  label: const Text('Send Feedback / Report Bug'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Hamma v1.0.0 (Beta)',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: _mutedColor,
+                height: 1.4,
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SettingsSectionCard extends StatelessWidget {
+  const _SettingsSectionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.child,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _SettingsScreenState._surfaceColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(
+            color: _SettingsScreenState._shadowColor,
+            blurRadius: 20,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  icon,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: _SettingsScreenState._mutedColor,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          child,
+        ],
       ),
     );
   }

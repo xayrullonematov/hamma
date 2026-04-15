@@ -2,6 +2,15 @@
 
 This project, internally referred to as **Hamma** or **AI Server V2**, is a mobile-first Flutter application designed for managing remote servers directly via SSH from the device, augmented by AI-driven command suggestions and safety assessments.
 
+## Current Project Status
+
+- **Phase 1: Core SSH / AI**: complete
+- **Phase 2: UI Polish & Security**: complete
+- **Current Stage**: Beta Release Candidate
+- **MVP**: complete
+
+Future roadmap items such as SFTP file explorer, sync, and extended history remain intentionally outside the current release candidate scope.
+
 ## Project Vision & Core Principles
 
 **Product One-Liner:** "Manage your server without writing commands."
@@ -33,8 +42,8 @@ The project follows a feature-based architecture with a clear separation between
 - **Framework:** Flutter (Dart)
 - **SSH Protocol:** `dartssh2`
 - **Terminal Emulator:** `xterm`
-- **Security:** `flutter_secure_storage` for credentials and saved hosts.
-- **AI Integration:** OpenAI-compatible REST APIs.
+- **Security:** `flutter_secure_storage` for credentials and saved hosts
+- **AI Integration:** multi-provider AI support with provider-managed API keys
 
 ## UX Principles
 

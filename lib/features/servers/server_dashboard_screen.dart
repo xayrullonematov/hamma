@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/storage/custom_actions_storage.dart';
 import '../ai_assistant/ai_copilot_sheet.dart';
+import '../quick_actions/custom_actions_screen.dart';
 import '../quick_actions/quick_actions.dart';
 import '../settings/settings_screen.dart';
 import '../terminal/terminal_screen.dart';
@@ -39,6 +41,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   static const _shadowColor = Color(0x22000000);
 
   final SshService _sshService = SshService();
+  final CustomActionsStorage _customActionsStorage = const CustomActionsStorage();
   late AiProvider _aiProvider;
   late String _apiKey;
 
@@ -48,14 +51,20 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   String? _status;
   String _quickActionOutput = 'Quick action results will appear here.';
   ConnectionTestState _connectionTestState = ConnectionTestState.idle;
+  List<QuickAction> _customQuickActions = const [];
 
   ServerProfile get _server => widget.server;
+  List<QuickAction> get _allQuickActions => [
+        ...kQuickActions,
+        ..._customQuickActions,
+      ];
 
   @override
   void initState() {
     super.initState();
     _aiProvider = widget.aiProvider;
     _apiKey = widget.apiKey;
+    _loadCustomQuickActions();
   }
 
   @override
@@ -198,6 +207,29 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           _activeQuickActionId = null;
         });
       }
+    }
+  }
+
+  Future<void> _loadCustomQuickActions() async {
+    try {
+      final actions = await _customActionsStorage.loadActions();
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _customQuickActions = actions;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _showMessage(error.toString());
+        }
+      });
     }
   }
 
@@ -474,6 +506,11 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   }
 
   IconData _quickActionIcon(String actionId) {
+    final customAction = _allQuickActions.where((action) => action.id == actionId);
+    if (customAction.isNotEmpty && customAction.first.isCustom) {
+      return Icons.terminal_rounded;
+    }
+
     switch (actionId) {
       case 'restart-server':
         return Icons.restart_alt_rounded;
@@ -486,6 +523,20 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
       default:
         return Icons.terminal_rounded;
     }
+  }
+
+  Future<void> _openCustomActions() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const CustomActionsScreen(),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    await _loadCustomQuickActions();
   }
 
   void _openTerminal() {
@@ -711,6 +762,11 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                         style: theme.textTheme.titleMedium,
                       ),
                       const Spacer(),
+                      IconButton(
+                        onPressed: _isBusy ? null : _openCustomActions,
+                        icon: const Icon(Icons.edit_note_rounded),
+                        tooltip: 'Manage custom actions',
+                      ),
                       Text(
                         _sshService.isConnected ? 'Live SSH' : 'Disconnected',
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -723,7 +779,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: kQuickActions.length,
+                    itemCount: _allQuickActions.length,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
@@ -732,7 +788,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                       childAspectRatio: 1.24,
                     ),
                     itemBuilder: (context, index) {
-                      final action = kQuickActions[index];
+                      final action = _allQuickActions[index];
                       final isRunning = _activeQuickActionId == action.id;
                       final isEnabled = !_isBusy && _sshService.isConnected;
 

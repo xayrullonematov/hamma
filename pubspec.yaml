@@ -37,6 +37,9 @@ dependencies:
   dartssh2: ^2.11.0
   flutter_secure_storage: ^10.0.0
   xterm: ^4.0.0
+  sentry_flutter: ^9.17.0
+  url_launcher: ^6.3.1
+  local_auth: ^2.2.0
 
 dev_dependencies:
   flutter_test:
