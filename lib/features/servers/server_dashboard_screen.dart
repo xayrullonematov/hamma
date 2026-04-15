@@ -7,6 +7,7 @@ import '../../core/storage/custom_actions_storage.dart';
 import '../ai_assistant/ai_copilot_sheet.dart';
 import '../quick_actions/custom_actions_screen.dart';
 import '../quick_actions/quick_actions.dart';
+import '../sftp/file_explorer_screen.dart';
 import '../settings/settings_screen.dart';
 import '../terminal/terminal_screen.dart';
 
@@ -18,6 +19,7 @@ class ServerDashboardScreen extends StatefulWidget {
     required this.apiKey,
     required this.openRouterModel,
     required this.onSaveAiSettings,
+    this.onBackupImported,
   });
 
   final ServerProfile server;
@@ -29,7 +31,8 @@ class ServerDashboardScreen extends StatefulWidget {
     String apiKey,
     String? openRouterModel,
   )
-      onSaveAiSettings;
+  onSaveAiSettings;
+  final Future<void> Function()? onBackupImported;
 
   @override
   State<ServerDashboardScreen> createState() => _ServerDashboardScreenState();
@@ -47,7 +50,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   static const _shadowColor = Color(0x22000000);
 
   final SshService _sshService = SshService();
-  final CustomActionsStorage _customActionsStorage = const CustomActionsStorage();
+  final CustomActionsStorage _customActionsStorage =
+      const CustomActionsStorage();
   late AiProvider _aiProvider;
   late String _apiKey;
   late String? _openRouterModel;
@@ -62,9 +66,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
 
   ServerProfile get _server => widget.server;
   List<QuickAction> get _allQuickActions => [
-        ...kQuickActions,
-        ..._customQuickActions,
-      ];
+    ...kQuickActions,
+    ..._customQuickActions,
+  ];
 
   @override
   void initState() {
@@ -328,9 +332,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         false;
   }
 
-  Future<void> _handleQuickActionError({
-    required Object error,
-  }) async {
+  Future<void> _handleQuickActionError({required Object error}) async {
     final message = error.toString();
     if (_looksLikeDisconnect(message)) {
       await _sshService.disconnect();
@@ -374,12 +376,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   void _openSettings() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => SettingsScreen(
-          initialProvider: _aiProvider,
-          initialApiKey: _apiKey,
-          initialOpenRouterModel: _openRouterModel,
-          onSaveAiSettings: _saveAiSettings,
-        ),
+        builder:
+            (_) => SettingsScreen(
+              initialProvider: _aiProvider,
+              initialApiKey: _apiKey,
+              initialOpenRouterModel: _openRouterModel,
+              onSaveAiSettings: _saveAiSettings,
+              onBackupImported: widget.onBackupImported,
+            ),
       ),
     );
   }
@@ -391,10 +395,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
 
     _isShowingMessage = true;
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)))
-        .closed
-        .then((_) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message))).closed.then((_) {
       _isShowingMessage = false;
     });
   }
@@ -422,7 +425,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
 
   Future<String?> _runCopilotCommand(String command) async {
     if (!_sshService.isConnected) {
-      throw StateError('SSH is disconnected. Reconnect before running commands.');
+      throw StateError(
+        'SSH is disconnected. Reconnect before running commands.',
+      );
     }
 
     try {
@@ -525,7 +530,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   }
 
   IconData _quickActionIcon(String actionId) {
-    final customAction = _allQuickActions.where((action) => action.id == actionId);
+    final customAction = _allQuickActions.where(
+      (action) => action.id == actionId,
+    );
     if (customAction.isNotEmpty && customAction.first.isCustom) {
       return Icons.terminal_rounded;
     }
@@ -546,9 +553,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
 
   Future<void> _openCustomActions() async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const CustomActionsScreen(),
-      ),
+      MaterialPageRoute<void>(builder: (_) => const CustomActionsScreen()),
     );
 
     if (!mounted) {
@@ -561,13 +566,22 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   void _openTerminal() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => TerminalScreen(
-          sshService: _sshService,
-          serverName: _server.name,
-          aiProvider: _aiProvider,
-          apiKey: _apiKey,
-          openRouterModel: _openRouterModel,
-        ),
+        builder:
+            (_) => TerminalScreen(
+              sshService: _sshService,
+              serverName: _server.name,
+              aiProvider: _aiProvider,
+              apiKey: _apiKey,
+              openRouterModel: _openRouterModel,
+            ),
+      ),
+    );
+  }
+
+  void _openFileExplorer() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FileExplorerScreen(server: _server),
       ),
     );
   }
@@ -577,11 +591,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
       color: _surfaceColor,
       borderRadius: BorderRadius.circular(24),
       boxShadow: const [
-        BoxShadow(
-          color: _shadowColor,
-          blurRadius: 18,
-          offset: Offset(0, 10),
-        ),
+        BoxShadow(color: _shadowColor, blurRadius: 18, offset: Offset(0, 10)),
       ],
     );
   }
@@ -589,7 +599,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final connectButtonLabel = _sshService.isConnected ? 'Reconnect' : 'Connect';
+    final connectButtonLabel =
+        _sshService.isConnected ? 'Reconnect' : 'Connect';
 
     return Scaffold(
       appBar: AppBar(
@@ -620,7 +631,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                         width: 56,
                         height: 56,
                         decoration: BoxDecoration(
-                          color: _connectionBadgeColor().withValues(alpha: 0.14),
+                          color: _connectionBadgeColor().withValues(
+                            alpha: 0.14,
+                          ),
                           borderRadius: BorderRadius.circular(18),
                         ),
                         child: Icon(
@@ -657,7 +670,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: _connectionBadgeColor().withValues(alpha: 0.14),
+                          color: _connectionBadgeColor().withValues(
+                            alpha: 0.14,
+                          ),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Row(
@@ -704,7 +719,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                     alignment: Alignment.centerLeft,
                     child: OutlinedButton.icon(
                       onPressed:
-                          _isBusy || !_sshService.isConnected ? null : _runConnectionTest,
+                          _isBusy || !_sshService.isConnected
+                              ? null
+                              : _runConnectionTest,
                       icon: const Icon(Icons.verified_outlined),
                       label: const Text('Connection Test'),
                     ),
@@ -719,10 +736,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Main Actions',
-                    style: theme.textTheme.titleMedium,
-                  ),
+                  Text('Main Actions', style: theme.textTheme.titleMedium),
                   const SizedBox(height: 14),
                   Row(
                     children: [
@@ -736,9 +750,10 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: FilledButton.icon(
-                          onPressed: _isBusy || !_sshService.isConnected
-                              ? null
-                              : _openTerminal,
+                          onPressed:
+                              _isBusy || !_sshService.isConnected
+                                  ? null
+                                  : _openTerminal,
                           icon: const Icon(Icons.terminal_rounded),
                           label: const Text('Open Terminal'),
                         ),
@@ -758,12 +773,21 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: _isBusy ? null : _openSettings,
-                          icon: const Icon(Icons.settings_outlined),
-                          label: const Text('Settings'),
+                          onPressed: _isBusy ? null : _openFileExplorer,
+                          icon: const Icon(Icons.folder_open_outlined),
+                          label: const Text('File Explorer'),
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isBusy ? null : _openSettings,
+                      icon: const Icon(Icons.settings_outlined),
+                      label: const Text('Settings'),
+                    ),
                   ),
                 ],
               ),
@@ -777,10 +801,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        'Quick Actions',
-                        style: theme.textTheme.titleMedium,
-                      ),
+                      Text('Quick Actions', style: theme.textTheme.titleMedium),
                       const Spacer(),
                       IconButton(
                         onPressed: _isBusy ? null : _openCustomActions,
@@ -802,11 +823,11 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                     itemCount: _allQuickActions.length,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: 1.24,
-                    ),
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 1.24,
+                        ),
                     itemBuilder: (context, index) {
                       final action = _allQuickActions[index];
                       final isRunning = _activeQuickActionId == action.id;
@@ -945,15 +966,13 @@ class _QuickActionTile extends StatelessWidget {
                       color: const Color(0xFF3B82F6).withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: isRunning
-                        ? const Padding(
-                            padding: EdgeInsets.all(10),
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Icon(
-                            icon,
-                            color: const Color(0xFF3B82F6),
-                          ),
+                    child:
+                        isRunning
+                            ? const Padding(
+                              padding: EdgeInsets.all(10),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : Icon(icon, color: const Color(0xFF3B82F6)),
                   ),
                   const Spacer(),
                   Text(
@@ -961,9 +980,9 @@ class _QuickActionTile extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -971,9 +990,9 @@ class _QuickActionTile extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: _ServerDashboardScreenState._mutedColor,
-                          fontFamily: 'monospace',
-                        ),
+                      color: _ServerDashboardScreenState._mutedColor,
+                      fontFamily: 'monospace',
+                    ),
                   ),
                 ],
               ),
@@ -986,9 +1005,7 @@ class _QuickActionTile extends StatelessWidget {
 }
 
 class _TerminalDot extends StatelessWidget {
-  const _TerminalDot({
-    required this.color,
-  });
+  const _TerminalDot({required this.color});
 
   final Color color;
 
@@ -997,16 +1014,9 @@ class _TerminalDot extends StatelessWidget {
     return Container(
       width: 10,
       height: 10,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-      ),
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }
 
-enum ConnectionTestState {
-  idle,
-  connected,
-  failed,
-}
+enum ConnectionTestState { idle, connected, failed }

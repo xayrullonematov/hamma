@@ -25,7 +25,7 @@ class ServerListScreen extends StatefulWidget {
     String apiKey,
     String? openRouterModel,
   )
-      onSaveAiSettings;
+  onSaveAiSettings;
   final String? startupWarning;
 
   @override
@@ -54,9 +54,9 @@ class _ServerListScreenState extends State<ServerListScreen> {
           return;
         }
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(widget.startupWarning!)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(widget.startupWarning!)));
       });
     }
   }
@@ -105,9 +105,9 @@ class _ServerListScreenState extends State<ServerListScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
@@ -137,14 +137,16 @@ class _ServerListScreenState extends State<ServerListScreen> {
       return;
     }
 
-    final updatedServers = _servers
-        .map((item) => item.id == updatedServer.id ? updatedServer : item)
-        .toList();
+    final updatedServers =
+        _servers
+            .map((item) => item.id == updatedServer.id ? updatedServer : item)
+            .toList();
     await _saveServers(updatedServers);
   }
 
   Future<void> _deleteServer(ServerProfile server) async {
-    final shouldDelete = await showDialog<bool>(
+    final shouldDelete =
+        await showDialog<bool>(
           context: context,
           builder: (context) {
             return AlertDialog(
@@ -175,7 +177,8 @@ class _ServerListScreenState extends State<ServerListScreen> {
   }
 
   Future<void> _clearSavedHosts() async {
-    final shouldClear = await showDialog<bool>(
+    final shouldClear =
+        await showDialog<bool>(
           context: context,
           builder: (context) {
             return AlertDialog(
@@ -218,22 +221,24 @@ class _ServerListScreenState extends State<ServerListScreen> {
         return;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
   }
 
   void _openServer(ServerProfile server) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ServerDashboardScreen(
-          server: server,
-          aiProvider: widget.aiProvider,
-          apiKey: widget.apiKey,
-          openRouterModel: widget.openRouterModel,
-          onSaveAiSettings: widget.onSaveAiSettings,
-        ),
+        builder:
+            (_) => ServerDashboardScreen(
+              server: server,
+              aiProvider: widget.aiProvider,
+              apiKey: widget.apiKey,
+              openRouterModel: widget.openRouterModel,
+              onSaveAiSettings: widget.onSaveAiSettings,
+              onBackupImported: _loadServers,
+            ),
       ),
     );
   }
@@ -241,12 +246,14 @@ class _ServerListScreenState extends State<ServerListScreen> {
   void _openSettings() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => SettingsScreen(
-          initialProvider: widget.aiProvider,
-          initialApiKey: widget.apiKey,
-          initialOpenRouterModel: widget.openRouterModel,
-          onSaveAiSettings: widget.onSaveAiSettings,
-        ),
+        builder:
+            (_) => SettingsScreen(
+              initialProvider: widget.aiProvider,
+              initialApiKey: widget.apiKey,
+              initialOpenRouterModel: widget.openRouterModel,
+              onSaveAiSettings: widget.onSaveAiSettings,
+              onBackupImported: _loadServers,
+            ),
       ),
     );
   }
@@ -265,111 +272,109 @@ class _ServerListScreenState extends State<ServerListScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _loadError != null
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _loadError != null
               ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _loadError!,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton(
-                          onPressed: () {
-                            setState(() {
-                              _isLoading = true;
-                              _loadError = null;
-                            });
-                            _loadServers();
-                          },
-                          child: const Text('Retry'),
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton(
-                          onPressed: _clearSavedHosts,
-                          child: const Text('Clear Saved Hosts'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-          : _servers.isEmpty
-              ? const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'No saved servers yet. Add one to start managing your server.',
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                )
-              : CustomScrollView(
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Server Dashboard',
-                                    style: theme.textTheme.headlineSmall,
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    'Direct SSH access to your saved infrastructure.',
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF162033),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Text(
-                                '${_servers.length} saved',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      sliver: SliverList.separated(
-                        itemCount: _servers.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 14),
-                        itemBuilder: (context, index) {
-                          final server = _servers[index];
-                          return _ServerDashboardCard(
-                            server: server,
-                            onOpen: () => _openServer(server),
-                            onEdit: () => _editServer(server),
-                            onDelete: () => _deleteServer(server),
-                          );
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_loadError!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: () {
+                          setState(() {
+                            _isLoading = true;
+                            _loadError = null;
+                          });
+                          _loadServers();
                         },
+                        child: const Text('Retry'),
+                      ),
+                      const SizedBox(height: 8),
+                      TextButton(
+                        onPressed: _clearSavedHosts,
+                        child: const Text('Clear Saved Hosts'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              : _servers.isEmpty
+              ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text(
+                    'No saved servers yet. Add one to start managing your server.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+              : CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Server Dashboard',
+                                  style: theme.textTheme.headlineSmall,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Direct SSH access to your saved infrastructure.',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF162033),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Text(
+                              '${_servers.length} saved',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    sliver: SliverList.separated(
+                      itemCount: _servers.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 14),
+                      itemBuilder: (context, index) {
+                        final server = _servers[index];
+                        return _ServerDashboardCard(
+                          server: server,
+                          onOpen: () => _openServer(server),
+                          onEdit: () => _editServer(server),
+                          onDelete: () => _deleteServer(server),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addServer,
         icon: const Icon(Icons.add),
@@ -422,7 +427,9 @@ class _ServerDashboardCard extends StatelessWidget {
                   width: 52,
                   height: 52,
                   decoration: BoxDecoration(
-                    color: _ServerListScreenState._cardAccent.withValues(alpha: 0.16),
+                    color: _ServerListScreenState._cardAccent.withValues(
+                      alpha: 0.16,
+                    ),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Icon(
