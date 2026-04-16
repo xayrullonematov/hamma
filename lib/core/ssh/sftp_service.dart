@@ -207,17 +207,19 @@ class SftpService {
       throw StateError('SSH client is not connected.');
     }
 
-    final result = await sshClient.runWithResult(command);
-    final output = utf8.decode(result.output, allowMalformed: true).trim();
-    if (result.exitCode == 0 && result.exitSignal == null) {
-      return;
-    }
+    final session = await sshClient.execute(command);
+    
+    // Capture any error output from the sudo cp command
+    final stderrList = await session.stderr.toList();
+    await session.done;
 
-    if (output.isNotEmpty) {
-      throw StateError(output);
+    if (stderrList.isNotEmpty) {
+      final errorBytes = stderrList.expand((list) => list).toList();
+      final output = utf8.decode(errorBytes, allowMalformed: true).trim();
+      if (output.isNotEmpty) {
+        throw StateError('Command failed: $output');
+      }
     }
-
-    throw StateError('Remote command failed: $command');
   }
 
   bool _isPermissionDeniedError(Object error) {
