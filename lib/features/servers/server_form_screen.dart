@@ -1,14 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/models/server_profile.dart';
 
 class ServerFormScreen extends StatefulWidget {
-  const ServerFormScreen({
-    super.key,
-    this.initialServer,
-  });
+  const ServerFormScreen({super.key, this.initialServer});
 
   final ServerProfile? initialServer;
 
@@ -28,6 +28,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   late final TextEditingController _portController;
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
+  late final TextEditingController _privateKeyController;
 
   bool get _isEditing => widget.initialServer != null;
 
@@ -42,6 +43,9 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
     );
     _usernameController = TextEditingController(text: server?.username ?? '');
     _passwordController = TextEditingController(text: server?.password ?? '');
+    _privateKeyController = TextEditingController(
+      text: server?.privateKey ?? '',
+    );
   }
 
   @override
@@ -51,6 +55,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
     _portController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
+    _privateKeyController.dispose();
     super.dispose();
   }
 
@@ -60,6 +65,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
     }
 
     final port = int.parse(_portController.text.trim());
+    final privateKey = _privateKeyController.text.trim();
     final profile = ServerProfile(
       id: widget.initialServer?.id ?? _generateServerId(),
       name: _nameController.text.trim(),
@@ -67,6 +73,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
       port: port,
       username: _usernameController.text.trim(),
       password: _passwordController.text.trim(),
+      privateKey: privateKey.isEmpty ? null : privateKey,
     );
 
     Navigator.of(context).pop(profile);
@@ -78,9 +85,44 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   }
 
   InputDecoration _fieldDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-    );
+    return InputDecoration(labelText: label);
+  }
+
+  Future<void> _importPrivateKey() async {
+    try {
+      final pickedFile = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        withData: true,
+      );
+      if (pickedFile == null || pickedFile.files.isEmpty) {
+        return;
+      }
+
+      final file = pickedFile.files.single;
+      final fileBytes =
+          file.bytes ??
+          (file.path == null || file.path!.trim().isEmpty
+              ? null
+              : await File(file.path!).readAsBytes());
+      if (fileBytes == null) {
+        _showSnackBar('Selected key file could not be opened.');
+        return;
+      }
+
+      final privateKey = utf8.decode(fileBytes);
+      _privateKeyController.value = TextEditingValue(
+        text: privateKey,
+        selection: TextSelection.collapsed(offset: privateKey.length),
+      );
+    } catch (error) {
+      _showSnackBar('Could not import private key: $error');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -89,9 +131,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Server' : 'Add Server'),
-      ),
+      appBar: AppBar(title: Text(_isEditing ? 'Edit Server' : 'Add Server')),
       body: SafeArea(
         top: false,
         child: Form(
@@ -165,11 +205,47 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                       obscureText: true,
                       decoration: _fieldDecoration('Password'),
                       validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Enter a password.';
+                        final password = value?.trim() ?? '';
+                        final privateKey = _privateKeyController.text.trim();
+                        if (password.isEmpty && privateKey.isEmpty) {
+                          return 'Enter a password or add a private key.';
                         }
                         return null;
                       },
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Private Key (Optional)',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: _importPrivateKey,
+                          icon: const Icon(Icons.file_upload),
+                          label: const Text('Import Key File'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    _ObscuredMultilineTextFormField(
+                      controller: _privateKeyController,
+                      decoration: InputDecoration(
+                        hintText: 'Paste or import a PEM private key.',
+                        alignLabelWithHint: true,
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          12,
+                          16,
+                          12,
+                          16,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -189,15 +265,91 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
               Text(
                 'Your saved server profile stays on this device.',
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: _mutedColor,
-                ),
+                style: theme.textTheme.bodySmall?.copyWith(color: _mutedColor),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+class _ObscuredMultilineTextFormField extends StatelessWidget {
+  const _ObscuredMultilineTextFormField({
+    required this.controller,
+    required this.decoration,
+  });
+
+  final TextEditingController controller;
+  final InputDecoration decoration;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textStyle =
+        theme.textTheme.bodyLarge ?? const TextStyle(fontSize: 16);
+    const contentPadding = EdgeInsets.fromLTRB(12, 16, 12, 16);
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Padding(
+              padding: contentPadding,
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: controller,
+                builder: (context, value, _) {
+                  final text = value.text;
+                  final isEmpty = text.isEmpty;
+                  return Text(
+                    isEmpty
+                        ? 'Paste or import a PEM private key.'
+                        : _maskText(text),
+                    style: textStyle.copyWith(
+                      color:
+                          isEmpty
+                              ? theme.inputDecorationTheme.hintStyle?.color ??
+                                  theme.hintColor
+                              : textStyle.color,
+                      height: 1.4,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+        TextFormField(
+          controller: controller,
+          keyboardType: TextInputType.multiline,
+          textInputAction: TextInputAction.newline,
+          minLines: 6,
+          maxLines: 8,
+          autocorrect: false,
+          enableSuggestions: false,
+          style: textStyle.copyWith(color: Colors.transparent, height: 1.4),
+          cursorColor: theme.colorScheme.primary,
+          decoration: decoration.copyWith(
+            hintText: null,
+            contentPadding: contentPadding,
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _maskText(String value) {
+    final buffer = StringBuffer();
+    for (final rune in value.runes) {
+      final character = String.fromCharCode(rune);
+      if (character == '\n' || character == '\r') {
+        buffer.write(character);
+      } else {
+        buffer.write('•');
+      }
+    }
+    return buffer.toString();
   }
 }
 
@@ -244,10 +396,7 @@ class _FormSectionCard extends StatelessWidget {
                   color: theme.colorScheme.primary.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(
-                  icon,
-                  color: theme.colorScheme.primary,
-                ),
+                child: Icon(icon, color: theme.colorScheme.primary),
               ),
               const SizedBox(width: 14),
               Expanded(

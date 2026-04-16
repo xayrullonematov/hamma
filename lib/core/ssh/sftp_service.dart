@@ -37,6 +37,7 @@ class SftpService {
     required int port,
     required String username,
     required String password,
+    String? privateKey,
     Future<bool> Function({
       required String host,
       required int port,
@@ -51,11 +52,17 @@ class SftpService {
       host: host,
       port: port,
     );
+    final resolvedPrivateKey = privateKey?.trim();
+    final identities =
+        resolvedPrivateKey == null || resolvedPrivateKey.isEmpty
+            ? null
+            : SSHKeyPair.fromPem(resolvedPrivateKey);
 
     final socket = await SSHSocket.connect(host, port);
     final sshClient = SSHClient(
       socket,
       username: username,
+      identities: identities,
       onPasswordRequest: () => password,
       onVerifyHostKey: (algorithm, fingerprintBytes) async {
         final fingerprint = _formatFingerprint(fingerprintBytes);
@@ -208,7 +215,7 @@ class SftpService {
     }
 
     final session = await sshClient.execute(command);
-    
+
     // Capture any error output from the sudo cp command
     final stderrList = await session.stderr.toList();
     await session.done;

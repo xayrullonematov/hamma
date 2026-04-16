@@ -140,6 +140,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         port: _server.port,
         username: _server.username,
         password: _server.password,
+        privateKey: _server.privateKey,
         onTrustHostKey: _confirmHostKeyTrust,
       );
 

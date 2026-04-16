@@ -6,7 +6,10 @@ class ServerProfile {
     required this.port,
     required this.username,
     required this.password,
+    this.privateKey,
   });
+
+  static const _privateKeySentinel = Object();
 
   final String id;
   final String name;
@@ -14,6 +17,7 @@ class ServerProfile {
   final int port;
   final String username;
   final String password;
+  final String? privateKey;
 
   bool get isValid {
     return name.trim().isNotEmpty &&
@@ -21,7 +25,8 @@ class ServerProfile {
         port > 0 &&
         port <= 65535 &&
         username.trim().isNotEmpty &&
-        password.trim().isNotEmpty;
+        (password.trim().isNotEmpty ||
+            (privateKey?.trim().isNotEmpty ?? false));
   }
 
   ServerProfile copyWith({
@@ -31,6 +36,7 @@ class ServerProfile {
     int? port,
     String? username,
     String? password,
+    Object? privateKey = _privateKeySentinel,
   }) {
     return ServerProfile(
       id: id ?? this.id,
@@ -39,6 +45,10 @@ class ServerProfile {
       port: port ?? this.port,
       username: username ?? this.username,
       password: password ?? this.password,
+      privateKey:
+          identical(privateKey, _privateKeySentinel)
+              ? this.privateKey
+              : privateKey as String?,
     );
   }
 
@@ -50,6 +60,7 @@ class ServerProfile {
       'port': port,
       'username': username,
       'password': password,
+      'privateKey': privateKey,
     };
   }
 
@@ -61,6 +72,7 @@ class ServerProfile {
       port: json['port'] as int,
       username: json['username'] as String,
       password: json['password'] as String,
+      privateKey: json['privateKey'] as String?,
     );
   }
 }

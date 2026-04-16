@@ -6,10 +6,9 @@ import 'package:dartssh2/dartssh2.dart';
 import '../storage/trusted_host_key_storage.dart';
 
 class SshService {
-  SshService({
-    TrustedHostKeyStorage? trustedHostKeyStorage,
-  }) : _trustedHostKeyStorage =
-           trustedHostKeyStorage ?? const TrustedHostKeyStorage();
+  SshService({TrustedHostKeyStorage? trustedHostKeyStorage})
+    : _trustedHostKeyStorage =
+          trustedHostKeyStorage ?? const TrustedHostKeyStorage();
 
   SSHClient? _client;
   final TrustedHostKeyStorage _trustedHostKeyStorage;
@@ -21,12 +20,14 @@ class SshService {
     required int port,
     required String username,
     required String password,
+    String? privateKey,
     Future<bool> Function({
       required String host,
       required int port,
       required String algorithm,
       required String fingerprint,
-    })? onTrustHostKey,
+    })?
+    onTrustHostKey,
   }) async {
     await disconnect();
 
@@ -34,11 +35,17 @@ class SshService {
       host: host,
       port: port,
     );
+    final resolvedPrivateKey = privateKey?.trim();
+    final identities =
+        resolvedPrivateKey == null || resolvedPrivateKey.isEmpty
+            ? null
+            : SSHKeyPair.fromPem(resolvedPrivateKey);
 
     final socket = await SSHSocket.connect(host, port);
     final client = SSHClient(
       socket,
       username: username,
+      identities: identities,
       onPasswordRequest: () => password,
       onVerifyHostKey: (algorithm, fingerprintBytes) async {
         final fingerprint = _formatFingerprint(fingerprintBytes);
@@ -118,10 +125,7 @@ class SshService {
     }
   }
 
-  Future<SSHSession> startShell({
-    int width = 80,
-    int height = 24,
-  }) async {
+  Future<SSHSession> startShell({int width = 80, int height = 24}) async {
     final client = _client;
     if (client == null) {
       throw StateError('SSH client is not connected.');
@@ -129,11 +133,7 @@ class SshService {
 
     try {
       return client.shell(
-        pty: SSHPtyConfig(
-          type: 'xterm-256color',
-          width: width,
-          height: height,
-        ),
+        pty: SSHPtyConfig(type: 'xterm-256color', width: width, height: height),
       );
     } catch (error) {
       if (_looksLikeDisconnect(error)) {
