@@ -44,7 +44,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const _shadowColor = Color(0x22000000);
   static const _openRouterModelsUrl = 'https://openrouter.ai/api/v1/models';
 
-  late final TextEditingController _apiKeyController;
+  late final TextEditingController _openAiApiKeyController;
+  late final TextEditingController _geminiApiKeyController;
+  late final TextEditingController _openRouterApiKeyController;
   late final TextEditingController _openRouterModelController;
   final AppLockStorage _appLockStorage = const AppLockStorage();
   final BackupService _backupService = const BackupService();
@@ -68,10 +70,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _selectedProvider = widget.initialProvider;
     _openRouterModel = _normalizeOpenRouterModel(widget.initialOpenRouterModel);
-    _apiKeyController = TextEditingController(text: widget.initialApiKey);
+    _openAiApiKeyController = TextEditingController(
+      text:
+          widget.initialProvider == AiProvider.openAi
+              ? widget.initialApiKey
+              : '',
+    );
+    _geminiApiKeyController = TextEditingController(
+      text:
+          widget.initialProvider == AiProvider.gemini
+              ? widget.initialApiKey
+              : '',
+    );
+    _openRouterApiKeyController = TextEditingController(
+      text:
+          widget.initialProvider == AiProvider.openRouter
+              ? widget.initialApiKey
+              : '',
+    );
     _openRouterModelController = TextEditingController(
       text: _openRouterModel ?? '',
     );
+    _loadStoredApiKeys();
     _loadAppPinStatus();
     if (_selectedProvider == AiProvider.openRouter) {
       _loadOpenRouterModels();
@@ -80,7 +100,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _apiKeyController.dispose();
+    _openAiApiKeyController.dispose();
+    _geminiApiKeyController.dispose();
+    _openRouterApiKeyController.dispose();
     _openRouterModelController.dispose();
     super.dispose();
   }
@@ -90,22 +112,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return normalized.isEmpty ? null : normalized;
   }
 
+  String _apiKeyForProvider(AiProvider provider) {
+    switch (provider) {
+      case AiProvider.openAi:
+        return _openAiApiKeyController.text.trim();
+      case AiProvider.gemini:
+        return _geminiApiKeyController.text.trim();
+      case AiProvider.openRouter:
+        return _openRouterApiKeyController.text.trim();
+    }
+  }
+
+  Future<void> _loadStoredApiKeys() async {
+    try {
+      final openAiKey = await _apiKeyStorage.loadApiKey(AiProvider.openAi);
+      final geminiKey = await _apiKeyStorage.loadApiKey(AiProvider.gemini);
+      final openRouterKey = await _apiKeyStorage.loadApiKey(
+        AiProvider.openRouter,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      _openAiApiKeyController.text = openAiKey ?? _openAiApiKeyController.text;
+      _geminiApiKeyController.text = geminiKey ?? _geminiApiKeyController.text;
+      _openRouterApiKeyController.text =
+          openRouterKey ?? _openRouterApiKeyController.text;
+    } catch (_) {
+      // Ignore storage load failures here and keep the current in-memory values.
+    }
+  }
+
   Future<void> _save() async {
-    final apiKey = _apiKeyController.text.trim();
+    final openAiKey = _openAiApiKeyController.text.trim();
+    final geminiKey = _geminiApiKeyController.text.trim();
+    final openRouterKey = _openRouterApiKeyController.text.trim();
+    final selectedApiKey = _apiKeyForProvider(_selectedProvider);
     final resolvedOpenRouterModel = _normalizeOpenRouterModel(
       _openRouterModelController.text,
     );
 
     setState(() {
       _isSaving = true;
-      _status = apiKey.isEmpty ? 'Clearing API key' : 'Saving AI settings';
+      _status = 'Saving AI settings';
       _openRouterModel = resolvedOpenRouterModel;
     });
 
     try {
+      await _apiKeyStorage.saveApiKey(AiProvider.openAi, openAiKey);
+      await _apiKeyStorage.saveApiKey(AiProvider.gemini, geminiKey);
+      await _apiKeyStorage.saveApiKey(AiProvider.openRouter, openRouterKey);
       await widget.onSaveAiSettings(
         _selectedProvider,
-        apiKey,
+        selectedApiKey,
         resolvedOpenRouterModel,
       );
       if (!mounted) {
@@ -113,7 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       setState(() {
-        _status = apiKey.isEmpty ? 'API key cleared.' : 'AI settings saved.';
+        _status = 'AI settings saved.';
       });
     } catch (error) {
       if (!mounted) {
@@ -457,6 +516,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Widget _buildApiKeyField({
+    required TextEditingController controller,
+    required String label,
+    required String helperText,
+  }) {
+    return TextFormField(
+      controller: controller,
+      enabled: !_isBusy,
+      obscureText: true,
+      decoration: InputDecoration(labelText: label, helperText: helperText),
+    );
+  }
+
   Widget _buildOpenRouterModelSelector(ThemeData theme) {
     if (_isLoadingOpenRouterModels) {
       return Container(
@@ -561,7 +633,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _SettingsSectionCard(
               title: 'AI Configuration',
               subtitle:
-                  'Choose your AI provider and manage the API key used by the copilot.',
+                  'Choose your default AI provider and manage the saved keys used by the copilot.',
               icon: Icons.smart_toy_outlined,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -572,7 +644,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       // ignore: deprecated_member_use
                       value: _selectedProvider,
                       decoration: const InputDecoration(
-                        labelText: 'AI Provider',
+                        labelText: 'Default Provider',
                       ),
                       items:
                           AiProvider.values.map((provider) {
@@ -610,14 +682,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _apiKeyController,
-                    enabled: !_isBusy,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Enter API Key',
-                      helperText: 'Leave blank to clear the saved API key.',
-                    ),
+                  _buildApiKeyField(
+                    controller: _openAiApiKeyController,
+                    label: 'OpenAI Key',
+                    helperText: 'Leave blank to clear the saved OpenAI key.',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildApiKeyField(
+                    controller: _geminiApiKeyController,
+                    label: 'Gemini Key',
+                    helperText: 'Leave blank to clear the saved Gemini key.',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildApiKeyField(
+                    controller: _openRouterApiKeyController,
+                    label: 'OpenRouter Key',
+                    helperText:
+                        'Leave blank to clear the saved OpenRouter key.',
                   ),
                   if (_selectedProvider == AiProvider.openRouter) ...[
                     const SizedBox(height: 16),

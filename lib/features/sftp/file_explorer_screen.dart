@@ -57,6 +57,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         username: widget.server.username,
         password: widget.server.password,
         privateKey: widget.server.privateKey,
+        privateKeyPassword: widget.server.privateKeyPassword,
         onTrustHostKey: _confirmHostKeyTrust,
       );
       await _loadDirectory('.');

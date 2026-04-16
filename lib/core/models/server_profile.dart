@@ -7,9 +7,11 @@ class ServerProfile {
     required this.username,
     required this.password,
     this.privateKey,
+    this.privateKeyPassword,
   });
 
   static const _privateKeySentinel = Object();
+  static const _privateKeyPasswordSentinel = Object();
 
   final String id;
   final String name;
@@ -18,6 +20,7 @@ class ServerProfile {
   final String username;
   final String password;
   final String? privateKey;
+  final String? privateKeyPassword;
 
   bool get isValid {
     return name.trim().isNotEmpty &&
@@ -37,6 +40,7 @@ class ServerProfile {
     String? username,
     String? password,
     Object? privateKey = _privateKeySentinel,
+    Object? privateKeyPassword = _privateKeyPasswordSentinel,
   }) {
     return ServerProfile(
       id: id ?? this.id,
@@ -49,6 +53,10 @@ class ServerProfile {
           identical(privateKey, _privateKeySentinel)
               ? this.privateKey
               : privateKey as String?,
+      privateKeyPassword:
+          identical(privateKeyPassword, _privateKeyPasswordSentinel)
+              ? this.privateKeyPassword
+              : privateKeyPassword as String?,
     );
   }
 
@@ -61,6 +69,7 @@ class ServerProfile {
       'username': username,
       'password': password,
       'privateKey': privateKey,
+      'privateKeyPassword': privateKeyPassword,
     };
   }
 
@@ -73,6 +82,7 @@ class ServerProfile {
       username: json['username'] as String,
       password: json['password'] as String,
       privateKey: json['privateKey'] as String?,
+      privateKeyPassword: json['privateKeyPassword'] as String?,
     );
   }
 }

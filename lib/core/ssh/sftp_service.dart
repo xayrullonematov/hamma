@@ -38,6 +38,7 @@ class SftpService {
     required String username,
     required String password,
     String? privateKey,
+    String? privateKeyPassword,
     Future<bool> Function({
       required String host,
       required int port,
@@ -56,7 +57,7 @@ class SftpService {
     final identities =
         resolvedPrivateKey == null || resolvedPrivateKey.isEmpty
             ? null
-            : SSHKeyPair.fromPem(resolvedPrivateKey);
+            : SSHKeyPair.fromPem(resolvedPrivateKey, privateKeyPassword);
 
     final socket = await SSHSocket.connect(host, port);
     final sshClient = SSHClient(

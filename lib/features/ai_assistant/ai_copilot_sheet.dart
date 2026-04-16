@@ -1,8 +1,13 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/ai/ai_command_service.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
+import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/chat_history_storage.dart';
 
 class AiCopilotSheet extends StatefulWidget {
@@ -10,7 +15,7 @@ class AiCopilotSheet extends StatefulWidget {
     super.key,
     required this.serverId,
     required this.provider,
-    required this.apiKey,
+    required this.apiKeyStorage,
     required this.openRouterModel,
     required this.executionTarget,
     required this.canRunCommands,
@@ -21,7 +26,7 @@ class AiCopilotSheet extends StatefulWidget {
 
   final String serverId;
   final AiProvider provider;
-  final String apiKey;
+  final ApiKeyStorage apiKeyStorage;
   final String? openRouterModel;
   final AiCopilotExecutionTarget executionTarget;
   final bool Function() canRunCommands;
@@ -43,45 +48,58 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   static const _mutedColor = Color(0xFF94A3B8);
   static const _warningColor = Color(0xFFD97706);
   static const _shadowColor = Color(0x22000000);
+  static const _openRouterModelsUrl = 'https://openrouter.ai/api/v1/models';
 
   late AiCommandService _aiCommandService;
   final ChatHistoryStorage _chatHistoryStorage = const ChatHistoryStorage();
   final CommandRiskAssessor _riskAssessor = const CommandRiskAssessor();
   final TextEditingController _promptController = TextEditingController();
 
+  late AiProvider _activeProvider;
+  late String? _activeOpenRouterModel;
+  String _activeApiKey = '';
   CopilotMode _mode = CopilotMode.commandHelper;
   bool _isGenerating = false;
   bool _isHistoryLoading = true;
+  bool _isLoadingActiveApiKey = true;
+  bool _isLoadingOpenRouterModels = false;
+  bool _hasLoadedOpenRouterModels = false;
   int? _runningCommandIndex;
   List<_CopilotPlanStep> _planSteps = [];
   List<_ChatMessage> _chatMessages = const [];
+  String? _openRouterModelsError;
   String _commandOutput = '';
   String _status = 'Describe the issue, then generate suggested commands.';
+  List<String> _openRouterModels = const [];
+  int _providerLoadGeneration = 0;
 
   bool get _isRunningStep => _runningCommandIndex != null;
+  bool get _hasActiveApiKey => _activeApiKey.trim().isNotEmpty;
 
   @override
   void initState() {
     super.initState();
-    _aiCommandService = AiCommandService.forProvider(
-      provider: widget.provider,
-      apiKey: widget.apiKey,
-      openRouterModel: widget.openRouterModel,
-    );
+    _activeProvider = widget.provider;
+    _activeOpenRouterModel = _normalizeOpenRouterModel(widget.openRouterModel);
+    _refreshAiCommandService();
     _loadChatHistory();
+    _loadActiveProviderState();
   }
 
   @override
   void didUpdateWidget(covariant AiCopilotSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.provider != widget.provider ||
-        oldWidget.apiKey != widget.apiKey ||
-        oldWidget.openRouterModel != widget.openRouterModel) {
-      _aiCommandService = AiCommandService.forProvider(
-        provider: widget.provider,
-        apiKey: widget.apiKey,
-        openRouterModel: widget.openRouterModel,
+        oldWidget.apiKeyStorage != widget.apiKeyStorage) {
+      _activeProvider = widget.provider;
+      _loadActiveProviderState(widget.provider);
+    }
+
+    if (oldWidget.openRouterModel != widget.openRouterModel) {
+      _activeOpenRouterModel = _normalizeOpenRouterModel(
+        widget.openRouterModel,
       );
+      _refreshAiCommandService();
     }
 
     if (oldWidget.serverId != widget.serverId) {
@@ -103,6 +121,304 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     _planSteps = [];
   }
 
+  String _defaultStatusText() {
+    return _mode == CopilotMode.commandHelper
+        ? 'Describe the issue, then generate suggested commands.'
+        : 'Ask for explanations, log analysis, or Linux help.';
+  }
+
+  String? _normalizeOpenRouterModel(String? value) {
+    final normalized = value?.trim() ?? '';
+    return normalized.isEmpty ? null : normalized;
+  }
+
+  void _refreshAiCommandService() {
+    _aiCommandService = AiCommandService.forProvider(
+      provider: _activeProvider,
+      apiKey: _activeApiKey,
+      openRouterModel: _activeOpenRouterModel,
+    );
+  }
+
+  Future<void> _loadActiveProviderState([AiProvider? provider]) async {
+    final targetProvider = provider ?? _activeProvider;
+    final generation = ++_providerLoadGeneration;
+
+    setState(() {
+      _activeProvider = targetProvider;
+      _isLoadingActiveApiKey = true;
+      _status = 'Loading ${targetProvider.label} API key...';
+    });
+
+    if (targetProvider == AiProvider.openRouter) {
+      unawaited(_loadOpenRouterModels());
+    }
+
+    try {
+      final apiKey =
+          await widget.apiKeyStorage.loadApiKey(targetProvider) ?? '';
+      if (!mounted || generation != _providerLoadGeneration) {
+        return;
+      }
+
+      _activeApiKey = apiKey.trim();
+      _refreshAiCommandService();
+
+      setState(() {
+        _isLoadingActiveApiKey = false;
+        _status =
+            _hasActiveApiKey
+                ? _defaultStatusText()
+                : 'API key missing. Configure it in Settings.';
+      });
+    } catch (_) {
+      if (!mounted || generation != _providerLoadGeneration) {
+        return;
+      }
+
+      _activeApiKey = '';
+      _refreshAiCommandService();
+
+      setState(() {
+        _isLoadingActiveApiKey = false;
+        _status = 'API key missing. Configure it in Settings.';
+      });
+    }
+  }
+
+  Future<void> _handleProviderSelected(AiProvider provider) async {
+    if (provider == _activeProvider) {
+      return;
+    }
+
+    await _loadActiveProviderState(provider);
+  }
+
+  Future<void> _loadOpenRouterModels({bool forceRefresh = false}) async {
+    if (_isLoadingOpenRouterModels) {
+      return;
+    }
+
+    if (_hasLoadedOpenRouterModels && !forceRefresh) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingOpenRouterModels = true;
+      _openRouterModelsError = null;
+    });
+
+    try {
+      final response = await http
+          .get(Uri.parse(_openRouterModelsUrl))
+          .timeout(const Duration(seconds: 15));
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError(
+          'OpenRouter model list request failed with status ${response.statusCode}.',
+        );
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('OpenRouter model response was invalid.');
+      }
+
+      final data = decoded['data'];
+      if (data is! List) {
+        throw const FormatException('OpenRouter model response was invalid.');
+      }
+
+      final models =
+          data
+              .whereType<Map>()
+              .map((item) => (item['id'] ?? '').toString().trim())
+              .where((id) => id.isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort();
+
+      final selectedModel = _normalizeOpenRouterModel(_activeOpenRouterModel);
+      if (selectedModel != null && !models.contains(selectedModel)) {
+        models.insert(0, selectedModel);
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _openRouterModels = models;
+        _openRouterModelsError = null;
+        _hasLoadedOpenRouterModels = true;
+      });
+    } on TimeoutException {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _openRouterModelsError =
+            'OpenRouter model list request timed out. Try again.';
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _openRouterModelsError = error.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingOpenRouterModels = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showOpenRouterModelPicker() async {
+    if (_activeProvider != AiProvider.openRouter) {
+      return;
+    }
+
+    if (!_hasLoadedOpenRouterModels) {
+      await _loadOpenRouterModels();
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (_openRouterModelsError != null) {
+      final retry = await showDialog<bool>(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text('OpenRouter Models'),
+            content: Text(_openRouterModelsError!),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Close'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Retry'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (retry == true) {
+        await _loadOpenRouterModels(forceRefresh: true);
+        if (mounted) {
+          await _showOpenRouterModelPicker();
+        }
+      }
+      return;
+    }
+
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: _surfaceColor,
+      isScrollControlled: true,
+      builder: (context) {
+        return SafeArea(
+          top: false,
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.68,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'OpenRouter Models',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close_rounded),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                    children: [
+                      ListTile(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        title: const Text('Use Default Model'),
+                        subtitle: const Text('meta-llama/llama-3-8b-instruct'),
+                        trailing:
+                            _activeOpenRouterModel == null
+                                ? const Icon(
+                                  Icons.check_rounded,
+                                  color: _primaryColor,
+                                )
+                                : null,
+                        onTap: () => Navigator.of(context).pop(''),
+                      ),
+                      const SizedBox(height: 8),
+                      ..._openRouterModels.map((modelId) {
+                        final isSelected = modelId == _activeOpenRouterModel;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            tileColor: _panelColor,
+                            title: Text(modelId),
+                            trailing:
+                                isSelected
+                                    ? const Icon(
+                                      Icons.check_rounded,
+                                      color: _primaryColor,
+                                    )
+                                    : null,
+                            onTap: () => Navigator.of(context).pop(modelId),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || selected == null) {
+      return;
+    }
+
+    _activeOpenRouterModel = _normalizeOpenRouterModel(selected);
+    _refreshAiCommandService();
+
+    setState(() {
+      _status =
+          _activeOpenRouterModel == null
+              ? 'OpenRouter model reset to default.'
+              : 'OpenRouter model updated.';
+    });
+  }
+
   Future<void> _loadChatHistory() async {
     setState(() {
       _isHistoryLoading = true;
@@ -116,15 +432,19 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         return;
       }
 
-      final chatMessages = storedMessages
-          .map(
-            (message) => _ChatMessage(
-              role: message['role'] ?? '',
-              content: message['content'] ?? '',
-            ),
-          )
-          .where((message) => message.role.isNotEmpty && message.content.isNotEmpty)
-          .toList();
+      final chatMessages =
+          storedMessages
+              .map(
+                (message) => _ChatMessage(
+                  role: message['role'] ?? '',
+                  content: message['content'] ?? '',
+                ),
+              )
+              .where(
+                (message) =>
+                    message.role.isNotEmpty && message.content.isNotEmpty,
+              )
+              .toList();
 
       setState(() {
         _chatMessages = chatMessages;
@@ -146,10 +466,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     }
   }
 
-  void _appendChatMessage({
-    required String role,
-    required String content,
-  }) {
+  void _appendChatMessage({required String role, required String content}) {
     final normalizedContent = content.trim();
     if (normalizedContent.isEmpty) {
       return;
@@ -171,14 +488,15 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     try {
       await _chatHistoryStorage.saveHistory(
         serverId: widget.serverId,
-        messages: messages
-            .map(
-              (message) => {
-                'role': message.role,
-                'content': message.content,
-              },
-            )
-            .toList(),
+        messages:
+            messages
+                .map(
+                  (message) => {
+                    'role': message.role,
+                    'content': message.content,
+                  },
+                )
+                .toList(),
       );
     } catch (_) {
       // Ignore persistence failures to avoid interrupting the chat flow.
@@ -186,7 +504,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   }
 
   Future<void> _clearChatHistory() async {
-    final shouldClear = await showDialog<bool>(
+    final shouldClear =
+        await showDialog<bool>(
           context: context,
           builder: (context) {
             return AlertDialog(
@@ -233,10 +552,9 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       return;
     }
 
-    if (widget.apiKey.trim().isEmpty) {
+    if (!_hasActiveApiKey) {
       setState(() {
-        _status =
-            'Set your ${widget.provider.label} API key in Settings before generating commands.';
+        _status = 'API key missing. Configure it in Settings.';
       });
       return;
     }
@@ -260,16 +578,17 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       _disposePlanSteps();
 
       setState(() {
-        _planSteps = plan
-            .map(
-              (step) => _CopilotPlanStep(
-                title: step.title,
-                description: step.description,
-                controller: TextEditingController(text: step.command),
-                state: CopilotPlanStepState.pending,
-              ),
-            )
-            .toList();
+        _planSteps =
+            plan
+                .map(
+                  (step) => _CopilotPlanStep(
+                    title: step.title,
+                    description: step.description,
+                    controller: TextEditingController(text: step.command),
+                    state: CopilotPlanStepState.pending,
+                  ),
+                )
+                .toList();
         _status = 'Step plan ready';
       });
     } catch (error) {
@@ -301,10 +620,9 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       return;
     }
 
-    if (widget.apiKey.trim().isEmpty) {
+    if (!_hasActiveApiKey) {
       setState(() {
-        _status =
-            'Set your ${widget.provider.label} API key in Settings before using chat.';
+        _status = 'API key missing. Configure it in Settings.';
       });
       return;
     }
@@ -319,10 +637,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
     try {
       final response = await _aiCommandService.generateChatResponse(
-        _buildChatPrompt(
-          prompt,
-          historyMessages: existingChatMessages,
-        ),
+        _buildChatPrompt(prompt, historyMessages: existingChatMessages),
       );
       if (!mounted) {
         return;
@@ -376,9 +691,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       stepTitle: step.title,
       command: command,
       assessment: assessment,
-      warningText: pendingPreviousSteps.isEmpty
-          ? null
-          : 'Earlier steps are not completed: ${pendingPreviousSteps.join(', ')}. Running this step now may be misleading.',
+      warningText:
+          pendingPreviousSteps.isEmpty
+              ? null
+              : 'Earlier steps are not completed: ${pendingPreviousSteps.join(', ')}. Running this step now may be misleading.',
     );
     if (!shouldRun) {
       return;
@@ -386,9 +702,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
     setState(() {
       _runningCommandIndex = index;
-      _status = widget.executionTarget == AiCopilotExecutionTarget.terminal
-          ? 'Sending Step ${index + 1} to shell'
-          : 'Running Step ${index + 1}';
+      _status =
+          widget.executionTarget == AiCopilotExecutionTarget.terminal
+              ? 'Sending Step ${index + 1} to shell'
+              : 'Running Step ${index + 1}';
     });
 
     try {
@@ -420,9 +737,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
       setState(() {
         step.state = CopilotPlanStepState.failed;
-        _status = widget.executionTarget == AiCopilotExecutionTarget.terminal
-            ? 'Step ${index + 1} could not be sent to shell.'
-            : 'Step ${index + 1} failed. Output below.';
+        _status =
+            widget.executionTarget == AiCopilotExecutionTarget.terminal
+                ? 'Step ${index + 1} could not be sent to shell.'
+                : 'Step ${index + 1} failed. Output below.';
         if (widget.executionTarget == AiCopilotExecutionTarget.dashboard) {
           _appendExecutionOutput(
             stepNumber: index + 1,
@@ -592,16 +910,18 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     required String output,
     required bool succeeded,
   }) {
-    final entry = StringBuffer()
-      ..writeln('Step $stepNumber: $stepTitle')
-      ..writeln('Command: $command')
-      ..writeln('Result: ${succeeded ? 'Executed' : 'Failed'}')
-      ..writeln('Output:')
-      ..write(output);
+    final entry =
+        StringBuffer()
+          ..writeln('Step $stepNumber: $stepTitle')
+          ..writeln('Command: $command')
+          ..writeln('Result: ${succeeded ? 'Executed' : 'Failed'}')
+          ..writeln('Output:')
+          ..write(output);
 
-    _commandOutput = _commandOutput.isEmpty
-        ? entry.toString()
-        : '$_commandOutput\n\n------------------------------\n\n${entry.toString()}';
+    _commandOutput =
+        _commandOutput.isEmpty
+            ? entry.toString()
+            : '$_commandOutput\n\n------------------------------\n\n${entry.toString()}';
   }
 
   String _friendlyErrorMessage({
@@ -611,22 +931,21 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     final message = error.toString().trim();
     final normalized = message.toLowerCase();
 
-    if (error is AiCommandServiceException &&
-        error.message.trim().isNotEmpty) {
+    if (error is AiCommandServiceException && error.message.trim().isNotEmpty) {
       return error.message.trim();
     }
 
     if (normalized.contains('api key is not set')) {
-      return 'Set your ${widget.provider.label} API key in Settings first.';
+      return 'Set your ${_activeProvider.label} API key in Settings first.';
     }
 
     if (normalized.contains('timed out')) {
-      return '${widget.provider.label} took too long to respond. Try again.';
+      return '${_activeProvider.label} took too long to respond. Try again.';
     }
 
     if (normalized.contains('network error') ||
         normalized.contains('socketexception')) {
-      return 'Network error while contacting ${widget.provider.label}. Check your connection and try again.';
+      return 'Network error while contacting ${_activeProvider.label}. Check your connection and try again.';
     }
 
     if (normalized.contains('rejected the api key') ||
@@ -634,10 +953,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         normalized.contains('incorrect api key') ||
         normalized.contains('authentication') ||
         normalized.contains('unauthorized')) {
-      return '${widget.provider.label} API key was rejected. Check the key in Settings and try again.';
+      return '${_activeProvider.label} API key was rejected. Check the key in Settings and try again.';
     }
 
-    if (widget.provider == AiProvider.gemini &&
+    if (_activeProvider == AiProvider.gemini &&
         (normalized.contains('free-tier') ||
             normalized.contains('quota') ||
             normalized.contains('overload') ||
@@ -654,7 +973,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         normalized.contains('unsupported plan step entry') ||
         normalized.contains('plan step without a command') ||
         normalized.contains('no commands')) {
-      return '${widget.provider.label} returned an unreadable plan. Try again with a more specific request.';
+      return '${_activeProvider.label} returned an unreadable plan. Try again with a more specific request.';
     }
 
     return '$fallbackPrefix. Please try again.';
@@ -699,9 +1018,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       return '';
     }
 
-    final recentMessages = historyMessages.length > 10
-        ? historyMessages.sublist(historyMessages.length - 10)
-        : historyMessages;
+    final recentMessages =
+        historyMessages.length > 10
+            ? historyMessages.sublist(historyMessages.length - 10)
+            : historyMessages;
 
     var historyText = recentMessages
         .map(
@@ -723,21 +1043,25 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   String _buildContextSection() {
     final rawContext = widget.getContext().trim();
     if (rawContext.isEmpty ||
-        rawContext.toLowerCase().startsWith('no recent terminal context available')) {
+        rawContext.toLowerCase().startsWith(
+          'no recent terminal context available',
+        )) {
       return '';
     }
 
     final normalized = rawContext
         .replaceAll('\r\n', '\n')
         .replaceAll('\r', '\n');
-    final lines = normalized
-        .split('\n')
-        .map((line) => line.trimRight())
-        .where((line) => line.trim().isNotEmpty)
-        .toList();
-    final trimmedLines = lines.length > _maxPromptContextLines
-        ? lines.sublist(lines.length - _maxPromptContextLines)
-        : lines;
+    final lines =
+        normalized
+            .split('\n')
+            .map((line) => line.trimRight())
+            .where((line) => line.trim().isNotEmpty)
+            .toList();
+    final trimmedLines =
+        lines.length > _maxPromptContextLines
+            ? lines.sublist(lines.length - _maxPromptContextLines)
+            : lines;
     var trimmedContext = trimmedLines.join('\n').trim();
 
     if (trimmedContext.length > _maxPromptContextChars) {
@@ -761,9 +1085,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
     setState(() {
       _mode = mode;
-      _status = mode == CopilotMode.commandHelper
-          ? 'Describe the issue, then generate suggested commands.'
-          : 'Ask for explanations, log analysis, or Linux help.';
+      _status =
+          _hasActiveApiKey
+              ? _defaultStatusText()
+              : 'API key missing. Configure it in Settings.';
       _runningCommandIndex = null;
 
       if (mode == CopilotMode.generalChat) {
@@ -774,7 +1099,11 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   }
 
   void _submitPrompt() {
-    if (_isGenerating || _isRunningStep || _isHistoryLoading) {
+    if (_isGenerating ||
+        _isRunningStep ||
+        _isHistoryLoading ||
+        _isLoadingActiveApiKey ||
+        !_hasActiveApiKey) {
       return;
     }
 
@@ -797,12 +1126,215 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       color: _surfaceColor,
       borderRadius: BorderRadius.circular(24),
       boxShadow: const [
-        BoxShadow(
-          color: _shadowColor,
-          blurRadius: 20,
-          offset: Offset(0, 10),
-        ),
+        BoxShadow(color: _shadowColor, blurRadius: 20, offset: Offset(0, 10)),
       ],
+    );
+  }
+
+  Widget _buildHeader(ThemeData theme) {
+    return Container(
+      decoration: _surfaceDecoration(),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AI Copilot',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _mode == CopilotMode.commandHelper
+                          ? 'Command planning and safe execution'
+                          : 'Explain logs, errors, and Linux concepts',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: _mutedColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed:
+                    _isHistoryLoading || _isGenerating || _chatMessages.isEmpty
+                        ? null
+                        : _clearChatHistory,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                color: _mutedColor,
+                tooltip: 'Clear chat',
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: PopupMenuButton<AiProvider>(
+                  enabled: !_isGenerating && !_isRunningStep,
+                  color: _surfaceColor,
+                  onSelected:
+                      (provider) =>
+                          unawaited(_handleProviderSelected(provider)),
+                  itemBuilder: (context) {
+                    return AiProvider.values.map((provider) {
+                      return PopupMenuItem<AiProvider>(
+                        value: provider,
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(provider.label)),
+                            if (provider == _activeProvider)
+                              const Icon(
+                                Icons.check_rounded,
+                                color: _primaryColor,
+                              ),
+                          ],
+                        ),
+                      );
+                    }).toList();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _panelColor,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.swap_horiz_rounded, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            _activeProvider.label,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (_isLoadingActiveApiKey)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else
+                          const Icon(Icons.expand_more_rounded),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (_activeProvider == AiProvider.openRouter) ...[
+                const SizedBox(width: 10),
+                Flexible(
+                  child: TextButton(
+                    onPressed:
+                        _isGenerating || _isRunningStep
+                            ? null
+                            : _showOpenRouterModelPicker,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      backgroundColor: _panelColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_isLoadingOpenRouterModels)
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        else
+                          const Icon(Icons.tune_rounded, size: 16),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _activeOpenRouterModel ?? 'Default model',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildApiKeyBanner(ThemeData theme) {
+    if (_isLoadingActiveApiKey) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: _surfaceColor,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Loading ${_activeProvider.label} API key...',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: _mutedColor,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_hasActiveApiKey) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _warningColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Text(
+        'API key missing. Configure it in Settings.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: _warningColor,
+          fontWeight: FontWeight.w700,
+          height: 1.4,
+        ),
+      ),
     );
   }
 
@@ -846,11 +1378,13 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       padding: const EdgeInsets.only(bottom: 8),
       children: [
         _buildStatusBanner(theme),
+        if (_isLoadingActiveApiKey || !_hasActiveApiKey) ...[
+          const SizedBox(height: 12),
+          _buildApiKeyBanner(theme),
+        ],
         const SizedBox(height: 16),
         if (_isGenerating && _planSteps.isEmpty)
-          const _LoadingBubble(
-            label: 'Building a step-by-step plan...',
-          )
+          const _LoadingBubble(label: 'Building a step-by-step plan...')
         else if (_planSteps.isEmpty)
           _EmptyMessageCard(
             title: 'No plan yet',
@@ -902,9 +1436,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                       riskLabel: _riskLabel(assessment.level),
                       riskColor: _riskColor(assessment.level),
                       riskExplanation: assessment.explanation,
-                      warningText: pendingPrevious.isEmpty
-                          ? null
-                          : 'Earlier steps are not completed yet.',
+                      warningText:
+                          pendingPrevious.isEmpty
+                              ? null
+                              : 'Earlier steps are not completed yet.',
                       isRunning: isRunning,
                       isBusy: _isGenerating || _isRunningStep,
                       onChanged: () => setState(() {}),
@@ -930,9 +1465,13 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       padding: const EdgeInsets.only(bottom: 8),
       children: [
         _buildStatusBanner(theme),
+        if (_isLoadingActiveApiKey || !_hasActiveApiKey) ...[
+          const SizedBox(height: 12),
+          _buildApiKeyBanner(theme),
+        ],
         const SizedBox(height: 16),
         Text(
-          'Conversation with ${widget.provider.label}',
+          'Conversation with ${_activeProvider.label}',
           style: theme.textTheme.bodySmall?.copyWith(
             color: _mutedColor,
             fontWeight: FontWeight.w600,
@@ -940,9 +1479,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         ),
         const SizedBox(height: 10),
         if (_isHistoryLoading)
-          const _LoadingBubble(
-            label: 'Loading previous chat...',
-          )
+          const _LoadingBubble(label: 'Loading previous chat...')
         else if (_chatMessages.isEmpty && !_isGenerating)
           Align(
             alignment: Alignment.centerLeft,
@@ -970,25 +1507,26 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     isUser ? Alignment.centerRight : Alignment.centerLeft,
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 560),
-                  child: isUser
-                      ? _UserChatBubble(
-                          child: SelectableText(
-                            message.content,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.white,
-                              height: 1.5,
+                  child:
+                      isUser
+                          ? _UserChatBubble(
+                            child: SelectableText(
+                              message.content,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: Colors.white,
+                                height: 1.5,
+                              ),
+                            ),
+                          )
+                          : _ChatBubble(
+                            child: SelectableText(
+                              message.content,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: Colors.white,
+                                height: 1.5,
+                              ),
                             ),
                           ),
-                        )
-                      : _ChatBubble(
-                          child: SelectableText(
-                            message.content,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.white,
-                              height: 1.5,
-                            ),
-                          ),
-                        ),
                 ),
               ),
             );
@@ -1015,11 +1553,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
           Expanded(
             child: TextField(
               controller: _promptController,
+              enabled: !_isLoadingActiveApiKey && _hasActiveApiKey,
               minLines: 1,
               maxLines: 4,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: Colors.white,
-              ),
+              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
               decoration: InputDecoration(
                 hintText: _promptHintText(),
                 hintStyle: theme.textTheme.bodyMedium?.copyWith(
@@ -1052,30 +1589,40 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
           const SizedBox(width: 10),
           Container(
             decoration: BoxDecoration(
-              color: _isGenerating || _isRunningStep
-                  ? _panelColor
-                  : _primaryColor,
+              color:
+                  _isGenerating ||
+                          _isRunningStep ||
+                          _isLoadingActiveApiKey ||
+                          !_hasActiveApiKey
+                      ? _panelColor
+                      : _primaryColor,
               borderRadius: BorderRadius.circular(18),
             ),
             child: IconButton(
               onPressed:
-                  _isGenerating || _isRunningStep || _isHistoryLoading
+                  _isGenerating ||
+                          _isRunningStep ||
+                          _isHistoryLoading ||
+                          _isLoadingActiveApiKey ||
+                          !_hasActiveApiKey
                       ? null
                       : _submitPrompt,
-              icon: _isGenerating
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.send_rounded),
+              icon:
+                  _isGenerating
+                      ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                      : const Icon(Icons.send_rounded),
               color: Colors.white,
-              tooltip: _mode == CopilotMode.commandHelper
-                  ? 'Generate plan'
-                  : 'Send prompt',
+              tooltip:
+                  _mode == CopilotMode.commandHelper
+                      ? 'Generate plan'
+                      : 'Send prompt',
             ),
           ),
         ],
@@ -1108,61 +1655,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                 ),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'AI Copilot',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _mode == CopilotMode.commandHelper
-                            ? 'Command planning and safe execution'
-                            : 'Explain logs, errors, and Linux concepts',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: _mutedColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: _isHistoryLoading ||
-                            _isGenerating ||
-                            _chatMessages.isEmpty
-                        ? null
-                        : _clearChatHistory,
-                    icon: const Icon(Icons.delete_sweep_outlined),
-                    color: _mutedColor,
-                    tooltip: 'Clear chat',
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _surfaceColor,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      widget.provider.label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
+              _buildHeader(theme),
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
@@ -1205,14 +1699,17 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     ),
                   ),
                   onSelectionChanged:
-                      _isRunningStep ? null : (selection) => _switchMode(selection.first),
+                      _isRunningStep
+                          ? null
+                          : (selection) => _switchMode(selection.first),
                 ),
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: _mode == CopilotMode.commandHelper
-                    ? _buildCommandHelperView(theme)
-                    : _buildGeneralChatView(theme),
+                child:
+                    _mode == CopilotMode.commandHelper
+                        ? _buildCommandHelperView(theme)
+                        : _buildGeneralChatView(theme),
               ),
               const SizedBox(height: 12),
               _buildComposer(theme),
@@ -1224,22 +1721,11 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   }
 }
 
-enum CopilotMode {
-  commandHelper,
-  generalChat,
-}
+enum CopilotMode { commandHelper, generalChat }
 
-enum AiCopilotExecutionTarget {
-  terminal,
-  dashboard,
-}
+enum AiCopilotExecutionTarget { terminal, dashboard }
 
-enum CopilotPlanStepState {
-  pending,
-  sentToShell,
-  executed,
-  failed,
-}
+enum CopilotPlanStepState { pending, sentToShell, executed, failed }
 
 class _CopilotPlanStep {
   _CopilotPlanStep({
@@ -1256,19 +1742,14 @@ class _CopilotPlanStep {
 }
 
 class _ChatMessage {
-  const _ChatMessage({
-    required this.role,
-    required this.content,
-  });
+  const _ChatMessage({required this.role, required this.content});
 
   final String role;
   final String content;
 }
 
 class _StepNode extends StatelessWidget {
-  const _StepNode({
-    required this.number,
-  });
+  const _StepNode({required this.number});
 
   final int number;
 
@@ -1380,10 +1861,7 @@ class _StepTimelineCard extends StatelessWidget {
           if (warningText != null) ...[
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: const Color(0xFFD97706).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(16),
@@ -1446,10 +1924,7 @@ class _StepTimelineCard extends StatelessWidget {
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _RiskBadge(
-                label: riskLabel,
-                color: riskColor,
-              ),
+              _RiskBadge(label: riskLabel, color: riskColor),
               Text(
                 riskExplanation,
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -1471,16 +1946,17 @@ class _StepTimelineCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
-              icon: isRunning
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.play_arrow_rounded),
+              icon:
+                  isRunning
+                      ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                      : const Icon(Icons.play_arrow_rounded),
               label: const Text('Run'),
             ),
           ),
@@ -1491,10 +1967,7 @@ class _StepTimelineCard extends StatelessWidget {
 }
 
 class _RiskBadge extends StatelessWidget {
-  const _RiskBadge({
-    required this.label,
-    required this.color,
-  });
+  const _RiskBadge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -1502,10 +1975,7 @@ class _RiskBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 7,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
@@ -1524,9 +1994,7 @@ class _RiskBadge extends StatelessWidget {
 }
 
 class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({
-    required this.child,
-  });
+  const _ChatBubble({required this.child});
 
   final Widget child;
 
@@ -1556,9 +2024,7 @@ class _ChatBubble extends StatelessWidget {
 }
 
 class _UserChatBubble extends StatelessWidget {
-  const _UserChatBubble({
-    required this.child,
-  });
+  const _UserChatBubble({required this.child});
 
   final Widget child;
 
@@ -1588,9 +2054,7 @@ class _UserChatBubble extends StatelessWidget {
 }
 
 class _LoadingBubble extends StatelessWidget {
-  const _LoadingBubble({
-    required this.label,
-  });
+  const _LoadingBubble({required this.label});
 
   final String label;
 
@@ -1618,8 +2082,8 @@ class _LoadingBubble extends StatelessWidget {
             child: Text(
               label,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: _AiCopilotSheetState._mutedColor,
-                  ),
+                color: _AiCopilotSheetState._mutedColor,
+              ),
             ),
           ),
         ],
@@ -1629,10 +2093,7 @@ class _LoadingBubble extends StatelessWidget {
 }
 
 class _EmptyMessageCard extends StatelessWidget {
-  const _EmptyMessageCard({
-    required this.title,
-    required this.message,
-  });
+  const _EmptyMessageCard({required this.title, required this.message});
 
   final String title;
   final String message;
@@ -1672,9 +2133,7 @@ class _EmptyMessageCard extends StatelessWidget {
 }
 
 class _ExecutionOutputCard extends StatelessWidget {
-  const _ExecutionOutputCard({
-    required this.output,
-  });
+  const _ExecutionOutputCard({required this.output});
 
   final String output;
 
@@ -1692,9 +2151,9 @@ class _ExecutionOutputCard extends StatelessWidget {
           Text(
             'Execution Output',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
           Container(

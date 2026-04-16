@@ -8,6 +8,7 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../ai/ai_provider.dart';
 import '../models/server_profile.dart';
 import '../storage/api_key_storage.dart';
 import '../storage/saved_servers_storage.dart';
@@ -114,6 +115,15 @@ class BackupService {
       );
 
       await _savedServersStorage.saveServers(servers);
+      for (final provider in AiProvider.values) {
+        final key = aiSettings.apiKeyFor(provider);
+        if (key.isEmpty) {
+          await _apiKeyStorage.deleteApiKey(provider);
+          continue;
+        }
+
+        await _apiKeyStorage.saveApiKey(provider, key);
+      }
       await _apiKeyStorage.saveSettings(
         provider: aiSettings.provider,
         apiKey: aiSettings.apiKey,

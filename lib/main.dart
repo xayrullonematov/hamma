@@ -14,7 +14,6 @@ Future<void> main() async {
   const appLockStorage = AppLockStorage();
   var savedSettings = const AiSettings(
     provider: AiProvider.openAi,
-    apiKey: '',
     openRouterModel: null,
   );
   String? aiSettingsStartupWarning;
@@ -140,9 +139,7 @@ class _AiServerAppState extends State<AiServerApp> {
         scaffoldBackgroundColor: _scaffoldBackground,
         cardColor: _surface,
         canvasColor: _scaffoldBackground,
-        dialogTheme: const DialogThemeData(
-          backgroundColor: _surface,
-        ),
+        dialogTheme: const DialogThemeData(backgroundColor: _surface),
         snackBarTheme: const SnackBarThemeData(
           backgroundColor: _surface,
           contentTextStyle: TextStyle(color: Colors.white),
@@ -191,9 +188,7 @@ class _AiServerAppState extends State<AiServerApp> {
           ),
         ),
         textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            foregroundColor: _primary,
-          ),
+          style: TextButton.styleFrom(foregroundColor: _primary),
         ),
         textTheme: const TextTheme(
           headlineSmall: TextStyle(
@@ -208,24 +203,19 @@ class _AiServerAppState extends State<AiServerApp> {
             color: Colors.white,
             fontWeight: FontWeight.w600,
           ),
-          bodyLarge: TextStyle(
-            color: Colors.white,
-          ),
-          bodyMedium: TextStyle(
-            color: Colors.white,
-          ),
-          bodySmall: TextStyle(
-            color: _textMuted,
-          ),
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.white),
+          bodySmall: TextStyle(color: _textMuted),
         ),
       ),
-      home: widget.initialHasAppPin
-          ? AppLockScreen(
-              mode: AppLockMode.verify,
-              appLockStorage: widget.appLockStorage,
-              nextScreen: serverListScreen,
-            )
-          : serverListScreen,
+      home:
+          widget.initialHasAppPin
+              ? AppLockScreen(
+                mode: AppLockMode.verify,
+                appLockStorage: widget.appLockStorage,
+                nextScreen: serverListScreen,
+              )
+              : serverListScreen,
     );
   }
 }

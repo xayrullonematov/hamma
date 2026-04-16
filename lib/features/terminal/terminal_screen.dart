@@ -8,6 +8,7 @@ import 'package:xterm/xterm.dart';
 
 import '../../core/ai/ai_provider.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/storage/api_key_storage.dart';
 import '../ai_assistant/ai_copilot_sheet.dart';
 
 class TerminalScreen extends StatefulWidget {
@@ -16,14 +17,14 @@ class TerminalScreen extends StatefulWidget {
     required this.sshService,
     required this.serverName,
     required this.aiProvider,
-    required this.apiKey,
+    required this.apiKeyStorage,
     required this.openRouterModel,
   });
 
   final SshService sshService;
   final String serverName;
   final AiProvider aiProvider;
-  final String apiKey;
+  final ApiKeyStorage apiKeyStorage;
   final String? openRouterModel;
 
   @override
@@ -41,8 +42,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
   static final RegExp _ansiEscapePattern = RegExp(
     r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])',
   );
-  static final RegExp _controlCharPattern =
-      RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]');
+  static final RegExp _controlCharPattern = RegExp(
+    r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]',
+  );
   static final RegExp _errorPattern = RegExp(
     r'(error|failed|exception|denied|not found|permission|timed out|refused|closed)',
     caseSensitive: false,
@@ -65,9 +67,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void initState() {
     super.initState();
 
-    _terminal = Terminal(
-      maxLines: 10000,
-    );
+    _terminal = Terminal(maxLines: 10000);
 
     _terminal.write('Connecting interactive shell...\r\n');
     _terminal.onOutput = _handleTerminalInput;
@@ -132,7 +132,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
         _ctrlEnabled = false;
         _altEnabled = false;
       });
-      _handleTerminalChunk('Failed to open shell.\r\n$error\r\n', isError: true);
+      _handleTerminalChunk(
+        'Failed to open shell.\r\n$error\r\n',
+        isError: true,
+      );
     }
   }
 
@@ -265,11 +268,12 @@ class _TerminalScreenState extends State<TerminalScreen> {
       );
     }
 
-    final lines = _recentTerminalOutput
-        .split('\n')
-        .map((line) => line.trimRight())
-        .where(_shouldKeepContextLine)
-        .toList();
+    final lines =
+        _recentTerminalOutput
+            .split('\n')
+            .map((line) => line.trimRight())
+            .where(_shouldKeepContextLine)
+            .toList();
     final filteredLines = <String>[];
     for (final line in lines) {
       if (filteredLines.isEmpty || filteredLines.last != line) {
@@ -277,9 +281,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
       }
     }
 
-    final trimmedLines = filteredLines.length > _maxContextLines
-        ? filteredLines.sublist(filteredLines.length - _maxContextLines)
-        : filteredLines;
+    final trimmedLines =
+        filteredLines.length > _maxContextLines
+            ? filteredLines.sublist(filteredLines.length - _maxContextLines)
+            : filteredLines;
 
     _recentTerminalOutput = trimmedLines.join('\n');
     if (_recentTerminalOutput.length > _maxContextChars) {
@@ -362,7 +367,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
     final looksLikePrompt =
         RegExp(r'^[^\s@]+@[^\s:]+:.*[#$]$').hasMatch(trimmed) ||
-            RegExp(r'^[A-Za-z0-9._/-]+[#$>]$').hasMatch(trimmed);
+        RegExp(r'^[A-Za-z0-9._/-]+[#$>]$').hasMatch(trimmed);
 
     return !looksLikePrompt;
   }
@@ -422,7 +427,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
           child: AiCopilotSheet(
             serverId: widget.serverName,
             provider: widget.aiProvider,
-            apiKey: widget.apiKey,
+            apiKeyStorage: widget.apiKeyStorage,
             openRouterModel: widget.openRouterModel,
             executionTarget: AiCopilotExecutionTarget.terminal,
             canRunCommands: () => _session != null,
@@ -497,11 +502,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
         color: _surfaceColor,
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [
-          BoxShadow(
-            color: _shadowColor,
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
+          BoxShadow(color: _shadowColor, blurRadius: 18, offset: Offset(0, 10)),
         ],
       ),
       child: Row(
@@ -665,28 +666,32 @@ class _TerminalToolbarButton extends StatelessWidget {
           child: Ink(
             width: 56,
             decoration: BoxDecoration(
-              color: isActive
-                  ? const Color(0xFF3B82F6).withValues(alpha: 0.18)
-                  : _TerminalScreenState._panelColor,
+              color:
+                  isActive
+                      ? const Color(0xFF3B82F6).withValues(alpha: 0.18)
+                      : _TerminalScreenState._panelColor,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
-              child: icon != null
-                  ? Icon(
-                      icon,
-                      color: isActive
-                          ? const Color(0xFF3B82F6)
-                          : _TerminalScreenState._mutedColor,
-                    )
-                  : Text(
-                      label!,
-                      style: TextStyle(
-                        color: isActive
-                            ? const Color(0xFF3B82F6)
-                            : _TerminalScreenState._mutedColor,
-                        fontWeight: FontWeight.w700,
+              child:
+                  icon != null
+                      ? Icon(
+                        icon,
+                        color:
+                            isActive
+                                ? const Color(0xFF3B82F6)
+                                : _TerminalScreenState._mutedColor,
+                      )
+                      : Text(
+                        label!,
+                        style: TextStyle(
+                          color:
+                              isActive
+                                  ? const Color(0xFF3B82F6)
+                                  : _TerminalScreenState._mutedColor,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
             ),
           ),
         ),

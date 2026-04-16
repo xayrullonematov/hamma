@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/server_profile.dart';
 
+enum AuthMethod { password, sshKey }
+
 class ServerFormScreen extends StatefulWidget {
   const ServerFormScreen({super.key, this.initialServer});
 
@@ -29,6 +31,8 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
   late final TextEditingController _privateKeyController;
+  late final TextEditingController _privateKeyPasswordController;
+  late AuthMethod _authMethod;
 
   bool get _isEditing => widget.initialServer != null;
 
@@ -46,6 +50,13 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
     _privateKeyController = TextEditingController(
       text: server?.privateKey ?? '',
     );
+    _privateKeyPasswordController = TextEditingController(
+      text: server?.privateKeyPassword ?? '',
+    );
+    _authMethod =
+        server?.privateKey?.trim().isNotEmpty ?? false
+            ? AuthMethod.sshKey
+            : AuthMethod.password;
   }
 
   @override
@@ -56,6 +67,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
     _usernameController.dispose();
     _passwordController.dispose();
     _privateKeyController.dispose();
+    _privateKeyPasswordController.dispose();
     super.dispose();
   }
 
@@ -66,14 +78,20 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
 
     final port = int.parse(_portController.text.trim());
     final privateKey = _privateKeyController.text.trim();
+    final privateKeyPassword = _privateKeyPasswordController.text.trim();
+    final isPasswordAuth = _authMethod == AuthMethod.password;
     final profile = ServerProfile(
       id: widget.initialServer?.id ?? _generateServerId(),
       name: _nameController.text.trim(),
       host: _hostController.text.trim(),
       port: port,
       username: _usernameController.text.trim(),
-      password: _passwordController.text.trim(),
-      privateKey: privateKey.isEmpty ? null : privateKey,
+      password: isPasswordAuth ? _passwordController.text.trim() : '',
+      privateKey: isPasswordAuth || privateKey.isEmpty ? null : privateKey,
+      privateKeyPassword:
+          isPasswordAuth || privateKeyPassword.isEmpty
+              ? null
+              : privateKeyPassword,
     );
 
     Navigator.of(context).pop(profile);
@@ -200,53 +218,96 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                       },
                     ),
                     const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      decoration: _fieldDecoration('Password'),
-                      validator: (value) {
-                        final password = value?.trim() ?? '';
-                        final privateKey = _privateKeyController.text.trim();
-                        if (password.isEmpty && privateKey.isEmpty) {
-                          return 'Enter a password or add a private key.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Private Key (Optional)',
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    SizedBox(
+                      width: double.infinity,
+                      child: SegmentedButton<AuthMethod>(
+                        segments: const [
+                          ButtonSegment<AuthMethod>(
+                            value: AuthMethod.password,
+                            label: Text('Password'),
                           ),
-                        ),
-                        TextButton.icon(
-                          onPressed: _importPrivateKey,
-                          icon: const Icon(Icons.file_upload),
-                          label: const Text('Import Key File'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _ObscuredMultilineTextFormField(
-                      controller: _privateKeyController,
-                      decoration: InputDecoration(
-                        hintText: 'Paste or import a PEM private key.',
-                        alignLabelWithHint: true,
-                        contentPadding: const EdgeInsets.fromLTRB(
-                          12,
-                          16,
-                          12,
-                          16,
-                        ),
+                          ButtonSegment<AuthMethod>(
+                            value: AuthMethod.sshKey,
+                            label: Text('SSH Key'),
+                          ),
+                        ],
+                        selected: <AuthMethod>{_authMethod},
+                        showSelectedIcon: false,
+                        onSelectionChanged: (selection) {
+                          setState(() {
+                            _authMethod = selection.first;
+                          });
+                        },
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    if (_authMethod == AuthMethod.password)
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: true,
+                        decoration: _fieldDecoration('Password'),
+                        validator: (value) {
+                          final password = value?.trim() ?? '';
+                          if (_authMethod == AuthMethod.password &&
+                              password.isEmpty) {
+                            return 'Enter a password.';
+                          }
+                          return null;
+                        },
+                      ),
+                    if (_authMethod == AuthMethod.sshKey) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Private Key (Optional)',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: _importPrivateKey,
+                            icon: const Icon(Icons.file_upload),
+                            label: const Text('Import Key File'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _ObscuredMultilineTextFormField(
+                        controller: _privateKeyController,
+                        decoration: InputDecoration(
+                          hintText: 'Paste or import a PEM private key.',
+                          alignLabelWithHint: true,
+                          contentPadding: const EdgeInsets.fromLTRB(
+                            12,
+                            16,
+                            12,
+                            16,
+                          ),
+                        ),
+                        validator: (value) {
+                          final privateKey = value?.trim() ?? '';
+                          if (_authMethod == AuthMethod.sshKey &&
+                              privateKey.isEmpty) {
+                            return 'Add a private key.';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _privateKeyPasswordController,
+                        obscureText: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: _fieldDecoration(
+                          'Private Key Passphrase (Optional)',
+                        ).copyWith(hintText: 'Leave empty if none'),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -279,10 +340,12 @@ class _ObscuredMultilineTextFormField extends StatelessWidget {
   const _ObscuredMultilineTextFormField({
     required this.controller,
     required this.decoration,
+    this.validator,
   });
 
   final TextEditingController controller;
   final InputDecoration decoration;
+  final FormFieldValidator<String>? validator;
 
   @override
   Widget build(BuildContext context) {
@@ -334,6 +397,7 @@ class _ObscuredMultilineTextFormField extends StatelessWidget {
             hintText: null,
             contentPadding: contentPadding,
           ),
+          validator: validator,
         ),
       ],
     );

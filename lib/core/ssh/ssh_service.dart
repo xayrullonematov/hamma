@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -11,9 +13,11 @@ class SshService {
           trustedHostKeyStorage ?? const TrustedHostKeyStorage();
 
   SSHClient? _client;
+  final Map<int, ServerSocket> _activeForwards = {};
   final TrustedHostKeyStorage _trustedHostKeyStorage;
 
   bool get isConnected => _client != null;
+  List<int> get activeForwardedPorts => _activeForwards.keys.toList();
 
   Future<void> connect({
     required String host,
@@ -21,6 +25,7 @@ class SshService {
     required String username,
     required String password,
     String? privateKey,
+    String? privateKeyPassword,
     Future<bool> Function({
       required String host,
       required int port,
@@ -39,7 +44,7 @@ class SshService {
     final identities =
         resolvedPrivateKey == null || resolvedPrivateKey.isEmpty
             ? null
-            : SSHKeyPair.fromPem(resolvedPrivateKey);
+            : SSHKeyPair.fromPem(resolvedPrivateKey, privateKeyPassword);
 
     final socket = await SSHSocket.connect(host, port);
     final client = SSHClient(
@@ -143,9 +148,122 @@ class SshService {
     }
   }
 
+  Future<void> startLocalForwarding({
+    required int localPort,
+    required String remoteHost,
+    required int remotePort,
+  }) async {
+    final client = _client;
+    if (client == null) {
+      throw StateError('SSH client is not connected.');
+    }
+    if (_activeForwards.containsKey(localPort)) {
+      throw StateError('Local port $localPort is already being forwarded.');
+    }
+
+    final serverSocket = await ServerSocket.bind('127.0.0.1', localPort);
+    _activeForwards[localPort] = serverSocket;
+
+    serverSocket.listen(
+      (socket) {
+        unawaited(
+          _handleForwardedConnection(
+            client: client,
+            socket: socket,
+            remoteHost: remoteHost,
+            remotePort: remotePort,
+          ),
+        );
+      },
+      onError: (_) {},
+      onDone: () {
+        if (identical(_activeForwards[localPort], serverSocket)) {
+          _activeForwards.remove(localPort);
+        }
+      },
+      cancelOnError: false,
+    );
+  }
+
+  Future<void> stopLocalForwarding(int localPort) async {
+    final serverSocket = _activeForwards.remove(localPort);
+    if (serverSocket == null) {
+      return;
+    }
+
+    try {
+      await serverSocket.close();
+    } catch (_) {
+      // Ignore close failures to keep forwarding cleanup non-fatal.
+    }
+  }
+
   Future<void> disconnect() async {
+    final forwardedSockets = _activeForwards.values.toList();
+    _activeForwards.clear();
+    for (final serverSocket in forwardedSockets) {
+      try {
+        await serverSocket.close();
+      } catch (_) {
+        // Ignore close failures during disconnect.
+      }
+    }
     _client?.close();
     _client = null;
+  }
+
+  Future<void> _handleForwardedConnection({
+    required SSHClient client,
+    required Socket socket,
+    required String remoteHost,
+    required int remotePort,
+  }) async {
+    SSHForwardChannel? forward;
+
+    try {
+      forward = await client.forwardLocal(remoteHost, remotePort);
+      await _bridgeForwardedConnection(socket: socket, forward: forward);
+    } catch (_) {
+      try {
+        await forward?.close();
+      } catch (_) {
+        // Ignore close failures when a forwarded channel could not start.
+      }
+      try {
+        await socket.close();
+      } catch (_) {
+        socket.destroy();
+      }
+    }
+  }
+
+  Future<void> _bridgeForwardedConnection({
+    required Socket socket,
+    required SSHForwardChannel forward,
+  }) async {
+    final remoteToLocal = forward.stream
+        .cast<List<int>>()
+        .handleError((_) {})
+        .pipe(socket)
+        .catchError((_) {});
+    final localToRemote = socket
+        .cast<List<int>>()
+        .handleError((_) {})
+        .pipe(forward.sink)
+        .catchError((_) {});
+
+    await Future.wait([remoteToLocal, localToRemote], eagerError: false);
+
+    try {
+      await forward.close();
+    } catch (_) {
+      // Ignore close failures on disconnect.
+    }
+    try {
+      await socket.close();
+    } catch (_) {
+      socket.destroy();
+    }
   }
 
   String _formatFingerprint(Uint8List bytes) {

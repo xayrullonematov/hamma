@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/custom_actions_storage.dart';
 import '../ai_assistant/ai_copilot_sheet.dart';
+import '../port_forwarding/port_forwarding_sheet.dart';
 import '../quick_actions/custom_actions_screen.dart';
 import '../quick_actions/quick_actions.dart';
 import '../sftp/file_explorer_screen.dart';
@@ -50,6 +52,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   static const _shadowColor = Color(0x22000000);
 
   final SshService _sshService = SshService();
+  final ApiKeyStorage _apiKeyStorage = const ApiKeyStorage();
   final CustomActionsStorage _customActionsStorage =
       const CustomActionsStorage();
   late AiProvider _aiProvider;
@@ -141,6 +144,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         username: _server.username,
         password: _server.password,
         privateKey: _server.privateKey,
+        privateKeyPassword: _server.privateKeyPassword,
         onTrustHostKey: _confirmHostKeyTrust,
       );
 
@@ -469,7 +473,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           child: AiCopilotSheet(
             serverId: _server.id,
             provider: _aiProvider,
-            apiKey: _apiKey,
+            apiKeyStorage: _apiKeyStorage,
             openRouterModel: _openRouterModel,
             executionTarget: AiCopilotExecutionTarget.dashboard,
             canRunCommands: () => _sshService.isConnected,
@@ -572,7 +576,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
               sshService: _sshService,
               serverName: _server.name,
               aiProvider: _aiProvider,
-              apiKey: _apiKey,
+              apiKeyStorage: _apiKeyStorage,
               openRouterModel: _openRouterModel,
             ),
       ),
@@ -584,6 +588,20 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
       MaterialPageRoute<void>(
         builder: (_) => FileExplorerScreen(server: _server),
       ),
+    );
+  }
+
+  Future<void> _openPortForwarding() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: false,
+      builder: (_) {
+        return FractionallySizedBox(
+          heightFactor: 0.82,
+          child: PortForwardingSheet(sshService: _sshService),
+        );
+      },
     );
   }
 
@@ -782,13 +800,27 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isBusy ? null : _openSettings,
-                      icon: const Icon(Icons.settings_outlined),
-                      label: const Text('Settings'),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _isBusy || !_sshService.isConnected
+                                  ? null
+                                  : _openPortForwarding,
+                          icon: const Icon(Icons.router_outlined),
+                          label: const Text('Port Forwarding'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isBusy ? null : _openSettings,
+                          icon: const Icon(Icons.settings_outlined),
+                          label: const Text('Settings'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
