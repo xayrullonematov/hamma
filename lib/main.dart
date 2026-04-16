@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/ai/ai_provider.dart';
+import 'core/background/background_keepalive.dart';
 import 'core/storage/api_key_storage.dart';
 import 'core/storage/app_lock_storage.dart';
 import 'features/security/app_lock_screen.dart';
@@ -9,6 +10,7 @@ import 'features/servers/server_list_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await BackgroundKeepalive.initialize();
 
   const apiKeyStorage = ApiKeyStorage();
   const appLockStorage = AppLockStorage();

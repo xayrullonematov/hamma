@@ -34,6 +34,7 @@ class TerminalScreen extends StatefulWidget {
 class _TerminalScreenState extends State<TerminalScreen> {
   static const _maxContextChars = 3500;
   static const _maxContextLines = 30;
+  static const _autoFixContextLines = 80;
   static const _backgroundColor = Color(0xFF0F172A);
   static const _surfaceColor = Color(0xFF1E293B);
   static const _panelColor = Color(0xFF162033);
@@ -372,7 +373,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
     return !looksLikePrompt;
   }
 
-  String getRecentTerminalContext() {
+  String _buildRecentTerminalContext({
+    String? terminalTextOverride,
+    bool useBufferLabel = false,
+  }) {
     final parts = <String>[];
 
     if (_lastUserCommand != null && _lastUserCommand!.isNotEmpty) {
@@ -383,14 +387,40 @@ class _TerminalScreenState extends State<TerminalScreen> {
       parts.add('Last visible error:\n$_lastVisibleError');
     }
 
-    final recentOutput = _recentTerminalOutput.trim();
+    final recentOutput = (terminalTextOverride ?? _recentTerminalOutput).trim();
     if (recentOutput.isNotEmpty) {
-      parts.add('Recent terminal output:\n$recentOutput');
+      parts.add(
+        '${useBufferLabel ? 'Recent terminal buffer' : 'Recent terminal output'}:\n$recentOutput',
+      );
     }
 
     return parts.isEmpty
         ? 'No recent terminal context available.'
         : parts.join('\n\n');
+  }
+
+  String getRecentTerminalContext() {
+    return _buildRecentTerminalContext();
+  }
+
+  String _extractRecentTerminalBuffer() {
+    final normalizedBuffer = _sanitizeTerminalText(
+      _terminal.buffer
+          .getText()
+          .replaceAll('\r\n', '\n')
+          .replaceAll('\r', '\n'),
+    );
+    final lines =
+        normalizedBuffer
+            .split('\n')
+            .map((line) => line.trimRight())
+            .where((line) => line.trim().isNotEmpty)
+            .toList();
+    final trimmedLines =
+        lines.length > _autoFixContextLines
+            ? lines.sublist(lines.length - _autoFixContextLines)
+            : lines;
+    return trimmedLines.join('\n').trim();
   }
 
   void _handleTerminalResize(
@@ -416,7 +446,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
     return null;
   }
 
-  Future<void> _openCopilot() async {
+  Future<void> _openCopilot({
+    String? initialPrompt,
+    String? contextOverride,
+  }) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -429,15 +462,38 @@ class _TerminalScreenState extends State<TerminalScreen> {
             provider: widget.aiProvider,
             apiKeyStorage: widget.apiKeyStorage,
             openRouterModel: widget.openRouterModel,
+            initialPrompt: initialPrompt,
             executionTarget: AiCopilotExecutionTarget.terminal,
             canRunCommands: () => _session != null,
-            getContext: getRecentTerminalContext,
+            getContext:
+                contextOverride == null
+                    ? getRecentTerminalContext
+                    : () => contextOverride,
             onRunCommand: _runCopilotCommand,
             executionUnavailableMessage:
                 'Terminal shell is disconnected. Reconnect before running commands.',
           ),
         );
       },
+    );
+  }
+
+  Future<void> _openAutoFixCopilot() async {
+    final terminalBuffer = _extractRecentTerminalBuffer();
+    final fallbackContext =
+        terminalBuffer.isEmpty ? _recentTerminalOutput : terminalBuffer;
+    final promptContext =
+        terminalBuffer.isEmpty
+            ? 'No recent terminal output was available.'
+            : terminalBuffer;
+
+    await _openCopilot(
+      initialPrompt:
+          'I am getting an error in my terminal. Analyze this recent output and provide the exact command to fix it:\n\n$promptContext',
+      contextOverride: _buildRecentTerminalContext(
+        terminalTextOverride: fallbackContext,
+        useBufferLabel: true,
+      ),
     );
   }
 
@@ -577,6 +633,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
         backgroundColor: _backgroundColor,
         title: Text('Terminal: ${widget.serverName}'),
         actions: [
+          IconButton(
+            onPressed: _openAutoFixCopilot,
+            icon: const Icon(Icons.auto_fix_high, color: Color(0xFFF59E0B)),
+            tooltip: 'AI Auto-Fix',
+          ),
           IconButton(
             onPressed: _openCopilot,
             icon: const Icon(Icons.smart_toy_outlined),

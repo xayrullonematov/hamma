@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
+import '../background/background_keepalive.dart';
 import '../storage/trusted_host_key_storage.dart';
 
 class SshService {
@@ -110,6 +111,12 @@ class SshService {
     );
 
     await client.authenticated;
+    try {
+      await BackgroundKeepalive.enable();
+    } catch (_) {
+      client.close();
+      rethrow;
+    }
     _client = client;
   }
 
@@ -210,6 +217,7 @@ class SshService {
     }
     _client?.close();
     _client = null;
+    await BackgroundKeepalive.disable();
   }
 
   Future<void> _handleForwardedConnection({

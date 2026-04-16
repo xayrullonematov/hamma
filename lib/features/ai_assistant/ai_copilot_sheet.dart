@@ -17,6 +17,7 @@ class AiCopilotSheet extends StatefulWidget {
     required this.provider,
     required this.apiKeyStorage,
     required this.openRouterModel,
+    this.initialPrompt,
     required this.executionTarget,
     required this.canRunCommands,
     required this.getContext,
@@ -28,6 +29,7 @@ class AiCopilotSheet extends StatefulWidget {
   final AiProvider provider;
   final ApiKeyStorage apiKeyStorage;
   final String? openRouterModel;
+  final String? initialPrompt;
   final AiCopilotExecutionTarget executionTarget;
   final bool Function() canRunCommands;
   final String Function() getContext;
@@ -72,6 +74,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   String _status = 'Describe the issue, then generate suggested commands.';
   List<String> _openRouterModels = const [];
   int _providerLoadGeneration = 0;
+  bool _hasTriggeredInitialPrompt = false;
 
   bool get _isRunningStep => _runningCommandIndex != null;
   bool get _hasActiveApiKey => _activeApiKey.trim().isNotEmpty;
@@ -81,6 +84,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     super.initState();
     _activeProvider = widget.provider;
     _activeOpenRouterModel = _normalizeOpenRouterModel(widget.openRouterModel);
+    _seedInitialPrompt();
     _refreshAiCommandService();
     _loadChatHistory();
     _loadActiveProviderState();
@@ -104,6 +108,12 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
     if (oldWidget.serverId != widget.serverId) {
       _loadChatHistory();
+    }
+
+    if (oldWidget.initialPrompt != widget.initialPrompt) {
+      _hasTriggeredInitialPrompt = false;
+      _seedInitialPrompt();
+      _scheduleInitialPromptIfReady();
     }
   }
 
@@ -130,6 +140,47 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   String? _normalizeOpenRouterModel(String? value) {
     final normalized = value?.trim() ?? '';
     return normalized.isEmpty ? null : normalized;
+  }
+
+  String? _normalizeInitialPrompt(String? value) {
+    final normalized = value?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      return null;
+    }
+    return normalized;
+  }
+
+  void _seedInitialPrompt() {
+    final initialPrompt = _normalizeInitialPrompt(widget.initialPrompt);
+    if (initialPrompt == null) {
+      return;
+    }
+
+    _promptController.value = TextEditingValue(
+      text: initialPrompt,
+      selection: TextSelection.collapsed(offset: initialPrompt.length),
+    );
+    _mode = CopilotMode.commandHelper;
+  }
+
+  void _scheduleInitialPromptIfReady() {
+    if (_hasTriggeredInitialPrompt ||
+        _normalizeInitialPrompt(widget.initialPrompt) == null ||
+        _isGenerating ||
+        _isRunningStep ||
+        _isHistoryLoading ||
+        _isLoadingActiveApiKey ||
+        !_hasActiveApiKey) {
+      return;
+    }
+
+    _hasTriggeredInitialPrompt = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _submitPrompt();
+    });
   }
 
   void _refreshAiCommandService() {
@@ -171,6 +222,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                 ? _defaultStatusText()
                 : 'API key missing. Configure it in Settings.';
       });
+      _scheduleInitialPromptIfReady();
     } catch (_) {
       if (!mounted || generation != _providerLoadGeneration) {
         return;
@@ -183,6 +235,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         _isLoadingActiveApiKey = false;
         _status = 'API key missing. Configure it in Settings.';
       });
+      _scheduleInitialPromptIfReady();
     }
   }
 
@@ -449,6 +502,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       setState(() {
         _chatMessages = chatMessages;
       });
+      _scheduleInitialPromptIfReady();
     } catch (_) {
       if (!mounted) {
         return;
@@ -457,11 +511,13 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       setState(() {
         _chatMessages = const [];
       });
+      _scheduleInitialPromptIfReady();
     } finally {
       if (mounted) {
         setState(() {
           _isHistoryLoading = false;
         });
+        _scheduleInitialPromptIfReady();
       }
     }
   }

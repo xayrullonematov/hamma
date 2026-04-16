@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/storage/saved_servers_storage.dart';
+import '../fleet/fleet_dashboard_screen.dart';
 import '../settings/settings_screen.dart';
 import 'server_dashboard_screen.dart';
 import 'server_form_screen.dart';
@@ -258,6 +259,12 @@ class _ServerListScreenState extends State<ServerListScreen> {
     );
   }
 
+  void _openFleetCommandCenter() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const FleetDashboardScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -266,6 +273,11 @@ class _ServerListScreenState extends State<ServerListScreen> {
       appBar: AppBar(
         title: const Text('Saved Servers'),
         actions: [
+          IconButton(
+            onPressed: _openFleetCommandCenter,
+            icon: const Icon(Icons.dashboard_customize_outlined),
+            tooltip: 'Fleet Command Center',
+          ),
           IconButton(
             onPressed: _openSettings,
             icon: const Icon(Icons.settings),
