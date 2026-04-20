@@ -52,6 +52,23 @@ df -P /
     return Map<String, ServerMetrics>.fromEntries(entries);
   }
 
+  Future<Map<String, String>> executeBulkCommand(
+    List<ServerProfile> servers,
+    String command, {
+    void Function(String serverId, String result)? onServerResult,
+  }) async {
+    final entries = await Future.wait(
+      servers.map((server) async {
+        final result = await _runCommandOnServer(server, command);
+        onServerResult?.call(server.id, result);
+        return MapEntry(server.id, result);
+      }),
+      eagerError: false,
+    );
+
+    return Map<String, String>.fromEntries(entries);
+  }
+
   Future<ServerMetrics> pollServer(ServerProfile server) async {
     if (!server.isValid) {
       return ServerMetrics.failed('Saved profile is incomplete.');
@@ -127,6 +144,83 @@ df -P /
       return ServerMetrics.failed(error.toString());
     } catch (error) {
       return ServerMetrics.failed(_friendlyErrorMessage(error));
+    } finally {
+      client?.close();
+    }
+  }
+
+  Future<String> _runCommandOnServer(
+    ServerProfile server,
+    String command,
+  ) async {
+    if (!server.isValid) {
+      return 'Error: Saved profile is incomplete.';
+    }
+
+    SSHClient? client;
+
+    try {
+      final trustedHostKey = await _trustedHostKeyStorage.loadTrustedHostKey(
+        host: server.host,
+        port: server.port,
+      );
+      final identities = _resolveIdentities(
+        privateKey: server.privateKey,
+        privateKeyPassword: server.privateKeyPassword,
+      );
+
+      final socket = await SSHSocket.connect(
+        server.host,
+        server.port,
+      ).timeout(_connectTimeout);
+
+      client = SSHClient(
+        socket,
+        username: server.username,
+        identities: identities,
+        onPasswordRequest: () => server.password,
+        onVerifyHostKey: (algorithm, fingerprintBytes) async {
+          final fingerprint = _formatFingerprint(fingerprintBytes);
+
+          if (trustedHostKey == null) {
+            throw SshUnknownHostKeyException(
+              host: server.host,
+              port: server.port,
+              algorithm: algorithm,
+              fingerprint: fingerprint,
+            );
+          }
+
+          final isTrustedFingerprint =
+              trustedHostKey.fingerprint == fingerprint &&
+              trustedHostKey.algorithm == algorithm;
+          if (isTrustedFingerprint) {
+            return true;
+          }
+
+          throw SshHostKeyMismatchException(
+            host: server.host,
+            port: server.port,
+            expectedAlgorithm: trustedHostKey.algorithm,
+            expectedFingerprint: trustedHostKey.fingerprint,
+            actualAlgorithm: algorithm,
+            actualFingerprint: fingerprint,
+          );
+        },
+      );
+
+      await client.authenticated.timeout(_connectTimeout);
+
+      final output = utf8.decode(
+        await client.run(command).timeout(_commandTimeout),
+        allowMalformed: true,
+      );
+
+      return output;
+    } on TimeoutException {
+      return 'Error: Timed out.';
+    } catch (error) {
+      return 'Error: ${_friendlyErrorMessage(error)}';
     } finally {
       client?.close();
     }

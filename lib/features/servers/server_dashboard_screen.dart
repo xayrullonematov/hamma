@@ -7,9 +7,14 @@ import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/custom_actions_storage.dart';
 import '../ai_assistant/ai_copilot_sheet.dart';
 import '../port_forwarding/port_forwarding_sheet.dart';
+import '../processes/process_manager_screen.dart';
+import '../docker/docker_manager_screen.dart';
+import '../logs/log_viewer_screen.dart';
+import '../packages/package_manager_screen.dart';
 import '../quick_actions/custom_actions_screen.dart';
 import '../quick_actions/quick_actions.dart';
 import '../sftp/file_explorer_screen.dart';
+import '../services/service_management_screen.dart';
 import '../settings/settings_screen.dart';
 import '../terminal/terminal_screen.dart';
 
@@ -591,6 +596,66 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     );
   }
 
+  void _openServiceManagement() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => ServiceManagementScreen(
+              sshService: _sshService,
+              serverName: _server.name,
+            ),
+      ),
+    );
+  }
+
+  void _openProcessManager() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => ProcessManagerScreen(
+              sshService: _sshService,
+              serverName: _server.name,
+            ),
+      ),
+    );
+  }
+
+  void _openDockerManager() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => DockerManagerScreen(
+              sshService: _sshService,
+              serverName: _server.name,
+            ),
+      ),
+    );
+  }
+
+  void _openLogViewer() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => LogViewerScreen(
+              sshService: _sshService,
+              serverName: _server.name,
+            ),
+      ),
+    );
+  }
+
+  void _openPackageManager() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => PackageManagerScreen(
+              sshService: _sshService,
+              serverName: _server.name,
+            ),
+      ),
+    );
+  }
+
   Future<void> _openPortForwarding() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -832,6 +897,53 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('Management', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.9,
+                    children: [
+                      _ManagementTile(
+                        icon: Icons.settings_input_component_outlined,
+                        label: 'Services',
+                        onTap: _sshService.isConnected ? _openServiceManagement : null,
+                      ),
+                      _ManagementTile(
+                        icon: Icons.memory_outlined,
+                        label: 'Processes',
+                        onTap: _sshService.isConnected ? _openProcessManager : null,
+                      ),
+                      _ManagementTile(
+                        icon: Icons.directions_boat_outlined,
+                        label: 'Docker',
+                        onTap: _sshService.isConnected ? _openDockerManager : null,
+                      ),
+                      _ManagementTile(
+                        icon: Icons.list_alt_rounded,
+                        label: 'Logs',
+                        onTap: _sshService.isConnected ? _openLogViewer : null,
+                      ),
+                      _ManagementTile(
+                        icon: Icons.system_update_alt_rounded,
+                        label: 'Packages',
+                        onTap: _sshService.isConnected ? _openPackageManager : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: _sectionDecoration(),
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Row(
                     children: [
                       Text('Quick Actions', style: theme.textTheme.titleMedium),
@@ -950,6 +1062,52 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ManagementTile extends StatelessWidget {
+  const _ManagementTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onTap != null;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Opacity(
+          opacity: isEnabled ? 1 : 0.5,
+          child: Container(
+            decoration: BoxDecoration(
+              color: _ServerDashboardScreenState._panelColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: const Color(0xFF3B82F6), size: 28),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

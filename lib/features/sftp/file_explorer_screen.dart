@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../../core/models/server_profile.dart';
 import '../../core/ssh/sftp_service.dart';
@@ -31,6 +35,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   bool _isConnecting = true;
   bool _isLoading = false;
   bool _isDownloadingFile = false;
+  bool _isUploadingFile = false;
   bool _isShowingMessage = false;
   String _currentPath = '.';
   String _displayPath = '.';
@@ -175,6 +180,64 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       if (mounted) {
         setState(() {
           _isDownloadingFile = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleDownload(SftpName entry) async {
+    final remotePath = _buildChildPath(_currentPath, entry.filename);
+
+    setState(() {
+      _isDownloadingFile = true;
+    });
+
+    try {
+      final dir =
+          Platform.isAndroid
+              ? (await getExternalStorageDirectory())?.path ??
+                  (await getApplicationDocumentsDirectory()).path
+              : (await getDownloadsDirectory())?.path ??
+                  (await getApplicationDocumentsDirectory()).path;
+
+      final localPath = p.join(dir, entry.filename);
+      await _sftpService.downloadFile(remotePath, localPath);
+      _showMessage('Downloaded to $localPath');
+    } catch (error) {
+      _showMessage('Download failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDownloadingFile = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleUpload() async {
+    try {
+      final result = await FilePicker.platform.pickFiles();
+      if (result == null || result.files.single.path == null) {
+        return;
+      }
+
+      final localPath = result.files.single.path!;
+      final filename = result.files.single.name;
+      final remotePath = _buildChildPath(_currentPath, filename);
+
+      setState(() {
+        _isUploadingFile = true;
+      });
+
+      await _sftpService.uploadFile(localPath, remotePath);
+      _showMessage('Uploaded $filename');
+      await _loadDirectory(_currentPath);
+    } catch (error) {
+      _showMessage('Upload failed: $error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingFile = false;
         });
       }
     }
@@ -374,12 +437,54 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               _entrySubtitle(entry),
               style: theme.textTheme.bodySmall?.copyWith(color: _mutedColor),
             ),
-            trailing: Icon(
-              isDirectory ? Icons.chevron_right_rounded : Icons.edit_outlined,
-              color: _mutedColor,
-            ),
+            trailing:
+                isDirectory
+                    ? const Icon(Icons.chevron_right_rounded, color: _mutedColor)
+                    : PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: _mutedColor),
+                      color: _panelColor,
+                      onSelected: (value) {
+                        if (value == 'edit') {
+                          _openEntry(entry);
+                        } else if (value == 'download') {
+                          _handleDownload(entry);
+                        }
+                      },
+                      itemBuilder:
+                          (context) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.edit, color: Colors.white),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Edit',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const PopupMenuItem(
+                              value: 'download',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.download_rounded,
+                                    color: Colors.white,
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Download',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                    ),
             onTap:
-                _isLoading || _isDownloadingFile
+                _isLoading || _isDownloadingFile || _isUploadingFile
                     ? null
                     : () => _openEntry(entry),
           );
@@ -501,7 +606,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
         actions: [
           IconButton(
             onPressed:
-                _isLoading || _isDownloadingFile
+                _isLoading || _isDownloadingFile || _isUploadingFile
                     ? null
                     : () => _loadDirectory(_currentPath),
             icon: const Icon(Icons.refresh_rounded),
@@ -560,7 +665,16 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           ),
           if (_isLoading) _buildLoadingOverlay('Loading directory...'),
           if (_isDownloadingFile) _buildLoadingOverlay('Downloading file...'),
+          if (_isUploadingFile) _buildLoadingOverlay('Uploading file...'),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed:
+            _isLoading || _isDownloadingFile || _isUploadingFile
+                ? null
+                : _handleUpload,
+        backgroundColor: _primaryColor,
+        child: const Icon(Icons.upload_file_rounded, color: Colors.white),
       ),
     );
   }

@@ -5,6 +5,8 @@ import 'core/ai/ai_provider.dart';
 import 'core/background/background_keepalive.dart';
 import 'core/storage/api_key_storage.dart';
 import 'core/storage/app_lock_storage.dart';
+import 'core/storage/app_prefs_storage.dart';
+import 'features/onboarding/onboarding_screen.dart';
 import 'features/security/app_lock_screen.dart';
 import 'features/servers/server_list_screen.dart';
 
@@ -14,12 +16,15 @@ Future<void> main() async {
 
   const apiKeyStorage = ApiKeyStorage();
   const appLockStorage = AppLockStorage();
+  const appPrefsStorage = AppPrefsStorage();
+
   var savedSettings = const AiSettings(
     provider: AiProvider.openAi,
     openRouterModel: null,
   );
   String? aiSettingsStartupWarning;
   var hasAppPin = false;
+  var isOnboardingComplete = false;
 
   try {
     savedSettings = await apiKeyStorage.loadSettings();
@@ -34,6 +39,12 @@ Future<void> main() async {
     hasAppPin = false;
   }
 
+  try {
+    isOnboardingComplete = await appPrefsStorage.isOnboardingComplete();
+  } catch (_) {
+    isOnboardingComplete = false;
+  }
+
   await SentryFlutter.init(
     (options) {
       options.dsn =
@@ -45,8 +56,10 @@ Future<void> main() async {
         AiServerApp(
           apiKeyStorage: apiKeyStorage,
           appLockStorage: appLockStorage,
+          appPrefsStorage: appPrefsStorage,
           initialSettings: savedSettings,
           initialHasAppPin: hasAppPin,
+          initialIsOnboardingComplete: isOnboardingComplete,
           initialAiSettingsLoadError: aiSettingsStartupWarning,
         ),
       );
@@ -59,15 +72,19 @@ class AiServerApp extends StatefulWidget {
     super.key,
     required this.apiKeyStorage,
     required this.appLockStorage,
+    required this.appPrefsStorage,
     required this.initialSettings,
     required this.initialHasAppPin,
+    required this.initialIsOnboardingComplete,
     this.initialAiSettingsLoadError,
   });
 
   final ApiKeyStorage apiKeyStorage;
   final AppLockStorage appLockStorage;
+  final AppPrefsStorage appPrefsStorage;
   final AiSettings initialSettings;
   final bool initialHasAppPin;
+  final bool initialIsOnboardingComplete;
   final String? initialAiSettingsLoadError;
 
   @override
@@ -83,6 +100,7 @@ class _AiServerAppState extends State<AiServerApp> {
   late AiProvider _aiProvider;
   late String _apiKey;
   late String? _openRouterModel;
+  late bool _isOnboardingComplete;
 
   @override
   void initState() {
@@ -90,6 +108,7 @@ class _AiServerAppState extends State<AiServerApp> {
     _aiProvider = widget.initialSettings.provider;
     _apiKey = widget.initialSettings.apiKey;
     _openRouterModel = widget.initialSettings.openRouterModel;
+    _isOnboardingComplete = widget.initialIsOnboardingComplete;
   }
 
   Future<void> _saveAiSettings(
@@ -123,6 +142,7 @@ class _AiServerAppState extends State<AiServerApp> {
       surface: _surface,
       onSurface: Color(0xFFF8FAFC),
     );
+
     final serverListScreen = ServerListScreen(
       aiProvider: _aiProvider,
       apiKey: _apiKey,
@@ -130,6 +150,24 @@ class _AiServerAppState extends State<AiServerApp> {
       onSaveAiSettings: _saveAiSettings,
       startupWarning: widget.initialAiSettingsLoadError,
     );
+
+    final initialScreen =
+        _isOnboardingComplete
+            ? (widget.initialHasAppPin
+                ? AppLockScreen(
+                  mode: AppLockMode.verify,
+                  appLockStorage: widget.appLockStorage,
+                  nextScreen: serverListScreen,
+                )
+                : serverListScreen)
+            : OnboardingScreen(
+              appPrefsStorage: widget.appPrefsStorage,
+              onComplete: () {
+                setState(() {
+                  _isOnboardingComplete = true;
+                });
+              },
+            );
 
     return MaterialApp(
       title: 'AI Server V2',
@@ -210,14 +248,7 @@ class _AiServerAppState extends State<AiServerApp> {
           bodySmall: TextStyle(color: _textMuted),
         ),
       ),
-      home:
-          widget.initialHasAppPin
-              ? AppLockScreen(
-                mode: AppLockMode.verify,
-                appLockStorage: widget.appLockStorage,
-                nextScreen: serverListScreen,
-              )
-              : serverListScreen,
+      home: initialScreen,
     );
   }
 }

@@ -40,6 +40,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
   static const _panelColor = Color(0xFF162033);
   static const _mutedColor = Color(0xFF94A3B8);
   static const _shadowColor = Color(0x22000000);
+  static const _ctrlActiveColor = Color(0xFF3B82F6);
+  static const _altActiveColor = Color(0xFFF59E0B);
   static final RegExp _ansiEscapePattern = RegExp(
     r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])',
   );
@@ -56,6 +58,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   SSHSession? _session;
   StreamSubscription<String>? _stdoutSubscription;
   StreamSubscription<String>? _stderrSubscription;
+  StreamSubscription<bool>? _connectionSubscription;
   String _status = 'Opening shell...';
   String _recentTerminalOutput = '';
   String _currentInputBuffer = '';
@@ -63,6 +66,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   String? _lastVisibleError;
   bool _ctrlEnabled = false;
   bool _altEnabled = false;
+  bool _isReconnecting = false;
 
   @override
   void initState() {
@@ -74,6 +78,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _terminal.onOutput = _handleTerminalInput;
     _terminal.onResize = _handleTerminalResize;
 
+    _connectionSubscription = widget.sshService.connectionState.listen((
+      connected,
+    ) {
+      if (!connected && _session != null) {
+        setState(() {
+          _status = 'Connection lost';
+        });
+      }
+    });
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _openShell();
     });
@@ -83,6 +97,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void dispose() {
     _stdoutSubscription?.cancel();
     _stderrSubscription?.cancel();
+    _connectionSubscription?.cancel();
     _session?.close();
     super.dispose();
   }
@@ -121,7 +136,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
       setState(() {
         _session = session;
         _status = 'Interactive shell connected';
+        _isReconnecting = false;
       });
+
+      _handleTerminalResize(_terminal.viewWidth, _terminal.viewHeight, 0, 0);
     } catch (error) {
       if (!mounted) {
         return;
@@ -132,6 +150,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
         _status = 'Failed to open shell';
         _ctrlEnabled = false;
         _altEnabled = false;
+        _isReconnecting = false;
       });
       _handleTerminalChunk(
         'Failed to open shell.\r\n$error\r\n',
@@ -140,11 +159,39 @@ class _TerminalScreenState extends State<TerminalScreen> {
     }
   }
 
-  void _handleTerminalInput(String data) {
-    _dispatchInput(data, trackInput: true);
+  Future<void> _handleReconnect() async {
+    if (_isReconnecting) {
+      return;
+    }
+
+    setState(() {
+      _isReconnecting = true;
+      _status = 'Reconnecting...';
+    });
+
+    try {
+      if (!widget.sshService.isConnected) {
+        await widget.sshService.reconnect();
+      }
+      await _openShell();
+    } catch (e) {
+      setState(() {
+        _isReconnecting = false;
+        _status = 'Reconnection failed';
+      });
+      _handleTerminalChunk('Reconnection failed: $e\r\n', isError: true);
+    }
   }
 
-  void _dispatchInput(String data, {required bool trackInput}) {
+  void _handleTerminalInput(String data) {
+    _dispatchInput(data, trackInput: true, applyPendingModifiers: true);
+  }
+
+  void _dispatchInput(
+    String data, {
+    required bool trackInput,
+    required bool applyPendingModifiers,
+  }) {
     final session = _session;
     if (session == null || data.isEmpty) {
       return;
@@ -155,7 +202,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       _trackUserInput(data);
     }
 
-    final payload = _applyPendingModifiers(data);
+    final payload = applyPendingModifiers ? _applyPendingModifiers(data) : data;
     session.write(Uint8List.fromList(utf8.encode(payload)));
   }
 
@@ -164,7 +211,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
       return data;
     }
 
-    var payload = data;
+    final firstRune = data.runes.first;
+    final firstCharacter = String.fromCharCode(firstRune);
+    final remainingCharacters = data.substring(firstCharacter.length);
+    var payload = firstCharacter;
 
     if (_ctrlEnabled) {
       final ctrlPayload = _applyCtrlModifier(payload);
@@ -184,7 +234,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       });
     }
 
-    return payload;
+    return '$payload$remainingCharacters';
   }
 
   String? _applyCtrlModifier(String data) {
@@ -192,23 +242,23 @@ class _TerminalScreenState extends State<TerminalScreen> {
       return null;
     }
 
-    final char = data.codeUnitAt(0);
-    final symbol = data;
+    final charCode = data.toLowerCase().codeUnitAt(0);
 
-    if ((char >= 65 && char <= 90) || (char >= 97 && char <= 122)) {
-      return String.fromCharCode(char & 0x1f);
+    if (charCode >= 97 && charCode <= 122) {
+      return String.fromCharCode(charCode - 96);
     }
 
-    switch (symbol) {
+    switch (data) {
       case '@':
         return String.fromCharCode(0);
       case '[':
         return String.fromCharCode(27);
-      case r'\':
+      case '\\':
         return String.fromCharCode(28);
       case ']':
         return String.fromCharCode(29);
       case '^':
+      case '~':
         return String.fromCharCode(30);
       case '/':
       case '-':
@@ -224,23 +274,21 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void _toggleCtrl() {
     setState(() {
       _ctrlEnabled = !_ctrlEnabled;
-      if (_ctrlEnabled) {
-        _altEnabled = false;
-      }
     });
   }
 
   void _toggleAlt() {
     setState(() {
       _altEnabled = !_altEnabled;
-      if (_altEnabled) {
-        _ctrlEnabled = false;
-      }
     });
   }
 
-  void _sendToolbarInput(String data, {bool trackInput = false}) {
-    _dispatchInput(data, trackInput: trackInput);
+  void _sendToolbarCharacter(String data) {
+    _dispatchInput(data, trackInput: true, applyPendingModifiers: true);
+  }
+
+  void _sendToolbarControl(String data) {
+    _dispatchInput(data, trackInput: false, applyPendingModifiers: false);
   }
 
   void _handleStdoutChunk(String data) {
@@ -432,13 +480,14 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _session?.resizeTerminal(width, height, pixelWidth, pixelHeight);
   }
 
-  Future<void> _sendCommandToShell(String command) async {
+  Future<void> _sendCommandToShell(String command, {bool addNewline = true}) async {
     final session = _session;
     if (session == null) {
-      throw StateError('Terminal shell is not connected.');
+      return;
     }
 
-    session.write(Uint8List.fromList(utf8.encode('$command\n')));
+    final payload = addNewline ? '$command\n' : command;
+    session.write(Uint8List.fromList(utf8.encode(payload)));
   }
 
   Future<String?> _runCopilotCommand(String command) async {
@@ -500,57 +549,63 @@ class _TerminalScreenState extends State<TerminalScreen> {
   List<_TerminalToolbarKey> _toolbarKeys() {
     return [
       _TerminalToolbarKey(
-        label: 'Esc',
-        onPressed: () => _sendToolbarInput('\x1b'),
+        label: 'ESC',
+        onPressed: () => _sendToolbarControl('\x1b'),
       ),
       _TerminalToolbarKey(
-        label: 'Tab',
-        onPressed: () => _sendToolbarInput('\t'),
-      ),
-      _TerminalToolbarKey(
-        label: 'Ctrl',
-        isToggle: true,
+        label: 'CTRL',
         isActive: _ctrlEnabled,
+        activeColor: _ctrlActiveColor,
         onPressed: _toggleCtrl,
       ),
       _TerminalToolbarKey(
-        label: 'Alt',
-        isToggle: true,
+        label: 'ALT',
         isActive: _altEnabled,
+        activeColor: _altActiveColor,
         onPressed: _toggleAlt,
       ),
       _TerminalToolbarKey(
-        label: '/',
-        onPressed: () => _sendToolbarInput('/', trackInput: true),
+        label: 'TAB',
+        onPressed: () => _sendToolbarControl('\t'),
+      ),
+      _TerminalToolbarKey(
+        label: '↑',
+        semanticLabel: 'Up',
+        onPressed: () => _sendToolbarControl('\x1b[A'),
+      ),
+      _TerminalToolbarKey(
+        label: '↓',
+        semanticLabel: 'Down',
+        onPressed: () => _sendToolbarControl('\x1b[B'),
+      ),
+      _TerminalToolbarKey(
+        label: '←',
+        semanticLabel: 'Left',
+        onPressed: () => _sendToolbarControl('\x1b[D'),
+      ),
+      _TerminalToolbarKey(
+        label: '→',
+        semanticLabel: 'Right',
+        onPressed: () => _sendToolbarControl('\x1b[C'),
       ),
       _TerminalToolbarKey(
         label: '-',
-        onPressed: () => _sendToolbarInput('-', trackInput: true),
+        onPressed: () => _sendToolbarCharacter('-'),
       ),
       _TerminalToolbarKey(
-        icon: Icons.keyboard_arrow_up_rounded,
-        semanticLabel: 'Up',
-        onPressed: () => _sendToolbarInput('\x1b[A'),
+        label: '/',
+        onPressed: () => _sendToolbarCharacter('/'),
       ),
       _TerminalToolbarKey(
-        icon: Icons.keyboard_arrow_down_rounded,
-        semanticLabel: 'Down',
-        onPressed: () => _sendToolbarInput('\x1b[B'),
-      ),
-      _TerminalToolbarKey(
-        icon: Icons.keyboard_arrow_left_rounded,
-        semanticLabel: 'Left',
-        onPressed: () => _sendToolbarInput('\x1b[D'),
-      ),
-      _TerminalToolbarKey(
-        icon: Icons.keyboard_arrow_right_rounded,
-        semanticLabel: 'Right',
-        onPressed: () => _sendToolbarInput('\x1b[C'),
+        label: '|',
+        onPressed: () => _sendToolbarCharacter('|'),
       ),
     ];
   }
 
   Widget _buildStatusHeader(ThemeData theme) {
+    final isConnected = _session != null;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 10),
       padding: const EdgeInsets.all(14),
@@ -567,7 +622,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
             width: 10,
             height: 10,
             decoration: BoxDecoration(
-              color: _session != null ? const Color(0xFF22C55E) : _mutedColor,
+              color: isConnected ? const Color(0xFF22C55E) : _mutedColor,
               shape: BoxShape.circle,
             ),
           ),
@@ -581,7 +636,73 @@ class _TerminalScreenState extends State<TerminalScreen> {
               ),
             ),
           ),
+          if (!isConnected && !_isReconnecting)
+            TextButton.icon(
+              onPressed: _handleReconnect,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Reconnect'),
+              style: TextButton.styleFrom(
+                foregroundColor: _ctrlActiveColor,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSnippetBar() {
+    final snippets = [
+      'sudo ',
+      '| grep ',
+      ' -la',
+      'tail -f ',
+      'mkdir ',
+      'rm -rf ',
+      'cd ',
+    ];
+
+    return Container(
+      height: 48,
+      decoration: const BoxDecoration(
+        color: _panelColor,
+        border: Border(top: BorderSide(color: Color(0xFF1E293B))),
+      ),
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        scrollDirection: Axis.horizontal,
+        itemCount: snippets.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final snippet = snippets[index];
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => _sendCommandToShell(snippet, addNewline: false),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: _surfaceColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: Center(
+                  child: Text(
+                    snippet,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -591,34 +712,41 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
     return SafeArea(
       top: false,
-      child: Container(
-        height: 72,
-        decoration: const BoxDecoration(
-          color: _surfaceColor,
-          boxShadow: [
-            BoxShadow(
-              color: _shadowColor,
-              blurRadius: 18,
-              offset: Offset(0, -6),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildSnippetBar(),
+          Container(
+            height: 78,
+            decoration: const BoxDecoration(
+              color: _panelColor,
+              border: Border(top: BorderSide(color: Color(0xFF243247))),
+              boxShadow: [
+                BoxShadow(
+                  color: _shadowColor,
+                  blurRadius: 18,
+                  offset: Offset(0, -6),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          scrollDirection: Axis.horizontal,
-          itemCount: keys.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 10),
-          itemBuilder: (context, index) {
-            final key = keys[index];
-            return _TerminalToolbarButton(
-              label: key.label,
-              icon: key.icon,
-              semanticLabel: key.semanticLabel,
-              isActive: key.isActive,
-              onPressed: key.onPressed,
-            );
-          },
-        ),
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              scrollDirection: Axis.horizontal,
+              itemCount: keys.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final key = keys[index];
+                return _TerminalToolbarButton(
+                  label: key.label,
+                  semanticLabel: key.semanticLabel,
+                  isActive: key.isActive,
+                  activeColor: key.activeColor,
+                  onPressed: key.onPressed,
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -645,32 +773,58 @@ class _TerminalScreenState extends State<TerminalScreen> {
           ),
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: Stack(
         children: [
-          _buildStatusHeader(theme),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: ColoredBox(
-                  color: _backgroundColor,
-                  child: SafeArea(
-                    top: false,
-                    bottom: false,
-                    child: TerminalView(
-                      _terminal,
-                      autofocus: true,
-                      backgroundOpacity: 1,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildStatusHeader(theme),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: ColoredBox(
+                      color: _backgroundColor,
+                      child: SafeArea(
+                        top: false,
+                        bottom: false,
+                        child: TerminalView(
+                          _terminal,
+                          autofocus: true,
+                          backgroundOpacity: 1,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: 12),
+              _buildToolbar(),
+            ],
           ),
-          const SizedBox(height: 12),
-          _buildToolbar(),
+          if (_isReconnecting || (!widget.sshService.isConnected && _session != null))
+            Positioned.fill(
+              child: Container(
+                color: _backgroundColor.withValues(alpha: 0.7),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(color: _ctrlActiveColor),
+                      const SizedBox(height: 16),
+                      Text(
+                        _isReconnecting ? 'Reconnecting...' : 'Connection Lost',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -684,38 +838,39 @@ class _TerminalScreenState extends State<TerminalScreen> {
 class _TerminalToolbarKey {
   const _TerminalToolbarKey({
     this.label,
-    this.icon,
     this.semanticLabel,
-    this.isToggle = false,
     this.isActive = false,
+    this.activeColor,
     required this.onPressed,
   });
 
   final String? label;
-  final IconData? icon;
   final String? semanticLabel;
-  final bool isToggle;
   final bool isActive;
+  final Color? activeColor;
   final VoidCallback onPressed;
 }
 
 class _TerminalToolbarButton extends StatelessWidget {
   const _TerminalToolbarButton({
     required this.label,
-    required this.icon,
     required this.semanticLabel,
     required this.isActive,
+    required this.activeColor,
     required this.onPressed,
   });
 
   final String? label;
-  final IconData? icon;
   final String? semanticLabel;
   final bool isActive;
+  final Color? activeColor;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
+    final resolvedActiveColor =
+        activeColor ?? _TerminalScreenState._ctrlActiveColor;
+
     return Semantics(
       button: true,
       label: semanticLabel ?? label,
@@ -723,36 +878,35 @@ class _TerminalToolbarButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           child: Ink(
-            width: 56,
+            width: 52,
             decoration: BoxDecoration(
               color:
                   isActive
-                      ? const Color(0xFF3B82F6).withValues(alpha: 0.18)
-                      : _TerminalScreenState._panelColor,
-              borderRadius: BorderRadius.circular(10),
+                      ? resolvedActiveColor.withValues(alpha: 0.18)
+                      : _TerminalScreenState._surfaceColor,
+              border: Border.all(
+                color:
+                    isActive
+                        ? resolvedActiveColor.withValues(alpha: 0.4)
+                        : const Color(0xFF334155),
+              ),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
-              child:
-                  icon != null
-                      ? Icon(
-                        icon,
-                        color:
-                            isActive
-                                ? const Color(0xFF3B82F6)
-                                : _TerminalScreenState._mutedColor,
-                      )
-                      : Text(
-                        label!,
-                        style: TextStyle(
-                          color:
-                              isActive
-                                  ? const Color(0xFF3B82F6)
-                                  : _TerminalScreenState._mutedColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+              child: Text(
+                label!,
+                style: TextStyle(
+                  color:
+                      isActive
+                          ? resolvedActiveColor
+                          : _TerminalScreenState._mutedColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  letterSpacing: 0.2,
+                ),
+              ),
             ),
           ),
         ),

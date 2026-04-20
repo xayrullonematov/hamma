@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/models/server_profile.dart';
@@ -30,10 +31,94 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
   List<ServerProfile> _servers = const [];
   Map<String, ServerMetrics> _metricsByServerId = const {};
 
+  bool _isExecutingBulkCommand = false;
+  Map<String, String> _bulkCommandResults = {};
+
   @override
   void initState() {
     super.initState();
     _loadFleet();
+  }
+
+  void _showBulkActionDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _surfaceColor,
+        title: const Text('Bulk Command', style: TextStyle(color: Colors.white)),
+        content: TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white),
+          decoration: const InputDecoration(
+            hintText: 'Enter command (e.g. uptime)',
+            hintStyle: TextStyle(color: _mutedColor),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: _mutedColor)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final cmd = controller.text.trim();
+              if (cmd.isNotEmpty) {
+                Navigator.pop(context);
+                _executeBulkAction(cmd);
+              }
+            },
+            child: const Text('Execute'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeBulkAction(String command) {
+    if (_servers.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isExecutingBulkCommand = true;
+      _bulkCommandResults = {for (var s in _servers) s.id: 'Executing...'};
+    });
+
+    _showBulkResultsSheet(command);
+
+    _fleetService.executeBulkCommand(
+      _servers,
+      command,
+      onServerResult: (serverId, result) {
+        if (mounted) {
+          setState(() {
+            _bulkCommandResults[serverId] = result;
+          });
+        }
+      },
+    ).then((_) {
+      if (mounted) {
+        setState(() {
+          _isExecutingBulkCommand = false;
+        });
+      }
+    });
+  }
+
+  void _showBulkResultsSheet(String command) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _BulkResultsOverlay(
+        command: command,
+        servers: _servers,
+        resultsProvider: () => _bulkCommandResults,
+        isExecutingProvider: () => _isExecutingBulkCommand,
+      ),
+    );
   }
 
   Future<void> _loadFleet({bool manualRefresh = false}) async {
@@ -305,9 +390,195 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
               : _servers.isEmpty
               ? _buildEmptyState()
               : _buildGrid(theme),
+      floatingActionButton:
+          _servers.isEmpty
+              ? null
+              : FloatingActionButton(
+                onPressed: _showBulkActionDialog,
+                backgroundColor: _primaryColor,
+                child: const Icon(Icons.bolt, color: Colors.white),
+              ),
     );
   }
 }
+
+class _BulkResultsOverlay extends StatefulWidget {
+  const _BulkResultsOverlay({
+    required this.command,
+    required this.servers,
+    required this.resultsProvider,
+    required this.isExecutingProvider,
+  });
+
+  final String command;
+  final List<ServerProfile> servers;
+  final Map<String, String> Function() resultsProvider;
+  final bool Function() isExecutingProvider;
+
+  @override
+  State<_BulkResultsOverlay> createState() => _BulkResultsOverlayState();
+}
+
+class _BulkResultsOverlayState extends State<_BulkResultsOverlay> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+      if (!widget.isExecutingProvider()) {
+        _timer?.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final results = widget.resultsProvider();
+    final isExecuting = widget.isExecutingProvider();
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFF1E293B),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                children: [
+                  const Icon(Icons.bolt, color: Color(0xFF3B82F6)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Bulk Command Results',
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          widget.command,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFF94A3B8),
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isExecuting)
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.separated(
+                controller: scrollController,
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                itemCount: widget.servers.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 16),
+                itemBuilder: (context, index) {
+                  final server = widget.servers[index];
+                  final result = results[server.id] ?? 'Pending...';
+                  final isError = result.startsWith('Error:');
+                  final isPending =
+                      result == 'Executing...' || result == 'Pending...';
+
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color:
+                            isError
+                                ? const Color(0xFFEF4444).withValues(alpha: 0.3)
+                                : isPending
+                                ? Colors.transparent
+                                : const Color(0xFF22C55E).withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              server.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Spacer(),
+                            if (!isPending)
+                              Icon(
+                                isError
+                                    ? Icons.error_outline
+                                    : Icons.check_circle_outline,
+                                size: 16,
+                                color:
+                                    isError
+                                        ? const Color(0xFFEF4444)
+                                        : const Color(0xFF22C55E),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          result,
+                          style: TextStyle(
+                            color:
+                                isPending ? const Color(0xFF94A3B8) : Colors.white,
+                            fontSize: 13,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 class _FleetMetricsCard extends StatelessWidget {
   const _FleetMetricsCard({

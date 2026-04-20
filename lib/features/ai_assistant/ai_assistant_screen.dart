@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../core/ai/ai_command_service.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/storage/chat_history_storage.dart';
 
 class AiAssistantScreen extends StatefulWidget {
   const AiAssistantScreen({
@@ -11,11 +14,13 @@ class AiAssistantScreen extends StatefulWidget {
     required this.sshService,
     required this.provider,
     required this.apiKey,
+    required this.serverId,
   });
 
   final SshService sshService;
   final AiProvider provider;
   final String apiKey;
+  final String serverId;
 
   @override
   State<AiAssistantScreen> createState() => _AiAssistantScreenState();
@@ -23,6 +28,7 @@ class AiAssistantScreen extends StatefulWidget {
 
 class _AiAssistantScreenState extends State<AiAssistantScreen> {
   late AiCommandService _aiCommandService;
+  final ChatHistoryStorage _storage = const ChatHistoryStorage();
   final CommandRiskAssessor _riskAssessor = const CommandRiskAssessor();
   final TextEditingController _promptController = TextEditingController();
 
@@ -57,6 +63,61 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       provider: widget.provider,
       apiKey: widget.apiKey,
     );
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    try {
+      final saved = await _storage.loadHistory(serverId: widget.serverId);
+      if (!mounted) {
+        return;
+      }
+
+      final loadedEntries = <_ExecutionHistoryEntry>[];
+      for (final item in saved) {
+        try {
+          final data = jsonDecode(item['content'] ?? '');
+          loadedEntries.add(_ExecutionHistoryEntry(
+            command: data['command'] ?? '',
+            output: data['output'] ?? '',
+            executedAt: DateTime.parse(data['executedAt']),
+            succeeded: data['succeeded'] ?? false,
+          ));
+        } catch (_) {
+          continue;
+        }
+      }
+
+      setState(() {
+        _history.clear();
+        _history.addAll(loadedEntries);
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _saveHistory() async {
+    final messages = _history.map((entry) {
+      return {
+        'role': 'history',
+        'content': jsonEncode({
+          'command': entry.command,
+          'output': entry.output,
+          'executedAt': entry.executedAt.toIso8601String(),
+          'succeeded': entry.succeeded,
+        }),
+      };
+    }).toList();
+
+    await _storage.saveHistory(serverId: widget.serverId, messages: messages);
+  }
+
+  Future<void> _clearHistory() async {
+    await _storage.clearHistory(serverId: widget.serverId);
+    if (mounted) {
+      setState(() {
+        _history.clear();
+      });
+    }
   }
 
   @override
@@ -68,6 +129,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         provider: widget.provider,
         apiKey: widget.apiKey,
       );
+    }
+    if (oldWidget.serverId != widget.serverId) {
+      _loadHistory();
     }
   }
 
@@ -297,6 +361,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         _history.removeLast();
       }
     });
+    _saveHistory();
   }
 
   String _formatTimestamp(DateTime time) {
@@ -353,8 +418,12 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI Assistant'),
-        // Fix 4: provider badge in app bar — user always knows which AI is active
         actions: [
+          IconButton(
+            onPressed: _history.isEmpty ? null : _clearHistory,
+            icon: const Icon(Icons.delete_sweep_outlined),
+            tooltip: 'Clear History',
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(

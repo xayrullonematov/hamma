@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_background/flutter_background.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class BackgroundKeepalive {
   BackgroundKeepalive._();
@@ -12,14 +14,21 @@ class BackgroundKeepalive {
       return;
     }
 
-    await FlutterBackground.initialize(
-      androidConfig: const FlutterBackgroundAndroidConfig(
-        notificationTitle: 'Hamma SSH',
-        notificationText: 'SSH session is active in the background',
-        notificationImportance: AndroidNotificationImportance.normal,
-      ),
-    );
-    _initialized = true;
+    // Request notification permissions for Android 13+ compliance
+    await Permission.notification.request();
+
+    try {
+      await FlutterBackground.initialize(
+        androidConfig: const FlutterBackgroundAndroidConfig(
+          notificationTitle: 'Hamma SSH',
+          notificationText: 'SSH session is active in the background',
+          notificationImportance: AndroidNotificationImportance.normal,
+        ),
+      );
+      _initialized = true;
+    } catch (e) {
+      debugPrint('Failed to initialize background keepalive: $e');
+    }
   }
 
   static Future<void> enable() async {
@@ -31,7 +40,11 @@ class BackgroundKeepalive {
       await initialize();
     }
 
-    await FlutterBackground.enableBackgroundExecution();
+    try {
+      await FlutterBackground.enableBackgroundExecution();
+    } catch (error) {
+      debugPrint('Background execution unavailable: $error');
+    }
   }
 
   static Future<void> disable() async {
@@ -39,6 +52,10 @@ class BackgroundKeepalive {
       return;
     }
 
-    await FlutterBackground.disableBackgroundExecution();
+    try {
+      await FlutterBackground.disableBackgroundExecution();
+    } catch (error) {
+      debugPrint('Failed to disable background execution cleanly: $error');
+    }
   }
 }

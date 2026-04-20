@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:pinenacl/ed25519.dart' as ed25519;
+import 'package:pointycastle/export.dart' as pc;
 
 import '../background/background_keepalive.dart';
 import '../storage/trusted_host_key_storage.dart';
@@ -16,8 +19,26 @@ class SshService {
   SSHClient? _client;
   final Map<int, ServerSocket> _activeForwards = {};
   final TrustedHostKeyStorage _trustedHostKeyStorage;
+  final StreamController<bool> _connectionStateController =
+      StreamController<bool>.broadcast();
+  Timer? _heartbeatTimer;
+
+  // Store last connection parameters for reconnection
+  String? _lastHost;
+  int? _lastPort;
+  String? _lastUsername;
+  String? _lastPassword;
+  String? _lastPrivateKey;
+  String? _lastPrivateKeyPassword;
+  Future<bool> Function({
+    required String host,
+    required int port,
+    required String algorithm,
+    required String fingerprint,
+  })? _lastOnTrustHostKey;
 
   bool get isConnected => _client != null;
+  Stream<bool> get connectionState => _connectionStateController.stream;
   List<int> get activeForwardedPorts => _activeForwards.keys.toList();
 
   Future<void> connect({
@@ -37,22 +58,39 @@ class SshService {
   }) async {
     await disconnect();
 
+    _lastHost = host;
+    _lastPort = port;
+    _lastUsername = username;
+    _lastPassword = password;
+    _lastPrivateKey = privateKey;
+    _lastPrivateKeyPassword = privateKeyPassword;
+    _lastOnTrustHostKey = onTrustHostKey;
+
     final trustedHostKey = await _trustedHostKeyStorage.loadTrustedHostKey(
       host: host,
       port: port,
     );
-    final resolvedPrivateKey = privateKey?.trim();
-    final identities =
-        resolvedPrivateKey == null || resolvedPrivateKey.isEmpty
-            ? null
-            : SSHKeyPair.fromPem(resolvedPrivateKey, privateKeyPassword);
 
-    final socket = await SSHSocket.connect(host, port);
+    List<SSHKeyPair>? identities;
+    if (privateKey != null && privateKey.isNotEmpty) {
+      try {
+        identities = SSHKeyPair.fromPem(privateKey, privateKeyPassword);
+      } catch (e) {
+        throw Exception('Invalid SSH private key or passphrase: $e');
+      }
+    }
+
+    final socket = await SSHSocket.connect(
+      host,
+      port,
+      timeout: const Duration(seconds: 15),
+    );
+
     final client = SSHClient(
       socket,
       username: username,
       identities: identities,
-      onPasswordRequest: () => password,
+      onPasswordRequest: () => password.isNotEmpty ? password : null,
       onVerifyHostKey: (algorithm, fingerprintBytes) async {
         final fingerprint = _formatFingerprint(fingerprintBytes);
 
@@ -118,6 +156,45 @@ class SshService {
       rethrow;
     }
     _client = client;
+    _startHeartbeat();
+    _connectionStateController.add(true);
+  }
+
+  Future<void> reconnect() async {
+    if (_lastHost == null) {
+      throw StateError('No previous connection to reconnect to.');
+    }
+
+    await connect(
+      host: _lastHost!,
+      port: _lastPort!,
+      username: _lastUsername!,
+      password: _lastPassword!,
+      privateKey: _lastPrivateKey,
+      privateKeyPassword: _lastPrivateKeyPassword,
+      onTrustHostKey: _lastOnTrustHostKey,
+    );
+  }
+
+  void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_client != null) {
+        try {
+          _client!.ping();
+        } catch (_) {
+          _handleDisconnect();
+        }
+      }
+    });
+  }
+
+  void _handleDisconnect() {
+    if (_client != null) {
+      _client = null;
+      _heartbeatTimer?.cancel();
+      _connectionStateController.add(false);
+    }
   }
 
   Future<String> execute(String command) async {
@@ -131,6 +208,24 @@ class SshService {
       return utf8.decode(output);
     } catch (error) {
       if (_looksLikeDisconnect(error)) {
+        _handleDisconnect();
+        await disconnect();
+      }
+      rethrow;
+    }
+  }
+
+  Future<SSHSession> streamCommand(String command) async {
+    final client = _client;
+    if (client == null) {
+      throw StateError('SSH client is not connected.');
+    }
+
+    try {
+      return await client.execute(command);
+    } catch (error) {
+      if (_looksLikeDisconnect(error)) {
+        _handleDisconnect();
         await disconnect();
       }
       rethrow;
@@ -149,6 +244,7 @@ class SshService {
       );
     } catch (error) {
       if (_looksLikeDisconnect(error)) {
+        _handleDisconnect();
         await disconnect();
       }
       rethrow;
@@ -206,6 +302,7 @@ class SshService {
   }
 
   Future<void> disconnect() async {
+    _heartbeatTimer?.cancel();
     final forwardedSockets = _activeForwards.values.toList();
     _activeForwards.clear();
     for (final serverSocket in forwardedSockets) {
@@ -217,7 +314,104 @@ class SshService {
     }
     _client?.close();
     _client = null;
+    _connectionStateController.add(false);
     await BackgroundKeepalive.disable();
+  }
+
+  static String extractPublicKey(String privateKeyPem, [String? passphrase]) {
+    try {
+      final keyPairs = SSHKeyPair.fromPem(privateKeyPem, passphrase);
+      if (keyPairs.isEmpty) {
+        throw Exception('No key pairs found in the provided PEM.');
+      }
+      return _formatAuthorizedKey(keyPairs.first.toPublicKey());
+    } catch (e) {
+      throw Exception('Failed to extract public key: $e');
+    }
+  }
+
+  static ({String privateKey, String publicKey}) generateEd25519() {
+    try {
+      final keyPair = ed25519.SigningKey.generate();
+      final privateKeyBytes = keyPair.asTypedList;
+      final publicKeyBytes = keyPair.publicKey.asTypedList;
+
+      final sshKeyPair = OpenSSHEd25519KeyPair(
+        publicKeyBytes,
+        privateKeyBytes,
+        'hamma-generated-key',
+      );
+
+      return (
+        privateKey: sshKeyPair.toPem(),
+        publicKey: _formatAuthorizedKey(sshKeyPair.toPublicKey()),
+      );
+    } catch (e) {
+      throw Exception('Failed to generate Ed25519 key: $e');
+    }
+  }
+
+  static ({String privateKey, String publicKey}) generateRsa([
+    int bitrate = 4096,
+  ]) {
+    try {
+      final keyGen = pc.RSAKeyGenerator()
+        ..init(
+          pc.ParametersWithRandom(
+            pc.RSAKeyGeneratorParameters(BigInt.parse('65537'), bitrate, 64),
+            _getSecureRandom(),
+          ),
+        );
+
+      final pair = keyGen.generateKeyPair();
+      final myPublic = pair.publicKey as pc.RSAPublicKey;
+      final myPrivate = pair.privateKey as pc.RSAPrivateKey;
+
+      final rsaPrivateKey = RsaPrivateKey(
+        BigInt.zero, // version
+        myPublic.n!,
+        myPublic.publicExponent!,
+        myPrivate.privateExponent!,
+        myPrivate.p!,
+        myPrivate.q!,
+        myPrivate.privateExponent! % (myPrivate.p! - BigInt.one), // exp1
+        myPrivate.privateExponent! % (myPrivate.q! - BigInt.one), // exp2
+        myPrivate.q!.modInverse(myPrivate.p!), // coef
+      );
+
+      return (
+        privateKey: rsaPrivateKey.toPem(),
+        publicKey: _formatAuthorizedKey(rsaPrivateKey.toPublicKey()),
+      );
+    } catch (e) {
+      throw Exception('Failed to generate RSA key: $e');
+    }
+  }
+
+  static String _formatAuthorizedKey(dynamic public) {
+    final encoded = public.encode() as Uint8List;
+    final base64Encoded = base64.encode(encoded);
+
+    // Extract type string (length-prefixed UTF-8)
+    final length =
+        (encoded[0] << 24) |
+        (encoded[1] << 16) |
+        (encoded[2] << 8) |
+        encoded[3];
+    final type = utf8.decode(encoded.sublist(4, 4 + length));
+
+    return '$type $base64Encoded';
+  }
+
+  static pc.SecureRandom _getSecureRandom() {
+    final secureRandom = pc.FortunaRandom();
+    final seed = Uint8List(32);
+    final random = Random.secure();
+    for (var i = 0; i < seed.length; i++) {
+      seed[i] = random.nextInt(256);
+    }
+    secureRandom.seed(pc.KeyParameter(seed));
+    return secureRandom;
   }
 
   Future<void> _handleForwardedConnection({
@@ -275,6 +469,9 @@ class SshService {
   }
 
   String _formatFingerprint(Uint8List bytes) {
+    if (bytes.length == 32) {
+      return 'SHA256:${base64.encode(bytes).replaceAll('=', '')}';
+    }
     return bytes
         .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
         .join(':');

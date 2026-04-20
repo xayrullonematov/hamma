@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -165,6 +166,29 @@ class SftpService {
     }
   }
 
+  Future<void> downloadFile(String remotePath, String localPath) async {
+    final file = await client.open(remotePath, mode: SftpFileOpenMode.read);
+    try {
+      final bytes = await file.readBytes();
+      await File(localPath).writeAsBytes(bytes);
+    } finally {
+      await file.close();
+    }
+  }
+
+  Future<void> uploadFile(String localPath, String remotePath) async {
+    final bytes = await File(localPath).readAsBytes();
+    final file = await client.open(
+      remotePath,
+      mode: SftpFileOpenMode.create | SftpFileOpenMode.write,
+    );
+    try {
+      await file.writeBytes(bytes);
+    } finally {
+      await file.close();
+    }
+  }
+
   Future<void> writeFileWithSudoFallback(
     String path,
     String content, {
@@ -238,14 +262,14 @@ class SftpService {
     return error.toString().toLowerCase().contains('permission denied');
   }
 
-  String _shellQuote(String value) {
-    return value.replaceAll("'", r"'\''");
-  }
-
   String _formatFingerprint(Uint8List bytes) {
     return bytes
         .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
         .join(':');
+  }
+
+  String _shellQuote(String value) {
+    return value.replaceAll("'", r"'\''");
   }
 }
 

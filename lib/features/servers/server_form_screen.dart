@@ -4,8 +4,10 @@ import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/models/server_profile.dart';
+import '../../core/ssh/ssh_service.dart';
 
 enum AuthMethod { password, sshKey }
 
@@ -77,7 +79,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
     }
 
     final port = int.parse(_portController.text.trim());
-    final privateKey = _privateKeyController.text.trim();
+    final privateKey = _privateKeyController.text;
     final privateKeyPassword = _privateKeyPasswordController.text.trim();
     final isPasswordAuth = _authMethod == AuthMethod.password;
     final profile = ServerProfile(
@@ -134,6 +136,108 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
       );
     } catch (error) {
       _showSnackBar('Could not import private key: $error');
+    }
+  }
+
+  Future<void> _showKeyGenerator() async {
+    final type = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Generate SSH Key Pair'),
+        content: const Text(
+          'Choose the type of key to generate. Ed25519 is modern and secure. RSA is widely supported.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'RSA'),
+            child: const Text('RSA (4096-bit)'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'ED25519'),
+            child: const Text('Ed25519'),
+          ),
+        ],
+      ),
+    );
+
+    if (type == null) return;
+
+    try {
+      final ({String privateKey, String publicKey}) result;
+      if (type == 'RSA') {
+        result = SshService.generateRsa();
+      } else {
+        result = SshService.generateEd25519();
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _privateKeyController.text = result.privateKey;
+      });
+
+      _showPublicKeyDialog(result.publicKey);
+    } catch (e) {
+      _showSnackBar('Key generation failed: $e');
+    }
+  }
+
+  void _showPublicKeyDialog(String publicKey) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Key Pair Generated'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Your private key has been filled in. Copy the public key below to your server\'s ~/.ssh/authorized_keys file.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: SelectableText(
+                publicKey,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: publicKey));
+              Navigator.pop(context);
+              _showSnackBar('Public key copied to clipboard.');
+            },
+            child: const Text('Copy & Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _copyExistingPublicKey() {
+    final pem = _privateKeyController.text.trim();
+    if (pem.isEmpty) return;
+
+    try {
+      final publicKey = SshService.extractPublicKey(
+        pem,
+        _privateKeyPasswordController.text.trim().isEmpty
+            ? null
+            : _privateKeyPasswordController.text.trim(),
+      );
+      Clipboard.setData(ClipboardData(text: publicKey));
+      _showSnackBar('Public key copied to clipboard.');
+    } catch (e) {
+      _showSnackBar('Could not extract public key. Check passphrase or format.');
     }
   }
 
@@ -269,9 +373,14 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                             ),
                           ),
                           TextButton.icon(
+                            onPressed: _showKeyGenerator,
+                            icon: const Icon(Icons.key, size: 18),
+                            label: const Text('Generate'),
+                          ),
+                          TextButton.icon(
                             onPressed: _importPrivateKey,
-                            icon: const Icon(Icons.file_upload),
-                            label: const Text('Import Key File'),
+                            icon: const Icon(Icons.file_upload, size: 18),
+                            label: const Text('Import'),
                           ),
                         ],
                       ),
@@ -281,6 +390,17 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                         decoration: InputDecoration(
                           hintText: 'Paste or import a PEM private key.',
                           alignLabelWithHint: true,
+                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _privateKeyController,
+                            builder: (context, value, _) {
+                              if (value.text.isEmpty) return const SizedBox();
+                              return IconButton(
+                                icon: const Icon(Icons.copy_all),
+                                tooltip: 'Copy Public Key',
+                                onPressed: _copyExistingPublicKey,
+                              );
+                            },
+                          ),
                           contentPadding: const EdgeInsets.fromLTRB(
                             12,
                             16,
