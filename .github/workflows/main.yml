@@ -32,7 +32,7 @@ jobs:
 
   build_linux:
     runs-on: ubuntu-latest
-    # Gold Standard: Build in 20.04 container to fix GLIBC errors on Mint/older distros
+    # This container ensures the binary is linked against GLIBC 2.31 (Mint 20.3 compatible)
     container:
       image: ubuntu:20.04
     steps:
