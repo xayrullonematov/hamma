@@ -82,29 +82,28 @@ void main() {
 
         // Scrub sensitive data before sending
         options.beforeSend = (SentryEvent event, Hint hint) {
-          final scrubbedEvent = event.copyWith(
-            message:
-                event.message == null
-                    ? null
-                    : SentryMessage(
-                      event.message!.formatted.replaceAll(
-                        RegExp(r'password[:=]\s*\S+'),
-                        'password=[SCRUBBED]',
-                      ),
-                    ),
-          );
-
-          // Remove sensitive keys from contexts/extra if they exist
-          if (scrubbedEvent.extra != null) {
-            scrubbedEvent.extra!.removeWhere(
-              (key, value) =>
-                  key.contains('password') ||
-                  key.contains('key') ||
-                  key.contains('secret'),
+          if (event.message != null) {
+            event.message = SentryMessage(
+              event.message!.formatted.replaceAll(
+                RegExp(r'password[:=]\s*\S+'),
+                'password=[SCRUBBED]',
+              ),
             );
           }
 
-          return scrubbedEvent;
+          // Remove sensitive keys from contexts if they exist
+          for (final context in event.contexts.values) {
+            if (context is Map) {
+              context.removeWhere(
+                (key, value) =>
+                    key.toString().toLowerCase().contains('password') ||
+                    key.toString().toLowerCase().contains('key') ||
+                    key.toString().toLowerCase().contains('secret'),
+              );
+            }
+          }
+
+          return event;
         };
       },
       appRunner: () {

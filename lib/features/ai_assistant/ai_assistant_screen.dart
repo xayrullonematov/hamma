@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -91,6 +90,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       _currentSessionId = sessionId;
       _messages = [];
     });
+    if (!mounted) return;
     if (Navigator.canPop(context)) Navigator.pop(context); // Close drawer
   }
 
@@ -265,8 +265,10 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         'SSH Command Execution Failure: $command',
         level: SentryLevel.error,
         withScope: (scope) {
-          scope.setExtra('command', command);
-          scope.setExtra('error', error);
+          scope.setContexts('Execution Details', {
+            'command': command,
+            'error': error,
+          });
         },
       );
 
@@ -623,7 +625,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: isUser ? _surfaceColor : _primaryColor.withOpacity(0.2),
+        color: isUser ? _surfaceColor : _primaryColor.withValues(alpha: 0.2),
         shape: BoxShape.circle,
       ),
       child: Icon(
@@ -737,7 +739,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                       const Spacer(),
                       if (isError)
                         TextButton.icon(
-                          onPressed: () => _reportAndAnalyzeError(cmd, output),
+                          onPressed: () => _reportAndAnalyzeError(command, output),
                           icon: const Icon(
                             Icons.analytics_outlined,
                             size: 14,

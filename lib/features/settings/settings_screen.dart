@@ -41,10 +41,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  static const _surfaceColor = Color(0xFF1E293B);
   static const _panelColor = Color(0xFF162033);
   static const _mutedColor = Color(0xFF94A3B8);
-  static const _shadowColor = Color(0x22000000);
   static const _openRouterModelsUrl = 'https://openrouter.ai/api/v1/models';
 
   late final TextEditingController _openAiApiKeyController;
@@ -1105,6 +1103,10 @@ class _SettingsSectionCard extends StatelessWidget {
   final String subtitle;
   final IconData icon;
   final Widget child;
+
+  static const _surfaceColor = Color(0xFF1E293B);
+  static const _mutedColor = Color(0xFF94A3B8);
+  static const _shadowColor = Color(0x22000000);
 
   @override
   Widget build(BuildContext context) {

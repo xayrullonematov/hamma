@@ -187,8 +187,17 @@ class AiCommandService {
   }
 
   // Support for legacy methods if needed, though they should be migrated
-  Future<List<AiCommandStep>> generateCommandPlan(String prompt) async => [];
-  Future<List<String>> generateCommands(String prompt) async => [];
+  Future<List<AiCommandStep>> generateCommandPlan(String prompt) async {
+    final trimmedPrompt = prompt.trim();
+    if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
+    return [];
+  }
+
+  Future<List<String>> generateCommands(String prompt) async {
+    final trimmedPrompt = prompt.trim();
+    if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
+    return [];
+  }
 }
 
 class AiCommandServiceException implements Exception {

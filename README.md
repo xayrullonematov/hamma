@@ -1,78 +1,107 @@
-# Hamma
+# 🛡️ Hamma: AI Server Manager
 
-**AI Server V2** is a mobile-first Flutter app for managing remote servers through **direct SSH from the device**, with AI assistance for safe command suggestions and guided execution.
+<div align="center">
+  <h3><b>"Manage your server without writing commands."</b></h3>
+  <p><i>A mobile-first, high-performance SSH client enhanced with AI-driven safety and automation.</i></p>
 
-## Status
+  [![Status](https://img.shields.io/badge/Status-Beta--RC-blue.svg?style=for-the-badge)]()
+  [![Tech](https://img.shields.io/badge/Stack-Flutter-02569B?style=for-the-badge&logo=flutter)]()
+  [![AI](https://img.shields.io/badge/AI-Empowered-8E44AD?style=for-the-badge)]()
+</div>
 
-- MVP: Complete
-- UI Polish: Complete
-- Secure Storage: Implemented
-- Release Stage: Beta Release Candidate
+---
 
-## Core Features
+## 🌟 Overview
 
-- Direct SSH connection from the mobile app using `dartssh2`
-- Premium Dark Mode UI across the main product surfaces
-- Mobile-Friendly Terminal Toolbar with essential power keys for phone-based SSH
-- Modern AI Chat Interface with Risk Badges and confirmation-first execution
-- Multi-step AI command plans with editable commands and safety checks
-- Quick Actions for common server tasks
-- Raw terminal access for power users via `xterm`
-- AES-Encrypted Local Credential Storage for API keys, saved servers, and trusted host keys
+**Hamma** (AI Server V2) is designed for developers and sysadmins who need to manage remote infrastructure on the go. Unlike traditional SSH clients, Hamma bridges the gap between raw terminal complexity and modern mobile UX, providing a "Safety-First" AI layer that explains logs, suggests fixes, and automates repetitive tasks.
 
-## Product Goal
+---
 
-**“Manage your server without writing commands.”**
+## 🚀 Key Features
 
-The app is designed to help users:
+### 🧠 Smart AI Assistant
+*   **Contextual Command Generation:** Ask for what you need (e.g., "Restart my Docker containers if they are down") and get a verified command plan.
+*   **Risk Assessment:** Every AI suggestion is automatically analyzed by our **Command Risk Assessor** to flag dangerous operations (e.g., `rm -rf`, `reboot`).
+*   **Error Analysis:** Paste a confusing log or error, and Hamma will explain the root cause and provide a fix.
 
-1. Save server profiles with host, port, username, and password.
-2. Connect directly from the device to the server over SSH.
-3. Use a polished dashboard, quick actions, terminal access, and AI assistance.
-4. Execute real server actions with clear previews, warnings, and confirmation.
+### 💻 Pro SSH & Terminal
+*   **Direct Transport:** Connections happen directly from your device to the server using `dartssh2`. No middleman, no proxies, total privacy.
+*   **Mobile-Optimized Terminal:** A full `xterm` terminal with a specialized toolbar for essential keys (Esc, Tab, Ctrl, Arrows) missing from mobile keyboards.
+*   **Multi-Server Dashboard:** View health metrics across your entire fleet at a glance.
 
-## Architecture Principles
+### 🛠️ Built-in Management Tools
+*   **Docker Manager:** List, start, stop, and inspect containers without typing a single line.
+*   **Service & Process Control:** Manage `systemd` services and monitor system resources (CPU/RAM/Disk).
+*   **SFTP File Explorer:** Navigate, edit, and transfer files securely.
 
-- Direct SSH first: no backend SSH proxy or pooled session transport for the core experience
-- AI as assistant, not transport: AI explains and suggests, but SSH remains the execution layer
-- Safety before execution: AI-generated commands stay visible, editable, and confirmable
-- Terminal remains available: advanced users still get raw shell access
+---
 
-## Security
+## 🛠️ Getting Started (User Guide)
 
-- Local settings and credentials are stored using `flutter_secure_storage`
-- Saved server profiles are encrypted at rest
-- Trusted host keys are stored securely for SSH trust decisions
+Using Hamma perfectly is a three-step process:
 
-## Tech Stack
+### 1. Secure Your App
+When you first launch Hamma, set up an **App PIN** in Settings. This encrypts your local database and protects your server credentials.
 
-- Flutter
-- `dartssh2`
-- `xterm`
-- `flutter_secure_storage`
+### 2. Configure AI (Optional but Recommended)
+Hamma supports multiple AI providers. Go to **Settings > AI Configuration**:
+- **OpenAI:** Best for general accuracy.
+- **Google Gemini:** High performance and speed.
+- **OpenRouter:** Access to diverse models like Llama 3 or Claude.
+*Your API keys are stored locally in the device's secure enclave.*
 
-## Development
+### 3. Add Your First Server
+Navigate to the **Servers** tab and tap **(+)**:
+- Enter your SSH credentials (Password and Private Key support included).
+- Tap **Test Connection** to verify.
+- Once saved, tap the server to open the **Dashboard** or **Terminal**.
 
-### Prerequisites
+---
 
-- Flutter SDK matching `pubspec.yaml`
-- Android Studio and/or Xcode
+## 🔒 Security & Privacy
 
-### Commands
+- **Zero-Proxy Architecture:** Your SSH traffic never leaves the direct encrypted tunnel between your phone and your server.
+- **Encrypted at Rest:** Server profiles and API keys are stored using `flutter_secure_storage` (Keychain on iOS, AES-encrypted SharedPreferences on Android).
+- **Safety First:** AI-generated commands are **never** executed automatically. You must review, edit, and confirm every action.
 
-- Install dependencies: `flutter pub get`
-- Run analyzer: `flutter analyze`
-- Run tests: `flutter test`
-- Run app: `flutter run`
-- Build Android: `flutter build apk`
-- Build iOS: `flutter build ios`
+---
 
-## Future Roadmap
+## 🏗️ Developer Guide
 
-The MVP is complete. Future work remains intentionally scoped to follow-up phases such as:
+### Tech Stack
+- **Framework:** Flutter (Dart)
+- **SSH:** `dartssh2`
+- **Terminal:** `xterm.dart`
+- **Security:** `flutter_secure_storage`
+- **Monitoring:** Sentry
 
-- File explorer over SFTP
-- Multi-device sync
-- Encrypted host/profile sync
-- AI chat history
-- Saved snippets and reusable actions
+### Local Development
+1.  **Clone & Install:**
+    ```bash
+    git clone https://github.com/hamma/hamma.git
+    cd hamma
+    flutter pub get
+    ```
+2.  **Verify Setup:**
+    ```bash
+    flutter analyze
+    flutter test
+    ```
+3.  **Run:**
+    ```bash
+    flutter run
+    ```
+
+---
+
+## 🗺️ Roadmap
+- [x] **Phase 1:** Core SSH & AI Integration
+- [x] **Phase 2:** UI Polish & Security Hardening
+- [ ] **Phase 3:** SFTP File Transfers & Editor
+- [ ] **Phase 4:** Multi-device encrypted sync
+
+---
+
+<div align="center">
+  <p>Built with ❤️ for the Linux Community</p>
+</div>

@@ -2,11 +2,9 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ChatHistoryStorage {
-  static const _androidOptions = AndroidOptions(encryptedSharedPreferences: true);
-
   const ChatHistoryStorage({
     FlutterSecureStorage? secureStorage,
-  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage(aOptions: _androidOptions);
+  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _sessionsPrefix = 'ai_sessions_';
   static const _messagesPrefix = 'ai_messages_';
