@@ -13,56 +13,57 @@
 
 ## 🌟 Overview
 
-**Hamma** (AI Server V2) is designed for developers and sysadmins who need to manage remote infrastructure on the go. Unlike traditional SSH clients, Hamma bridges the gap between raw terminal complexity and modern mobile UX, providing a "Safety-First" AI layer that explains logs, suggests fixes, and automates repetitive tasks.
+**Hamma** (AI Server V2) is a comprehensive DevOps command center in your pocket. It bridges the gap between raw terminal complexity and modern mobile UX, providing a "Safety-First" AI layer that explains logs, suggests fixes, and automates infrastructure management across your entire fleet.
 
 ---
 
 ## 🚀 Key Features
 
-### 🧠 Smart AI Assistant
-*   **Contextual Command Generation:** Ask for what you need (e.g., "Restart my Docker containers if they are down") and get a verified command plan.
-*   **Risk Assessment:** Every AI suggestion is automatically analyzed by our **Command Risk Assessor** to flag dangerous operations (e.g., `rm -rf`, `reboot`).
-*   **Error Analysis:** Paste a confusing log or error, and Hamma will explain the root cause and provide a fix.
+### 🧠 Smart AI Assistant & Copilot
+*   **Contextual Command Generation:** Ask for what you need (e.g., "Fix my Nginx config") and get a verified command plan.
+*   **Risk Assessment:** Every AI suggestion is analyzed by our **Command Risk Assessor** to flag dangerous operations.
+*   **Smart Error Analysis:** One-tap analysis of SSH execution failures to understand and resolve issues instantly.
 
-### 💻 Pro SSH & Terminal
-*   **Direct Transport:** Connections happen directly from your device to the server using `dartssh2`. No middleman, no proxies, total privacy.
-*   **Mobile-Optimized Terminal:** A full `xterm` terminal with a specialized toolbar for essential keys (Esc, Tab, Ctrl, Arrows) missing from mobile keyboards.
-*   **Multi-Server Dashboard:** View health metrics across your entire fleet at a glance.
+### 📁 Advanced SFTP File Manager
+*   **Visual Explorer:** Browse, create, and delete files/folders with ease.
+*   **In-App Editor:** Edit configuration files directly on the server with syntax highlighting.
+*   **Sudo Fallback:** Automatically attempts to write files with `sudo` if permission is denied.
 
-### 🛠️ Built-in Management Tools
-*   **Docker Manager:** List, start, stop, and inspect containers without typing a single line.
-*   **Service & Process Control:** Manage `systemd` services and monitor system resources (CPU/RAM/Disk).
-*   **SFTP File Explorer:** Navigate, edit, and transfer files securely.
+### 🐳 Container & System Orchestration
+*   **Docker Manager:** Complete control over containers—list, start, stop, restart, and view live logs.
+*   **Process & Service Manager:** Monitor CPU/RAM usage per process and manage `systemd` services.
+*   **Package Manager:** Install or update packages across your server with a simplified UI.
+
+### 🌐 Networking & Fleet Management
+*   **Fleet Dashboard:** Monitor the health, availability, and resource metrics of all your servers in one unified view.
+*   **Port Forwarding:** Set up SSH tunnels and forward ports directly from your mobile device.
 
 ---
 
 ## 🛠️ Getting Started (User Guide)
 
-Using Hamma perfectly is a three-step process:
-
 ### 1. Secure Your App
 When you first launch Hamma, set up an **App PIN** in Settings. This encrypts your local database and protects your server credentials.
 
-### 2. Configure AI (Optional but Recommended)
-Hamma supports multiple AI providers. Go to **Settings > AI Configuration**:
-- **OpenAI:** Best for general accuracy.
-- **Google Gemini:** High performance and speed.
-- **OpenRouter:** Access to diverse models like Llama 3 or Claude.
-*Your API keys are stored locally in the device's secure enclave.*
+### 2. Configure AI
+Go to **Settings > AI Configuration** to unlock the Copilot features:
+- **Supported Providers:** OpenAI, Google Gemini, and OpenRouter.
+- *Your API keys are stored locally in the device's secure enclave.*
 
-### 3. Add Your First Server
-Navigate to the **Servers** tab and tap **(+)**:
-- Enter your SSH credentials (Password and Private Key support included).
-- Tap **Test Connection** to verify.
-- Once saved, tap the server to open the **Dashboard** or **Terminal**.
+### 3. Manage Your Servers
+Navigate to the **Servers** tab to add your infrastructure. Once connected, you can:
+- **Dashboard:** View live resource metrics.
+- **Terminal:** Use the mobile-optimized SSH terminal.
+- **Tools:** Use the SFTP, Docker, or Service managers from the dashboard tiles.
 
 ---
 
 ## 🔒 Security & Privacy
 
-- **Zero-Proxy Architecture:** Your SSH traffic never leaves the direct encrypted tunnel between your phone and your server.
-- **Encrypted at Rest:** Server profiles and API keys are stored using `flutter_secure_storage` (Keychain on iOS, AES-encrypted SharedPreferences on Android).
-- **Safety First:** AI-generated commands are **never** executed automatically. You must review, edit, and confirm every action.
+- **Zero-Proxy Architecture:** Direct encrypted tunnels between your phone and your server. No data ever touches our servers.
+- **Encrypted at Rest:** Credentials stored using `flutter_secure_storage` (Keychain/Biometrics supported).
+- **Safety First:** AI-generated commands are **never** executed without your explicit review and confirmation.
+- **Backup & Sync:** Export encrypted backups of your configurations for safe migration.
 
 ---
 
@@ -70,7 +71,7 @@ Navigate to the **Servers** tab and tap **(+)**:
 
 ### Tech Stack
 - **Framework:** Flutter (Dart)
-- **SSH:** `dartssh2`
+- **SSH/SFTP:** `dartssh2`
 - **Terminal:** `xterm.dart`
 - **Security:** `flutter_secure_storage`
 - **Monitoring:** Sentry
@@ -97,11 +98,12 @@ Navigate to the **Servers** tab and tap **(+)**:
 ## 🗺️ Roadmap
 - [x] **Phase 1:** Core SSH & AI Integration
 - [x] **Phase 2:** UI Polish & Security Hardening
-- [ ] **Phase 3:** SFTP File Transfers & Editor
-- [ ] **Phase 4:** Multi-device encrypted sync
+- [x] **Phase 3:** SFTP, Docker, and Fleet Management
+- [ ] **Phase 4:** Encrypted Cloud Sync (Optional)
+- [ ] **Phase 5:** Multi-Language Support
 
 ---
 
 <div align="center">
-  <p>Built with ❤️ for the Linux Community</p>
+  <p>Built with ❤️ for the DevOps Community</p>
 </div>

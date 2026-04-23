@@ -186,11 +186,38 @@ class AiCommandService {
     }
   }
 
-  // Support for legacy methods if needed, though they should be migrated
   Future<List<AiCommandStep>> generateCommandPlan(String prompt) async {
     final trimmedPrompt = prompt.trim();
     if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
-    return [];
+
+    // Use the existing chat logic to get a structured response
+    final response = await generateChatResponse(
+      'Based on the following request, provide a list of shell commands to execute. '
+      'Format each command in a markdown bash block. '
+      'Request: $trimmedPrompt',
+    );
+
+    final steps = <AiCommandStep>[];
+    final regExp = RegExp(r'```(?:bash|sh)?\n([\s\S]*?)\n```');
+    final matches = regExp.allMatches(response);
+
+    for (final match in matches) {
+      final command = match.group(1)?.trim();
+      if (command != null && command.isNotEmpty) {
+        steps.add(AiCommandStep(
+          title: 'Execute Command',
+          command: command,
+          description: 'AI suggested command based on your request.',
+        ));
+      }
+    }
+
+    if (steps.isEmpty && response.isNotEmpty) {
+      // Fallback: If no code blocks but text exists, it might be an explanation of why it can't do it
+      throw AiCommandServiceException(response);
+    }
+
+    return steps;
   }
 
   Future<List<String>> generateCommands(String prompt) async {
