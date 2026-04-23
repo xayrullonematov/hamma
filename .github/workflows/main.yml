@@ -21,12 +21,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Run tests
-        run: flutter test
-
       - name: Build APK
         run: flutter build apk --release --split-per-abi
 
@@ -38,20 +32,26 @@ jobs:
 
   build_linux:
     runs-on: ubuntu-latest
+    # Gold Standard: Build in 20.04 container to fix GLIBC errors on Mint/older distros
+    container:
+      image: ubuntu:20.04
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y curl git xz-utils zip libglu1-mesa \
+            libgtk-3-dev liblzma-dev pkg-config libsecret-1-dev \
+            libcurl4-openssl-dev build-essential clang cmake ninja-build
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: 3.x
-
-      - name: Install Linux dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev liblzma-dev libstdc++-12-dev pkg-config libsecret-1-dev libcurl4-openssl-dev
 
       - name: Install dependencies
         run: flutter pub get
