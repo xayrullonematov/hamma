@@ -38,6 +38,7 @@ class SshService {
   })? _lastOnTrustHostKey;
 
   bool get isConnected => _client != null;
+  String? get password => _lastPassword;
   Stream<bool> get connectionState => _connectionStateController.stream;
   List<int> get activeForwardedPorts => _activeForwards.keys.toList();
 

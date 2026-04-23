@@ -26,6 +26,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
   List<LinuxService> _filteredServices = [];
   bool _isLoading = true;
   String _searchQuery = '';
+  String? _transitioningServiceName;
 
   @override
   void initState() {
@@ -70,31 +71,30 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
     final lines = output.split('\n');
     final services = <LinuxService>[];
 
-    // Find the header line to determine column positions if needed, 
-    // or just look for the units.
-    // systemctl output typically looks like:
-    //   UNIT             LOAD   ACTIVE SUB     DESCRIPTION
-    //   atd.service      loaded active running Deferred execution scheduler
-    
     bool startParsing = false;
     for (var line in lines) {
       final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+
       if (trimmed.startsWith('UNIT') && trimmed.contains('LOAD')) {
         startParsing = true;
         continue;
       }
-      if (startParsing) {
-        if (trimmed.isEmpty || trimmed.startsWith('LOAD')) break;
-        if (trimmed.contains('loaded units listed')) break;
 
-        // Split by multiple spaces
-        final parts = trimmed.split(RegExp(r'\s{2,}'));
+      if (startParsing) {
+        if (trimmed.startsWith('LOAD')) break;
+        if (trimmed.contains('loaded units listed')) break;
+        // Handle footer or summary lines that start with a digit or have "listed"
+        if (RegExp(r'^\d+').hasMatch(trimmed) && trimmed.contains('listed')) break;
+
+        // Split by whitespace
+        final parts = trimmed.split(RegExp(r'\s+'));
         if (parts.length >= 4) {
           final unit = parts[0];
           final load = parts[1];
           final active = parts[2];
           final sub = parts[3];
-          final description = parts.length > 4 ? parts[4] : '';
+          final description = parts.length > 4 ? parts.sublist(4).join(' ') : '';
 
           services.add(LinuxService(
             name: unit,
@@ -124,21 +124,31 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
   Future<void> _runAction(LinuxService service, String action) async {
     final command = 'sudo systemctl $action ${service.name}';
     
-    // Show a loading indicator for the specific action if possible, 
-    // but for simplicity we'll just show the global busy state.
     setState(() {
-      _isLoading = true;
+      _transitioningServiceName = service.name;
     });
 
     try {
-      await widget.sshService.execute(command);
-      await _fetchServices(); // Refresh after action
+      final result = await widget.sshService.execute(command);
+      
+      final lowerResult = result.toLowerCase();
+      if (lowerResult.contains('password is required') || lowerResult.contains('failed')) {
+        throw Exception(result.trim());
+      }
+
+      // Wait for systemd to finish transition
+      await Future.delayed(const Duration(milliseconds: 800));
+      
+      await _fetchServices();
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
         _showError(e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _transitioningServiceName = null;
+        });
       }
     }
   }
@@ -146,7 +156,8 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
   void _showError(String message) {
     if (!mounted) return;
     final isPermissionDenied = message.toLowerCase().contains('permission denied') || 
-                               message.toLowerCase().contains('interactive authentication required');
+                               message.toLowerCase().contains('interactive authentication required') ||
+                               message.toLowerCase().contains('password is required');
     
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -216,6 +227,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
                         final service = _filteredServices[index];
                         return _ServiceTile(
                           service: service,
+                          isTransitioning: _transitioningServiceName == service.name,
                           onAction: (action) => _runAction(service, action),
                         );
                       },
@@ -249,10 +261,12 @@ class LinuxService {
 class _ServiceTile extends StatelessWidget {
   const _ServiceTile({
     required this.service,
+    required this.isTransitioning,
     required this.onAction,
   });
 
   final LinuxService service;
+  final bool isTransitioning;
   final Function(String) onAction;
 
   @override
@@ -270,14 +284,23 @@ class _ServiceTile extends StatelessWidget {
         ],
       ),
       child: ListTile(
-        leading: Container(
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
+        leading: isTransitioning
+            ? const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                ),
+              ),
         title: Text(
           service.name,
           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -286,14 +309,20 @@ class _ServiceTile extends StatelessWidget {
           service.description,
           style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
         ),
-        trailing: PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, color: Color(0xFF94A3B8)),
-          onSelected: onAction,
-          itemBuilder: (context) => [
-            const PopupMenuItem(value: 'start', child: Text('Start')),
-            const PopupMenuItem(value: 'stop', child: Text('Stop')),
-            const PopupMenuItem(value: 'restart', child: Text('Restart')),
-          ],
+        trailing: IgnorePointer(
+          ignoring: isTransitioning,
+          child: Opacity(
+            opacity: isTransitioning ? 0.5 : 1.0,
+            child: PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Color(0xFF94A3B8)),
+              onSelected: onAction,
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'start', child: Text('Start')),
+                const PopupMenuItem(value: 'stop', child: Text('Stop')),
+                const PopupMenuItem(value: 'restart', child: Text('Restart')),
+              ],
+            ),
+          ),
         ),
       ),
     );

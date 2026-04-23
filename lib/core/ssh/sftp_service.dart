@@ -139,6 +139,18 @@ class SftpService {
     return client.listdir(path);
   }
 
+  Future<void> createDirectory(String path) async {
+    await client.mkdir(path);
+  }
+
+  Future<void> removeFile(String path) async {
+    await client.remove(path);
+  }
+
+  Future<void> removeDirectory(String path) async {
+    await client.rmdir(path);
+  }
+
   Future<String> readFile(String path) async {
     final file = await client.open(path, mode: SftpFileOpenMode.read);
     try {

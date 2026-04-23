@@ -61,7 +61,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
       if (_packageManager == 'apt') {
         command = 'apt list --upgradable 2>/dev/null';
       } else {
-        command = 'sudo $_packageManager check-update --quiet';
+        command = 'sudo -S $_packageManager check-update --quiet';
       }
 
       final output = await widget.sshService.execute(command);
@@ -97,7 +97,6 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
         }
       }
     } else {
-      // YUM/DNF parsing logic here (simplified)
       for (var line in lines) {
         final parts = line.trim().split(RegExp(r'\s+'));
         if (parts.length >= 3 && !line.startsWith('Loaded') && !line.startsWith('Last')) {
@@ -109,11 +108,11 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
   }
 
   Future<void> _updateLists() async {
-    _showStreamConsole('Updating package lists...', 'sudo $_packageManager update -y');
+    _showStreamConsole('Updating package lists...', 'sudo -S $_packageManager update -y');
   }
 
   Future<void> _upgradeAll() async {
-    final cmd = _packageManager == 'apt' ? 'sudo apt upgrade -y' : 'sudo $_packageManager upgrade -y';
+    final cmd = 'sudo -S $_packageManager upgrade -y';
     _showStreamConsole('Upgrading all packages...', cmd, onDone: _fetchUpgradable);
   }
 
@@ -123,8 +122,6 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
     try {
       final command = _packageManager == 'apt' ? 'apt search $query' : '$_packageManager search $query';
       final output = await widget.sshService.execute(command);
-      // Parsing search results is complex as it varies widely. 
-      // For now, we'll just show raw matches in a simple list or modal.
       _parseSearchResults(output);
       setState(() => _isLoading = false);
     } catch (e) {
@@ -134,7 +131,6 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
   }
 
   void _parseSearchResults(String output) {
-    // Simplified parsing
     final lines = output.trim().split('\n');
     final results = <SearchResultPackage>[];
     for (var i = 0; i < lines.length; i++) {
@@ -274,7 +270,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
           subtitle: Text(pkg.description, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _mutedColor)),
           trailing: IconButton(
             icon: const Icon(Icons.download, color: _primaryColor),
-            onPressed: () => _showStreamConsole('Installing ${pkg.name}...', 'sudo $_packageManager install -y ${pkg.name}', onDone: _fetchUpgradable),
+            onPressed: () => _showStreamConsole('Installing ${pkg.name}...', 'sudo -S $_packageManager install -y ${pkg.name}', onDone: _fetchUpgradable),
           ),
         );
       },
@@ -318,8 +314,10 @@ class _StreamConsole extends StatefulWidget {
 }
 
 class _StreamConsoleState extends State<_StreamConsole> {
-  final List<String> _output = [];
+  final List<_ConsoleLine> _output = [];
   final ScrollController _scrollController = ScrollController();
+  StreamSubscription? _stdoutSub;
+  StreamSubscription? _stderrSub;
   bool _isDone = false;
 
   @override
@@ -328,16 +326,40 @@ class _StreamConsoleState extends State<_StreamConsole> {
     _start();
   }
 
+  @override
+  void dispose() {
+    _stdoutSub?.cancel();
+    _stderrSub?.cancel();
+    super.dispose();
+  }
+
   Future<void> _start() async {
     try {
       final session = await widget.sshService.streamCommand(widget.command);
-      session.stdout
+      
+      // Handle sudo authentication
+      if (widget.sshService.password != null) {
+        session.stdin.add(utf8.encode('${widget.sshService.password}\n'));
+      }
+
+      _stdoutSub = session.stdout
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .transform(const LineSplitter())
           .listen((line) {
             if (mounted) {
-              setState(() => _output.add(line));
+              setState(() => _output.add(_ConsoleLine(line, isError: false)));
+              _scrollToBottom();
+            }
+          });
+
+      _stderrSub = session.stderr
+          .cast<List<int>>()
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(const LineSplitter())
+          .listen((line) {
+            if (mounted) {
+              setState(() => _output.add(_ConsoleLine(line, isError: true)));
               _scrollToBottom();
             }
           });
@@ -348,7 +370,7 @@ class _StreamConsoleState extends State<_StreamConsole> {
         widget.onDone?.call();
       }
     } catch (e) {
-      if (mounted) setState(() => _output.add('Error: $e'));
+      if (mounted) setState(() => _output.add(_ConsoleLine('Error: $e', isError: true)));
     }
   }
 
@@ -378,7 +400,17 @@ class _StreamConsoleState extends State<_StreamConsole> {
               child: ListView.builder(
                 controller: _scrollController,
                 itemCount: _output.length,
-                itemBuilder: (context, index) => Text(_output[index], style: const TextStyle(color: Color(0xFFE2E8F0), fontFamily: 'monospace', fontSize: 12)),
+                itemBuilder: (context, index) {
+                  final line = _output[index];
+                  return Text(
+                    line.text, 
+                    style: TextStyle(
+                      color: line.isError ? const Color(0xFFEF4444) : const Color(0xFFE2E8F0), 
+                      fontFamily: 'monospace', 
+                      fontSize: 12,
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -389,6 +421,12 @@ class _StreamConsoleState extends State<_StreamConsole> {
       ),
     );
   }
+}
+
+class _ConsoleLine {
+  final String text;
+  final bool isError;
+  _ConsoleLine(this.text, {required this.isError});
 }
 
 class UpgradablePackage {

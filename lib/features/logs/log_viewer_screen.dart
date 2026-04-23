@@ -25,13 +25,14 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
   static const _primaryColor = Color(0xFF3B82F6);
   static const _dangerColor = Color(0xFFEF4444);
 
-  final List<String> _logLines = [];
+  final List<_LogEntry> _logEntries = [];
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _filterController = TextEditingController();
   final TextEditingController _customPathController = TextEditingController();
 
   SSHSession? _session;
   StreamSubscription? _stdoutSubscription;
+  StreamSubscription? _stderrSubscription;
   bool _isPaused = false;
   bool _autoScroll = true;
   String _filter = '';
@@ -59,7 +60,6 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentScroll = _scrollController.position.pixels;
       
-      // If user scrolls up, disable auto-scroll. If they are at the bottom, enable it.
       if (maxScroll - currentScroll > 50) {
         if (_autoScroll) setState(() => _autoScroll = false);
       } else {
@@ -72,31 +72,36 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     await _stopStreaming();
     
     setState(() {
-      _logLines.clear();
-      _logLines.add('--- Starting stream for ${_selectedSource.label} ---');
+      _logEntries.clear();
+      _logEntries.add(_LogEntry('--- Starting stream for ${_selectedSource.label} ---', isError: false));
     });
 
     String command = '';
     switch (_selectedSource) {
       case LogSource.system:
-        command = 'sudo journalctl -f -n 100';
+        command = 'sudo -S journalctl -f -n 100';
         break;
       case LogSource.auth:
-        command = 'sudo tail -f -n 100 /var/log/auth.log';
+        command = 'sudo -S tail -f -n 100 /var/log/auth.log';
         break;
       case LogSource.custom:
         final path = _customPathController.text.trim();
         if (path.isEmpty) {
-          setState(() => _logLines.add('Error: No custom path provided.'));
+          setState(() => _logEntries.add(_LogEntry('Error: No custom path provided.', isError: true)));
           return;
         }
-        command = 'sudo tail -f -n 100 $path';
+        command = 'sudo -S tail -f -n 100 $path';
         break;
     }
 
     try {
       final session = await widget.sshService.streamCommand(command);
       _session = session;
+      
+      // Handle sudo authentication
+      if (widget.sshService.password != null) {
+        session.stdin.add(utf8.encode('${widget.sshService.password}\n'));
+      }
       
       _stdoutSubscription = session.stdout
           .cast<List<int>>()
@@ -105,8 +110,24 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
           .listen((line) {
             if (!_isPaused && mounted) {
               setState(() {
-                _logLines.add(line);
-                if (_logLines.length > 2000) _logLines.removeAt(0);
+                _logEntries.add(_LogEntry(line, isError: false));
+                if (_logEntries.length > 2000) _logEntries.removeAt(0);
+              });
+              if (_autoScroll) {
+                _scrollToBottom();
+              }
+            }
+          });
+
+      _stderrSubscription = session.stderr
+          .cast<List<int>>()
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .transform(const LineSplitter())
+          .listen((line) {
+            if (!_isPaused && mounted) {
+              setState(() {
+                _logEntries.add(_LogEntry(line, isError: true));
+                if (_logEntries.length > 2000) _logEntries.removeAt(0);
               });
               if (_autoScroll) {
                 _scrollToBottom();
@@ -116,21 +137,23 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
           
       session.done.then((_) {
         if (mounted) {
-          setState(() => _logLines.add('--- Stream closed by server ---'));
+          setState(() => _logEntries.add(_LogEntry('--- Stream closed by server ---', isError: false)));
         }
       });
     } catch (e) {
       if (mounted) {
-        setState(() => _logLines.add('Error: $e'));
+        setState(() => _logEntries.add(_LogEntry('Error: $e', isError: true)));
       }
     }
   }
 
   Future<void> _stopStreaming() async {
     await _stdoutSubscription?.cancel();
+    await _stderrSubscription?.cancel();
     _session?.close();
     _session = null;
     _stdoutSubscription = null;
+    _stderrSubscription = null;
   }
 
   void _scrollToBottom() {
@@ -141,9 +164,9 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     });
   }
 
-  List<String> get _filteredLines {
-    if (_filter.isEmpty) return _logLines;
-    return _logLines.where((l) => l.toLowerCase().contains(_filter.toLowerCase())).toList();
+  List<_LogEntry> get _filteredEntries {
+    if (_filter.isEmpty) return _logEntries;
+    return _logEntries.where((e) => e.text.toLowerCase().contains(_filter.toLowerCase())).toList();
   }
 
   @override
@@ -161,7 +184,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),
-            onPressed: () => setState(() => _logLines.clear()),
+            onPressed: () => setState(() => _logEntries.clear()),
             tooltip: 'Clear view',
           ),
         ],
@@ -181,13 +204,13 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
               ),
               child: ListView.builder(
                 controller: _scrollController,
-                itemCount: _filteredLines.length,
+                itemCount: _filteredEntries.length,
                 itemBuilder: (context, index) {
-                  final line = _filteredLines[index];
+                  final entry = _filteredEntries[index];
                   return Text(
-                    line,
+                    entry.text,
                     style: TextStyle(
-                      color: _getLineColor(line),
+                      color: entry.isError ? _dangerColor : _getLineColor(entry.text),
                       fontFamily: 'monospace',
                       fontSize: 12,
                     ),
@@ -309,6 +332,13 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     }
     return const Color(0xFFE2E8F0);
   }
+}
+
+class _LogEntry {
+  final String text;
+  final bool isError;
+
+  _LogEntry(this.text, {this.isError = false});
 }
 
 enum LogSource {
