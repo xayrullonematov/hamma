@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/ai/ai_provider.dart';
@@ -10,61 +12,118 @@ import 'features/onboarding/onboarding_screen.dart';
 import 'features/security/app_lock_screen.dart';
 import 'features/servers/server_list_screen.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await BackgroundKeepalive.initialize();
+/// Production flag to disable debug-only features and logs.
+const bool kProduction = true;
 
-  const apiKeyStorage = ApiKeyStorage();
-  const appLockStorage = AppLockStorage();
-  const appPrefsStorage = AppPrefsStorage();
+void main() {
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  var savedSettings = const AiSettings(
-    provider: AiProvider.openAi,
-    openRouterModel: null,
-  );
-  String? aiSettingsStartupWarning;
-  var hasAppPin = false;
-  var isOnboardingComplete = false;
+    // Initialize notifications
+    final notifications = FlutterLocalNotificationsPlugin();
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosInit = DarwinInitializationSettings();
+    await notifications.initialize(
+      const InitializationSettings(android: androidInit, iOS: iosInit),
+    );
 
-  try {
-    savedSettings = await apiKeyStorage.loadSettings();
-  } catch (error) {
-    aiSettingsStartupWarning =
-        'Could not load the saved AI settings. You can continue and re-save them in Settings.\n$error';
-  }
+    // Initialize background sentinel
+    await BackgroundKeepalive.initialize();
 
-  try {
-    hasAppPin = await appLockStorage.hasPin();
-  } catch (_) {
-    hasAppPin = false;
-  }
+    const apiKeyStorage = ApiKeyStorage();
+    const appLockStorage = AppLockStorage();
+    const appPrefsStorage = AppPrefsStorage();
 
-  try {
-    isOnboardingComplete = await appPrefsStorage.isOnboardingComplete();
-  } catch (_) {
-    isOnboardingComplete = false;
-  }
+    var savedSettings = const AiSettings(
+      provider: AiProvider.openAi,
+      openRouterModel: null,
+    );
+    String? aiSettingsStartupWarning;
+    var hasAppPin = false;
+    var isOnboardingComplete = false;
 
-  await SentryFlutter.init(
-    (options) {
-      options.dsn =
-          'https://61903110a3e1bd10a89811e3c87f2f24@o4511222528802816.ingest.de.sentry.io/4511222565568592';
-      options.tracesSampleRate = 1.0;
-    },
-    appRunner: () {
-      runApp(
-        AiServerApp(
-          apiKeyStorage: apiKeyStorage,
-          appLockStorage: appLockStorage,
-          appPrefsStorage: appPrefsStorage,
-          initialSettings: savedSettings,
-          initialHasAppPin: hasAppPin,
-          initialIsOnboardingComplete: isOnboardingComplete,
-          initialAiSettingsLoadError: aiSettingsStartupWarning,
-        ),
-      );
-    },
-  );
+    try {
+      savedSettings = await apiKeyStorage.loadSettings();
+    } catch (error) {
+      aiSettingsStartupWarning =
+          'Could not load the saved AI settings. You can continue and re-save them in Settings.\n$error';
+    }
+
+    try {
+      hasAppPin = await appLockStorage.hasPin();
+    } catch (_) {
+      hasAppPin = false;
+    }
+
+    try {
+      isOnboardingComplete = await appPrefsStorage.isOnboardingComplete();
+    } catch (_) {
+      isOnboardingComplete = false;
+    }
+
+    // Start health monitoring if enabled
+    try {
+      if (await appPrefsStorage.isHealthMonitoringEnabled()) {
+        final interval = await appPrefsStorage.getHealthCheckInterval();
+        await BackgroundKeepalive.enable(intervalMinutes: interval);
+      }
+    } catch (_) {}
+
+    // Sentry DSN can be hardcoded for production or overridden by dev config
+    const productionDsn =
+        'https://61903110a3e1bd10a89811e3c87f2f24@o4511222528802816.ingest.de.sentry.io/4511222565568592';
+
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = productionDsn;
+        options.tracesSampleRate = 1.0;
+        options.attachStacktrace = true;
+        options.enableAutoSessionTracking = true;
+
+        // Scrub sensitive data before sending
+        options.beforeSend = (SentryEvent event, Hint hint) {
+          final scrubbedEvent = event.copyWith(
+            message:
+                event.message == null
+                    ? null
+                    : SentryMessage(
+                      event.message!.formatted.replaceAll(
+                        RegExp(r'password[:=]\s*\S+'),
+                        'password=[SCRUBBED]',
+                      ),
+                    ),
+          );
+
+          // Remove sensitive keys from contexts/extra if they exist
+          if (scrubbedEvent.extra != null) {
+            scrubbedEvent.extra!.removeWhere(
+              (key, value) =>
+                  key.contains('password') ||
+                  key.contains('key') ||
+                  key.contains('secret'),
+            );
+          }
+
+          return scrubbedEvent;
+        };
+      },
+      appRunner: () {
+        runApp(
+          AiServerApp(
+            apiKeyStorage: apiKeyStorage,
+            appLockStorage: appLockStorage,
+            appPrefsStorage: appPrefsStorage,
+            initialSettings: savedSettings,
+            initialHasAppPin: hasAppPin,
+            initialIsOnboardingComplete: isOnboardingComplete,
+            initialAiSettingsLoadError: aiSettingsStartupWarning,
+          ),
+        );
+      },
+    );
+  }, (exception, stackTrace) async {
+    await Sentry.captureException(exception, stackTrace: stackTrace);
+  });
 }
 
 class AiServerApp extends StatefulWidget {
@@ -170,8 +229,8 @@ class _AiServerAppState extends State<AiServerApp> {
             );
 
     return MaterialApp(
-      title: 'AI Server V2',
-      debugShowCheckedModeBanner: false,
+      title: 'Hamma',
+      debugShowCheckedModeBanner: !kProduction,
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,

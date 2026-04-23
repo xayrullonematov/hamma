@@ -1,74 +1,64 @@
-// ignore_for_file: deprecated_member_use
-
 import 'dart:convert';
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ChatHistoryStorage {
-  static const _androidOptions = AndroidOptions(
-    encryptedSharedPreferences: true,
-  );
+  static const _androidOptions = AndroidOptions(encryptedSharedPreferences: true);
 
   const ChatHistoryStorage({
     FlutterSecureStorage? secureStorage,
-  }) : _secureStorage = secureStorage ??
-            const FlutterSecureStorage(aOptions: _androidOptions);
+  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage(aOptions: _androidOptions);
 
-  static const _chatHistoryPrefix = 'chat_history_';
+  static const _sessionsPrefix = 'ai_sessions_';
+  static const _messagesPrefix = 'ai_messages_';
 
   final FlutterSecureStorage _secureStorage;
 
-  Future<List<Map<String, String>>> loadHistory({
-    required String serverId,
-  }) async {
-    final rawValue = await _secureStorage.read(key: _storageKey(serverId));
-    if (rawValue == null || rawValue.trim().isEmpty) {
-      return const [];
+  Future<List<Map<String, String>>> listSessions({required String serverId}) async {
+    final raw = await _secureStorage.read(key: '$_sessionsPrefix$serverId');
+    if (raw == null) return [];
+    try {
+      final List decoded = jsonDecode(raw);
+      return decoded.map((e) => Map<String, String>.from(e)).toList();
+    } catch (_) {
+      return [];
     }
-
-    final decoded = jsonDecode(rawValue);
-    if (decoded is! List) {
-      return const [];
-    }
-
-    final messages = <Map<String, String>>[];
-    for (final item in decoded) {
-      if (item is! Map) {
-        continue;
-      }
-
-      final role = (item['role'] ?? '').toString().trim();
-      final content = (item['content'] ?? '').toString().trim();
-      if (role.isEmpty || content.isEmpty) {
-        continue;
-      }
-
-      messages.add({
-        'role': role,
-        'content': content,
-      });
-    }
-
-    return messages;
   }
 
-  Future<void> saveHistory({
+  Future<void> saveSessions({required String serverId, required List<Map<String, String>> sessions}) async {
+    await _secureStorage.write(key: '$_sessionsPrefix$serverId', value: jsonEncode(sessions));
+  }
+
+  Future<List<Map<String, dynamic>>> loadMessages({required String serverId, required String sessionId}) async {
+    final raw = await _secureStorage.read(key: '$_messagesPrefix${serverId}_$sessionId');
+    if (raw == null) return [];
+    try {
+      final List decoded = jsonDecode(raw);
+      return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveMessages({
     required String serverId,
-    required List<Map<String, String>> messages,
+    required String sessionId,
+    required List<Map<String, dynamic>> messages,
   }) async {
     await _secureStorage.write(
-      key: _storageKey(serverId),
+      key: '$_messagesPrefix${serverId}_$sessionId',
       value: jsonEncode(messages),
     );
   }
 
-  Future<void> clearHistory({
-    required String serverId,
-  }) async {
-    await _secureStorage.delete(key: _storageKey(serverId));
+  Future<void> deleteSession({required String serverId, required String sessionId}) async {
+    await _secureStorage.delete(key: '$_messagesPrefix${serverId}_$sessionId');
+    final sessions = await listSessions(serverId: serverId);
+    sessions.removeWhere((s) => s['id'] == sessionId);
+    await saveSessions(serverId: serverId, sessions: sessions);
   }
 
-  String _storageKey(String serverId) {
-    return '$_chatHistoryPrefix${Uri.encodeComponent(serverId)}';
-  }
+  // Legacy support or fallback
+  Future<List<Map<String, String>>> loadHistory({required String serverId}) async => [];
+  Future<void> saveHistory({required String serverId, required List<Map<String, String>> messages}) async {}
+  Future<void> clearHistory({required String serverId}) async {}
 }

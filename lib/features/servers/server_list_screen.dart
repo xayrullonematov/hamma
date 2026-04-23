@@ -45,9 +45,14 @@ class _ServerListScreenState extends State<ServerListScreen> {
   String? _loadError;
   List<ServerProfile> _servers = const [];
 
+  bool _isSearching = false;
+  String _searchQuery = '';
+  late final TextEditingController _searchController;
+
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
     _loadServers();
     if (widget.startupWarning != null && widget.startupWarning!.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -60,6 +65,24 @@ class _ServerListScreenState extends State<ServerListScreen> {
         ).showSnackBar(SnackBar(content: Text(widget.startupWarning!)));
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<ServerProfile> get _filteredServers {
+    if (_searchQuery.isEmpty) {
+      return _servers;
+    }
+    final query = _searchQuery.toLowerCase();
+    return _servers.where((server) {
+      return server.name.toLowerCase().contains(query) ||
+          server.host.toLowerCase().contains(query) ||
+          server.username.toLowerCase().contains(query);
+    }).toList();
   }
 
   Future<void> _loadServers() async {
@@ -265,23 +288,79 @@ class _ServerListScreenState extends State<ServerListScreen> {
     );
   }
 
+  void _startSearch() {
+    ModalRoute.of(context)?.addLocalHistoryEntry(
+      LocalHistoryEntry(
+        onRemove: () {
+          setState(() {
+            _isSearching = false;
+            _searchQuery = '';
+            _searchController.clear();
+          });
+        },
+      ),
+    );
+    setState(() {
+      _isSearching = true;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final filteredServers = _filteredServers;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Saved Servers'),
+        title:
+            _isSearching
+                ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Search servers...',
+                    border: InputBorder.none,
+                    hintStyle: TextStyle(color: _subtitleColor),
+                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                )
+                : const Text('Saved Servers'),
         actions: [
-          IconButton(
-            onPressed: _openFleetCommandCenter,
-            icon: const Icon(Icons.dashboard_customize_outlined),
-            tooltip: 'Fleet Command Center',
-          ),
-          IconButton(
-            onPressed: _openSettings,
-            icon: const Icon(Icons.settings),
-          ),
+          if (_isSearching)
+            IconButton(
+              onPressed: () {
+                if (_searchController.text.isEmpty) {
+                  Navigator.of(context).pop();
+                } else {
+                  _searchController.clear();
+                  setState(() {
+                    _searchQuery = '';
+                  });
+                }
+              },
+              icon: const Icon(Icons.clear),
+            )
+          else ...[
+            IconButton(
+              onPressed: _startSearch,
+              icon: const Icon(Icons.search),
+              tooltip: 'Search',
+            ),
+            IconButton(
+              onPressed: _openFleetCommandCenter,
+              icon: const Icon(Icons.dashboard_customize_outlined),
+              tooltip: 'Fleet Command Center',
+            ),
+            IconButton(
+              onPressed: _openSettings,
+              icon: const Icon(Icons.settings),
+            ),
+          ],
         ],
       ),
       body:
@@ -337,12 +416,16 @@ class _ServerListScreenState extends State<ServerListScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Server Dashboard',
+                                  _isSearching
+                                      ? 'Search Results'
+                                      : 'Server Dashboard',
                                   style: theme.textTheme.headlineSmall,
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Direct SSH access to your saved infrastructure.',
+                                  _isSearching
+                                      ? 'Showing results for "$_searchQuery"'
+                                      : 'Direct SSH access to your saved infrastructure.',
                                   style: theme.textTheme.bodySmall,
                                 ),
                               ],
@@ -358,7 +441,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Text(
-                              '${_servers.length} saved',
+                              '${filteredServers.length} ${_isSearching ? 'found' : 'saved'}',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600,
@@ -369,22 +452,33 @@ class _ServerListScreenState extends State<ServerListScreen> {
                       ),
                     ),
                   ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                    sliver: SliverList.separated(
-                      itemCount: _servers.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 14),
-                      itemBuilder: (context, index) {
-                        final server = _servers[index];
-                        return _ServerDashboardCard(
-                          server: server,
-                          onOpen: () => _openServer(server),
-                          onEdit: () => _editServer(server),
-                          onDelete: () => _deleteServer(server),
-                        );
-                      },
+                  if (filteredServers.isEmpty && _isSearching)
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Text(
+                          'No servers match your search.',
+                          style: TextStyle(color: _subtitleColor),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      sliver: SliverList.separated(
+                        itemCount: filteredServers.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 14),
+                        itemBuilder: (context, index) {
+                          final server = filteredServers[index];
+                          return _ServerDashboardCard(
+                            server: server,
+                            onOpen: () => _openServer(server),
+                            onEdit: () => _editServer(server),
+                            onDelete: () => _deleteServer(server),
+                          );
+                        },
+                      ),
                     ),
-                  ),
                 ],
               ),
       floatingActionButton: FloatingActionButton.extended(

@@ -3,13 +3,16 @@ import 'dart:convert';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/ai/ai_provider.dart';
+import '../../core/background/background_keepalive.dart';
 import '../../core/backup/backup_service.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/app_lock_storage.dart';
+import '../../core/storage/app_prefs_storage.dart';
 import '../security/app_lock_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -51,6 +54,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final AppLockStorage _appLockStorage = const AppLockStorage();
   final BackupService _backupService = const BackupService();
   final ApiKeyStorage _apiKeyStorage = const ApiKeyStorage();
+  final AppPrefsStorage _appPrefsStorage = const AppPrefsStorage();
+
   late AiProvider _selectedProvider;
   String? _openRouterModel;
   bool _isSaving = false;
@@ -62,6 +67,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _openRouterModelsError;
   List<String> _openRouterModels = const [];
   String _status = '';
+
+  bool _healthMonitoringEnabled = false;
+  int _healthCheckInterval = 30;
 
   bool get _isBusy => _isSaving || _isExportingBackup || _isImportingBackup;
 
@@ -93,6 +101,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     _loadStoredApiKeys();
     _loadAppPinStatus();
+    _loadHealthMonitoringSettings();
     if (_selectedProvider == AiProvider.openRouter) {
       _loadOpenRouterModels();
     }
@@ -143,6 +152,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _loadHealthMonitoringSettings() async {
+    final enabled = await _appPrefsStorage.isHealthMonitoringEnabled();
+    final interval = await _appPrefsStorage.getHealthCheckInterval();
+    if (!mounted) return;
+    setState(() {
+      _healthMonitoringEnabled = enabled;
+      _healthCheckInterval = interval;
+    });
+  }
+
   Future<void> _save() async {
     final openAiKey = _openAiApiKeyController.text.trim();
     final geminiKey = _geminiApiKeyController.text.trim();
@@ -154,7 +173,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() {
       _isSaving = true;
-      _status = 'Saving AI settings';
+      _status = 'Saving settings';
       _openRouterModel = resolvedOpenRouterModel;
     });
 
@@ -167,12 +186,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         selectedApiKey,
         resolvedOpenRouterModel,
       );
+
+      await _appPrefsStorage.setHealthMonitoringEnabled(
+        _healthMonitoringEnabled,
+      );
+      await _appPrefsStorage.setHealthCheckInterval(_healthCheckInterval);
+
+      if (_healthMonitoringEnabled) {
+        await BackgroundKeepalive.enable(
+          intervalMinutes: _healthCheckInterval,
+        );
+      } else {
+        await BackgroundKeepalive.disable();
+      }
+
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _status = 'AI settings saved.';
+        _status = 'Settings saved.';
       });
     } catch (error) {
       if (!mounted) {
@@ -180,7 +213,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       setState(() {
-        _status = 'Failed to save AI settings: $error';
+        _status = 'Failed to save settings: $error';
       });
     } finally {
       if (mounted) {
@@ -367,7 +400,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final uri = Uri(
       scheme: 'mailto',
       path: 'support@example.com',
-      queryParameters: const {'subject': 'Hamma Beta Feedback'},
+      queryParameters: const {'subject': 'Hamma Feedback'},
     );
 
     try {
@@ -626,7 +659,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: SafeArea(
-        top: false,
         child: ListView(
           padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
           children: [
@@ -641,7 +673,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Theme(
                     data: theme.copyWith(canvasColor: _panelColor),
                     child: DropdownButtonFormField<AiProvider>(
-                      // ignore: deprecated_member_use
                       value: _selectedProvider,
                       decoration: const InputDecoration(
                         labelText: 'Default Provider',
@@ -719,6 +750,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const SizedBox(height: 16),
                     _buildOpenRouterModelSelector(theme),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            _SettingsSectionCard(
+              title: 'Health Monitoring',
+              subtitle:
+                  'Monitor server health in the background and receive alerts for downtime or high resource usage.',
+              icon: Icons.health_and_safety_outlined,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SwitchListTile(
+                    title: const Text('Enable Background Monitoring'),
+                    subtitle: const Text(
+                      'Periodically check all saved servers.',
+                    ),
+                    value: _healthMonitoringEnabled,
+                    onChanged:
+                        _isBusy
+                            ? null
+                            : (value) {
+                              setState(() {
+                                _healthMonitoringEnabled = value;
+                              });
+                            },
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  if (_healthMonitoringEnabled) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'Check Interval: $_healthCheckInterval minutes',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    Slider(
+                      value: _healthCheckInterval.toDouble(),
+                      min: 15,
+                      max: 120,
+                      divisions: 7,
+                      label: '$_healthCheckInterval min',
+                      onChanged:
+                          _isBusy
+                              ? null
+                              : (value) {
+                                setState(() {
+                                  _healthCheckInterval = value.toInt();
+                                });
+                              },
+                    ),
                   ],
                 ],
               ),
@@ -874,22 +955,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 20),
             _SettingsSectionCard(
-              title: 'About & Support',
-              subtitle:
-                  'Send beta feedback, report bugs, or share issues you find while using Hamma.',
-              icon: Icons.mail_outline,
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _isBusy ? null : _launchFeedbackEmail,
-                  icon: const Icon(Icons.mail_outline),
-                  label: const Text('Send Feedback / Report Bug'),
-                ),
+              title: 'Support',
+              subtitle: 'Access the help center and documentation.',
+              icon: Icons.support_agent_outlined,
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const HelpCenterScreen()),
+                        );
+                      },
+                      icon: const Icon(Icons.help_center_outlined),
+                      label: const Text('Help Center'),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isBusy ? null : _launchFeedbackEmail,
+                      icon: const Icon(Icons.mail_outline),
+                      label: const Text('Contact Support'),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 20),
             Text(
-              'Hamma v1.0.0 (Beta)',
+              'Hamma v1.0.0',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: _mutedColor,
@@ -898,6 +995,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class HelpCenterScreen extends StatelessWidget {
+  const HelpCenterScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final topics = [
+      {
+        'title': 'Connecting via SSH',
+        'markdown': '''
+# Connecting via SSH
+Hamma uses `dartssh2` to establish secure connections. To connect:
+1. Tap **Add Server**.
+2. Enter the **Host** (IP or Domain) and **Port** (default 22).
+3. Provide your **Username**.
+4. Use either a **Password** or a **Private Key** (Ed25519 or RSA).
+5. Tap **Test Connection** to verify settings before saving.
+'''
+      },
+      {
+        'title': 'Managing Docker',
+        'markdown': '''
+# Managing Docker
+Hamma provides a simplified Docker dashboard:
+1. Open a server from the list.
+2. Select **Docker Manager**.
+3. View running containers, stats, and images.
+4. Perform actions like **Restart**, **Stop**, or **View Logs** directly from buttons.
+'''
+      },
+      {
+        'title': 'Using AI Assistant',
+        'markdown': '''
+# Using AI Assistant
+The AI Copilot helps you manage servers without writing complex commands:
+1. Tap the **AI Assistant** icon in a server dashboard.
+2. Ask questions like "How do I check Nginx logs?" or "Restart my Postgres container".
+3. The AI suggests commands which you can **edit** and **run** after explicit confirmation.
+4. If a command fails, use **Smart Error Analysis** to get a technical breakdown of the failure.
+'''
+      },
+      {
+        'title': 'Fleet Monitoring',
+        'markdown': '''
+# Fleet Monitoring
+Monitor your entire infrastructure at once:
+1. Open the **Fleet Command Center** from the main server list.
+2. View CPU, RAM, and Disk metrics across all saved servers.
+3. Enable **Background Health Monitoring** in Settings to receive alerts if a server goes offline or exceeds resource thresholds.
+'''
+      },
+    ];
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Help Center')),
+      body: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: topics.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final topic = topics[index];
+          return Card(
+            child: ListTile(
+              title: Text(topic['title']!),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(title: Text(topic['title']!)),
+                      body: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: MarkdownBody(
+                          data: topic['markdown']!,
+                          selectable: true,
+                          styleSheet: MarkdownStyleSheet(
+                            h1: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+                            p: const TextStyle(color: Color(0xFFE2E8F0), height: 1.6, fontSize: 15),
+                            listBullet: const TextStyle(color: Color(0xFF3B82F6)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        },
       ),
     );
   }
@@ -922,11 +1112,11 @@ class _SettingsSectionCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: _SettingsScreenState._surfaceColor,
+        color: _surfaceColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
-            color: _SettingsScreenState._shadowColor,
+            color: _shadowColor,
             blurRadius: 20,
             offset: Offset(0, 10),
           ),
@@ -964,7 +1154,7 @@ class _SettingsSectionCard extends StatelessWidget {
                     Text(
                       subtitle,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: _SettingsScreenState._mutedColor,
+                        color: _mutedColor,
                         height: 1.4,
                       ),
                     ),

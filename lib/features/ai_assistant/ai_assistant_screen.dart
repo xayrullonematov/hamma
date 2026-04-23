@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
-
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import '../../core/ai/ai_command_service.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
@@ -27,34 +28,22 @@ class AiAssistantScreen extends StatefulWidget {
 }
 
 class _AiAssistantScreenState extends State<AiAssistantScreen> {
+  static const _backgroundColor = Color(0xFF0F172A);
+  static const _surfaceColor = Color(0xFF1E293B);
+  static const _mutedColor = Color(0xFF94A3B8);
+  static const _primaryColor = Color(0xFF3B82F6);
+  static const _dangerColor = Color(0xFFEF4444);
+
   late AiCommandService _aiCommandService;
   final ChatHistoryStorage _storage = const ChatHistoryStorage();
   final CommandRiskAssessor _riskAssessor = const CommandRiskAssessor();
-  final TextEditingController _promptController = TextEditingController();
+  final TextEditingController _inputController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
 
-  bool _isGenerating = false;
-  bool _connectionLost = false;
-  int? _runningCommandIndex;
-  List<TextEditingController> _commandControllers = [];
-  final List<_ExecutionHistoryEntry> _history = [];
-  String _status = 'Describe the issue, then generate suggested commands.';
-
-  bool get _canExecuteCommands {
-    return widget.sshService.isConnected && !_connectionLost;
-  }
-
-  String get _combinedOutput {
-    if (_history.isEmpty) {
-      return 'No command has been run yet.';
-    }
-
-    return _history.map((entry) {
-      final stateLabel = entry.succeeded ? 'OK' : 'ERROR';
-      return '[${_formatTimestamp(entry.executedAt)}] $stateLabel\n'
-          'Command: ${entry.command}\n'
-          '${entry.output}';
-    }).join('\n\n------------------------------\n\n');
-  }
+  List<Map<String, String>> _sessions = [];
+  String? _currentSessionId;
+  List<Map<String, dynamic>> _messages = [];
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -63,315 +52,344 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       provider: widget.provider,
       apiKey: widget.apiKey,
     );
-    _loadHistory();
+    _initChat();
   }
 
-  Future<void> _loadHistory() async {
-    try {
-      final saved = await _storage.loadHistory(serverId: widget.serverId);
-      if (!mounted) {
-        return;
-      }
-
-      final loadedEntries = <_ExecutionHistoryEntry>[];
-      for (final item in saved) {
-        try {
-          final data = jsonDecode(item['content'] ?? '');
-          loadedEntries.add(_ExecutionHistoryEntry(
-            command: data['command'] ?? '',
-            output: data['output'] ?? '',
-            executedAt: DateTime.parse(data['executedAt']),
-            succeeded: data['succeeded'] ?? false,
-          ));
-        } catch (_) {
-          continue;
-        }
-      }
-
-      setState(() {
-        _history.clear();
-        _history.addAll(loadedEntries);
-      });
-    } catch (_) {}
-  }
-
-  Future<void> _saveHistory() async {
-    final messages = _history.map((entry) {
-      return {
-        'role': 'history',
-        'content': jsonEncode({
-          'command': entry.command,
-          'output': entry.output,
-          'executedAt': entry.executedAt.toIso8601String(),
-          'succeeded': entry.succeeded,
-        }),
-      };
-    }).toList();
-
-    await _storage.saveHistory(serverId: widget.serverId, messages: messages);
-  }
-
-  Future<void> _clearHistory() async {
-    await _storage.clearHistory(serverId: widget.serverId);
-    if (mounted) {
-      setState(() {
-        _history.clear();
-      });
+  Future<void> _initChat() async {
+    final sessions = await _storage.listSessions(serverId: widget.serverId);
+    setState(() => _sessions = sessions);
+    if (sessions.isNotEmpty) {
+      _loadSession(sessions.first['id']!);
+    } else {
+      _createNewChat();
     }
   }
 
-  @override
-  void didUpdateWidget(covariant AiAssistantScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.apiKey != widget.apiKey ||
-        oldWidget.provider != widget.provider) {
-      _aiCommandService = AiCommandService.forProvider(
-        provider: widget.provider,
-        apiKey: widget.apiKey,
-      );
-    }
-    if (oldWidget.serverId != widget.serverId) {
-      _loadHistory();
+  Future<void> _loadSession(String sessionId) async {
+    final messages = await _storage.loadMessages(
+      serverId: widget.serverId,
+      sessionId: sessionId,
+    );
+    setState(() {
+      _currentSessionId = sessionId;
+      _messages = messages;
+    });
+    _scrollToBottom();
+  }
+
+  Future<void> _createNewChat() async {
+    final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
+    final newSession = {
+      'id': sessionId,
+      'title': 'New Chat',
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    final sessions = [newSession, ..._sessions];
+    await _storage.saveSessions(serverId: widget.serverId, sessions: sessions);
+    setState(() {
+      _sessions = sessions;
+      _currentSessionId = sessionId;
+      _messages = [];
+    });
+    if (Navigator.canPop(context)) Navigator.pop(context); // Close drawer
+  }
+
+  Future<void> _deleteSession(String sessionId) async {
+    await _storage.deleteSession(
+      serverId: widget.serverId,
+      sessionId: sessionId,
+    );
+    if (_currentSessionId == sessionId) {
+      _initChat();
+    } else {
+      final sessions = await _storage.listSessions(serverId: widget.serverId);
+      setState(() => _sessions = sessions);
     }
   }
 
   @override
   void dispose() {
-    _promptController.dispose();
-    for (final controller in _commandControllers) {
-      controller.dispose();
-    }
+    _inputController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
-  Future<void> _generateCommands() async {
-    final prompt = _promptController.text.trim();
-    if (prompt.isEmpty) {
-      setState(() {
-        _status = 'Enter a prompt first';
-      });
-      return;
-    }
+  Future<void> _sendMessage() async {
+    final text = _inputController.text.trim();
+    if (text.isEmpty || _isLoading || _currentSessionId == null) return;
 
-    if (widget.apiKey.trim().isEmpty) {
-      setState(() {
-        _status =
-            'Set your ${widget.provider.label} API key in Settings before generating commands.';
-      });
-      return;
-    }
+    _inputController.clear();
+    final userMsg = {
+      'role': 'user',
+      'content': text,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
 
     setState(() {
-      _isGenerating = true;
-      _status = 'Generating suggested commands';
+      _messages.add(userMsg);
+      _isLoading = true;
     });
+    _scrollToBottom();
 
     try {
-      final commands = await _aiCommandService.generateCommands(prompt);
-      if (!mounted) {
-        return;
-      }
+      // Prepare history (limit to last 10 for context window)
+      final history =
+          _messages
+              .where((m) => m['role'] == 'user' || m['role'] == 'assistant')
+              .take(_messages.length - 1)
+              .map(
+                (m) => {
+                  'role': m['role'] as String,
+                  'content': m['content'] as String,
+                },
+              )
+              .toList();
 
-      for (final controller in _commandControllers) {
-        controller.dispose();
-      }
-
-      setState(() {
-        _commandControllers = commands
-            .map((command) => TextEditingController(text: command))
-            .toList();
-        _status = 'Suggested commands ready';
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _status = 'Failed to generate commands';
-      });
-      _appendHistory(
-        command: 'Generate suggestions',
-        output: error.toString(),
-        succeeded: false,
+      final response = await _aiCommandService.generateChatResponse(
+        text,
+        history: history,
       );
-    } finally {
+
+      final assistantMsg = {
+        'role': 'assistant',
+        'content': response,
+        'timestamp': DateTime.now().toIso8601String(),
+        'outputs': <String, String>{},
+      };
+
       if (mounted) {
         setState(() {
-          _isGenerating = false;
+          _messages.add(assistantMsg);
+          _isLoading = false;
         });
+        _scrollToBottom();
+        _saveCurrentMessages();
+        _updateSessionTitleIfNeeded(text);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _messages.add({
+            'role': 'system',
+            'content': 'Error: $e',
+            'timestamp': DateTime.now().toIso8601String(),
+          });
+          _isLoading = false;
+        });
+        _scrollToBottom();
       }
     }
   }
 
-  Future<void> _runCommand(int index) async {
-    final command = _commandControllers[index].text.trim();
-    await _runCommandText(command, index: index);
-  }
-
-  Future<void> _rerunCommand(String command) async {
-    await _runCommandText(command);
-  }
-
-  Future<void> _runCommandText(String command, {int? index}) async {
-    if (command.isEmpty) {
-      setState(() {
-        _status = 'Command cannot be empty';
-      });
-      return;
+  void _saveCurrentMessages() {
+    if (_currentSessionId != null) {
+      _storage.saveMessages(
+        serverId: widget.serverId,
+        sessionId: _currentSessionId!,
+        messages: _messages,
+      );
     }
+  }
 
-    if (!_canExecuteCommands) {
-      setState(() {
-        _status = 'SSH connection lost. Return and reconnect before running commands.';
-      });
+  void _updateSessionTitleIfNeeded(String firstMessage) {
+    if (_messages.length <= 2) {
+      final title =
+          firstMessage.length > 30
+              ? '${firstMessage.substring(0, 27)}...'
+              : firstMessage;
+      final sessionIndex = _sessions.indexWhere(
+        (s) => s['id'] == _currentSessionId,
+      );
+      if (sessionIndex != -1) {
+        setState(() {
+          _sessions[sessionIndex]['title'] = title;
+        });
+        _storage.saveSessions(serverId: widget.serverId, sessions: _sessions);
+      }
+    }
+  }
+
+  Future<void> _runCommand(int msgIndex, String command) async {
+    if (!widget.sshService.isConnected) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('SSH not connected')));
       return;
     }
 
     final assessment = _riskAssessor.assess(command);
-    final shouldRun = await _showConfirmationDialog(command, assessment);
-    if (!shouldRun) {
-      return;
-    }
-
-    setState(() {
-      _runningCommandIndex = index;
-      _status = 'Running command';
-    });
+    final confirmed = await _showRiskDialog(command, assessment);
+    if (!confirmed) return;
 
     try {
       final output = await widget.sshService.execute(command);
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _status = 'Command finished';
-      });
-      _appendHistory(
-        command: command,
-        output: output.isEmpty ? '(no output)' : output,
-        succeeded: true,
-      );
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      final message = error.toString();
-      final disconnected = _looksLikeDisconnect(message);
-
-      setState(() {
-        if (disconnected) {
-          _connectionLost = true;
-          _status =
-              'SSH connection lost. Return to the main screen and reconnect.';
-        } else {
-          _status = 'Command failed';
-        }
-      });
-
-      _appendHistory(
-        command: command,
-        output: disconnected
-            ? 'SSH connection lost while running the command.\n$message'
-            : message,
-        succeeded: false,
-      );
-    } finally {
       if (mounted) {
         setState(() {
-          _runningCommandIndex = null;
+          final outputs = Map<String, dynamic>.from(
+            _messages[msgIndex]['outputs'] ?? {},
+          );
+          outputs[command] = output.isEmpty ? '(No output)' : output;
+          _messages[msgIndex]['outputs'] = outputs;
         });
+        _saveCurrentMessages();
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          final outputs = Map<String, dynamic>.from(
+            _messages[msgIndex]['outputs'] ?? {},
+          );
+          outputs[command] = 'Error: $e';
+          _messages[msgIndex]['outputs'] = outputs;
+        });
+        _saveCurrentMessages();
+        _scrollToBottom();
       }
     }
   }
 
-  Future<bool> _showConfirmationDialog(
+  Future<void> _reportAndAnalyzeError(String command, String error) async {
+    setState(() => _isLoading = true);
+
+    try {
+      // 1. Send to Sentry
+      Sentry.addBreadcrumb(
+        Breadcrumb(
+          message: 'User initiated Smart Error Analysis',
+          category: 'ai_assistant',
+          data: {'command': command, 'error': error},
+        ),
+      );
+      Sentry.captureMessage(
+        'SSH Command Execution Failure: $command',
+        level: SentryLevel.error,
+        withScope: (scope) {
+          scope.setExtra('command', command);
+          scope.setExtra('error', error);
+        },
+      );
+
+      // 2. Prompt AI for analysis
+      final analysisPrompt =
+          'The following Linux command failed with an error. Please provide a deep technical explanation of why this specific error occurred and how to resolve it.\n\nCommand: $command\nError: $error';
+      final history =
+          _messages
+              .where((m) => m['role'] == 'user' || m['role'] == 'assistant')
+              .map(
+                (m) => {
+                  'role': m['role'] as String,
+                  'content': m['content'] as String,
+                },
+              )
+              .toList();
+
+      final response = await _aiCommandService.generateChatResponse(
+        analysisPrompt,
+        history: history,
+      );
+
+      if (mounted) {
+        setState(() {
+          _messages.add({
+            'role': 'assistant',
+            'content': '### Smart Error Analysis\n\n$response',
+            'timestamp': DateTime.now().toIso8601String(),
+          });
+          _isLoading = false;
+        });
+        _scrollToBottom();
+        _saveCurrentMessages();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _messages.add({
+            'role': 'system',
+            'content': 'Analysis failed: $e',
+            'timestamp': DateTime.now().toIso8601String(),
+          });
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      }
+    }
+  }
+
+  Future<bool> _showRiskDialog(
     String command,
     CommandRiskAssessment assessment,
   ) async {
     final color = _riskColor(assessment.level);
-
     return await showDialog<bool>(
           context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('Confirm Command'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('This command will run on your server:'),
-                  const SizedBox(height: 12),
-                  SelectableText(command),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(999),
+          builder: (context) => AlertDialog(
+            title: const Text('Run Command'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    command,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: Colors.white,
                     ),
-                    child: Text(
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: color, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
                       _riskLabel(assessment.level),
                       style: TextStyle(
                         color: color,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(assessment.explanation),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
+                  ],
                 ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Run'),
+                const SizedBox(height: 8),
+                Text(
+                  assessment.explanation,
+                  style: const TextStyle(fontSize: 14),
                 ),
               ],
-            );
-          },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Run'),
+              ),
+            ],
+          ),
         ) ??
         false;
   }
 
-  void _appendHistory({
-    required String command,
-    required String output,
-    required bool succeeded,
-  }) {
-    setState(() {
-      _history.insert(
-        0,
-        _ExecutionHistoryEntry(
-          command: command,
-          output: output,
-          executedAt: DateTime.now(),
-          succeeded: succeeded,
-        ),
-      );
-
-      if (_history.length > 8) {
-        _history.removeLast();
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
       }
     });
-    _saveHistory();
-  }
-
-  String _formatTimestamp(DateTime time) {
-    final year = time.year.toString().padLeft(4, '0');
-    final month = time.month.toString().padLeft(2, '0');
-    final day = time.day.toString().padLeft(2, '0');
-    final hour = time.hour.toString().padLeft(2, '0');
-    final minute = time.minute.toString().padLeft(2, '0');
-    final second = time.second.toString().padLeft(2, '0');
-    return '$year-$month-$day $hour:$minute:$second';
   }
 
   String _riskLabel(CommandRiskLevel level) {
@@ -388,261 +406,109 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   Color _riskColor(CommandRiskLevel level) {
     switch (level) {
       case CommandRiskLevel.safe:
-        return const Color(0xFF15803D);
+        return const Color(0xFF22C55E);
       case CommandRiskLevel.warning:
-        return const Color(0xFFD97706);
+        return const Color(0xFFF59E0B);
       case CommandRiskLevel.dangerous:
-        return const Color(0xFFDC2626);
+        return const Color(0xFFEF4444);
     }
   }
 
-  bool _looksLikeDisconnect(String message) {
-    final normalized = message.toLowerCase();
-    const patterns = [
-      'not connected',
-      'connection reset',
-      'broken pipe',
-      'socketexception',
-      'connection closed',
-      'channel is not open',
-      'failed host handshake',
-    ];
-
-    return patterns.any(normalized.contains);
+  List<String> _extractCommands(String content) {
+    final regex = RegExp(
+      r'```(?:bash|sh|shell|linux|)\n([\s\S]*?)\n```',
+      multiLine: true,
+    );
+    return regex
+        .allMatches(content)
+        .map((m) => m.group(1)!.trim())
+        .where((cmd) => cmd.isNotEmpty)
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
+      backgroundColor: _backgroundColor,
       appBar: AppBar(
+        backgroundColor: _backgroundColor,
         title: const Text('AI Assistant'),
-        actions: [
-          IconButton(
-            onPressed: _history.isEmpty ? null : _clearHistory,
-            icon: const Icon(Icons.delete_sweep_outlined),
-            tooltip: 'Clear History',
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.secondaryContainer,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  widget.provider.label,
-                  style: TextStyle(
-                    color: theme.colorScheme.onSecondaryContainer,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
+        elevation: 0,
+      ),
+      drawer: _buildDrawer(),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              itemCount: _messages.length + (_isLoading ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == _messages.length) return _buildTypingIndicator();
+                return _buildMessageBubble(index);
+              },
             ),
           ),
+          _buildInputArea(),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (!_canExecuteCommands)
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFEE2E2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'SSH is disconnected. You can still generate suggestions, but reconnect before running commands.',
-                ),
-              ),
-            TextField(
-              controller: _promptController,
-              minLines: 1,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Ask anything about your server',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _isGenerating ? null : _generateCommands,
-              child: _isGenerating
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Generate Fix'),
-            ),
-            const SizedBox(height: 12),
-            Text(_status, style: theme.textTheme.bodyLarge),
-            const SizedBox(height: 16),
-            Expanded(
-              child: ListView(
-                children: [
-                  Text('Suggested Commands', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  if (_commandControllers.isEmpty)
-                    const Text('No suggestions yet.'),
-                  ...List.generate(_commandControllers.length, (index) {
-                    final controller = _commandControllers[index];
-                    final command = controller.text;
-                    final isRunning = _runningCommandIndex == index;
-                    final assessment = _riskAssessor.assess(command);
+    );
+  }
 
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              TextField(
-                                controller: controller,
-                                maxLines: null,
-                                onChanged: (_) {
-                                  setState(() {});
-                                },
-                                decoration: const InputDecoration(
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _riskColor(assessment.level)
-                                          .withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    child: Text(
-                                      _riskLabel(assessment.level),
-                                      style: TextStyle(
-                                        color: _riskColor(assessment.level),
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    assessment.explanation,
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: FilledButton(
-                                  onPressed: _isGenerating ||
-                                          isRunning ||
-                                          !_canExecuteCommands
-                                      ? null
-                                      : () => _runCommand(index),
-                                  child: isRunning
-                                      ? const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Text('Run'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  Text('Command Output', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(12),
+  Widget _buildDrawer() {
+    return Drawer(
+      backgroundColor: _backgroundColor,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: FilledButton.icon(
+                onPressed: _createNewChat,
+                icon: const Icon(Icons.add),
+                label: const Text('New Chat'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                  backgroundColor: _primaryColor,
+                ),
+              ),
+            ),
+            const Divider(color: Colors.white12),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _sessions.length,
+                itemBuilder: (context, index) {
+                  final session = _sessions[index];
+                  final isSelected = session['id'] == _currentSessionId;
+                  return ListTile(
+                    leading: Icon(
+                      Icons.chat_bubble_outline,
+                      color: isSelected ? _primaryColor : _mutedColor,
+                      size: 20,
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: SelectableText(
-                        _combinedOutput,
-                        style: const TextStyle(
-                          color: Color(0xFFE2E8F0),
-                          fontFamily: 'monospace',
-                        ),
+                    title: Text(
+                      session['title'] ?? 'Untitled Chat',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : _mutedColor,
+                        fontSize: 14,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Recent Commands', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 12),
-                  if (_history.isEmpty)
-                    const Text('No command history yet.'),
-                  ..._history.map((entry) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                entry.command,
-                                style: const TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                '${entry.succeeded ? 'Success' : 'Failed'} • ${_formatTimestamp(entry.executedAt)}',
-                                style: theme.textTheme.bodySmall,
-                              ),
-                              const SizedBox(height: 8),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: OutlinedButton(
-                                  onPressed: _isGenerating || !_canExecuteCommands
-                                      ? null
-                                      : () => _rerunCommand(entry.command),
-                                  child: const Text('Re-run'),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
-                ],
+                    selected: isSelected,
+                    trailing:
+                        isSelected
+                            ? null
+                            : IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 18),
+                              onPressed: () => _deleteSession(session['id']!),
+                            ),
+                    onTap: () {
+                      _loadSession(session['id']!);
+                      Navigator.pop(context);
+                    },
+                  );
+                },
               ),
             ),
           ],
@@ -650,18 +516,328 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       ),
     );
   }
-}
 
-class _ExecutionHistoryEntry {
-  const _ExecutionHistoryEntry({
-    required this.command,
-    required this.output,
-    required this.executedAt,
-    required this.succeeded,
-  });
+  Widget _buildMessageBubble(int index) {
+    final msg = _messages[index];
+    final isUser = msg['role'] == 'user';
+    final isSystem = msg['role'] == 'system';
 
-  final String command;
-  final String output;
-  final DateTime executedAt;
-  final bool succeeded;
+    if (isSystem) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Text(
+            msg['content'],
+            style: const TextStyle(
+              color: _dangerColor,
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final commands = isUser ? <String>[] : _extractCommands(msg['content']);
+    final timestamp = DateTime.parse(
+      msg['timestamp'] ?? DateTime.now().toIso8601String(),
+    );
+    final timeStr =
+        '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          if (!isUser) _buildAvatar(false),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Column(
+              crossAxisAlignment:
+                  isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isUser ? _primaryColor : _surfaceColor,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(16),
+                      topRight: const Radius.circular(16),
+                      bottomLeft: Radius.circular(isUser ? 16 : 0),
+                      bottomRight: Radius.circular(isUser ? 0 : 16),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      MarkdownBody(
+                        data: msg['content'],
+                        selectable: true,
+                        styleSheet: MarkdownStyleSheet(
+                          p: const TextStyle(
+                            color: Colors.white,
+                            height: 1.5,
+                            fontSize: 14,
+                          ),
+                          code: const TextStyle(
+                            backgroundColor: Colors.black26,
+                            fontFamily: 'monospace',
+                            fontSize: 13,
+                          ),
+                          codeblockDecoration: BoxDecoration(
+                            color: Colors.black38,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        timeStr,
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (commands.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  ...commands.map((cmd) => _buildCommandCard(index, cmd)),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (isUser) _buildAvatar(true),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvatar(bool isUser) {
+    return Container(
+      width: 32,
+      height: 32,
+      decoration: BoxDecoration(
+        color: isUser ? _surfaceColor : _primaryColor.withOpacity(0.2),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        isUser ? Icons.person_outline : Icons.smart_toy_outlined,
+        color: isUser ? _mutedColor : _primaryColor,
+        size: 18,
+      ),
+    );
+  }
+
+  Widget _buildCommandCard(int msgIndex, String command) {
+    final output = _messages[msgIndex]['outputs']?[command];
+    final assessment = _riskAssessor.assess(command);
+    final color = _riskColor(assessment.level);
+    final isError = output?.startsWith('Error:') ?? false;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.black26,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.terminal, color: _primaryColor, size: 14),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Suggested Command',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    if (output == null)
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(
+                          Icons.play_arrow,
+                          color: _primaryColor,
+                          size: 20,
+                        ),
+                        onPressed: () => _runCommand(msgIndex, command),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  command,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                ),
+                if (output == null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.shield_outlined, color: color, size: 12),
+                      const SizedBox(width: 4),
+                      Text(
+                        _riskLabel(assessment.level),
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (output != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(12),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Result:',
+                        style: TextStyle(
+                          color: _mutedColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (isError)
+                        TextButton.icon(
+                          onPressed: () => _reportAndAnalyzeError(cmd, output),
+                          icon: const Icon(
+                            Icons.analytics_outlined,
+                            size: 14,
+                          ),
+                          label: const Text(
+                            'Report & Analyze',
+                            style: TextStyle(fontSize: 10),
+                          ),
+                          style: TextButton.styleFrom(
+                            foregroundColor: _primaryColor,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    output,
+                    style: const TextStyle(
+                      color: Color(0xFFE2E8F0),
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+        color: _backgroundColor,
+        border: Border(top: BorderSide(color: Colors.white10)),
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _inputController,
+                onSubmitted: (_) => _sendMessage(),
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Ask your assistant...',
+                  hintStyle: const TextStyle(color: _mutedColor),
+                  filled: true,
+                  fillColor: _surfaceColor,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            IconButton.filled(
+              onPressed: _isLoading ? null : _sendMessage,
+              icon:
+                  _isLoading
+                      ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(Colors.white),
+                        ),
+                      )
+                      : const Icon(Icons.arrow_upward),
+              style: IconButton.styleFrom(backgroundColor: _primaryColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTypingIndicator() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 24, left: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: _surfaceColor,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Text(
+          '...',
+          style: TextStyle(color: _mutedColor, fontWeight: FontWeight.bold),
+        ),
+      ),
+    );
+  }
 }

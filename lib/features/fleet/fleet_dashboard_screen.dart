@@ -34,10 +34,33 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
   bool _isExecutingBulkCommand = false;
   Map<String, String> _bulkCommandResults = {};
 
+  bool _isSearching = false;
+  String _searchQuery = '';
+  late final TextEditingController _searchController;
+
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
     _loadFleet();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<ServerProfile> get _filteredServers {
+    if (_searchQuery.isEmpty) {
+      return _servers;
+    }
+    final query = _searchQuery.toLowerCase();
+    return _servers.where((server) {
+      return server.name.toLowerCase().contains(query) ||
+          server.host.toLowerCase().contains(query) ||
+          server.username.toLowerCase().contains(query);
+    }).toList();
   }
 
   void _showBulkActionDialog() {
@@ -229,6 +252,23 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
     return _dangerColor;
   }
 
+  void _startSearch() {
+    ModalRoute.of(context)?.addLocalHistoryEntry(
+      LocalHistoryEntry(
+        onRemove: () {
+          setState(() {
+            _isSearching = false;
+            _searchQuery = '';
+            _searchController.clear();
+          });
+        },
+      ),
+    );
+    setState(() {
+      _isSearching = true;
+    });
+  }
+
   Widget _buildSummaryCard(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(18),
@@ -315,6 +355,7 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
   }
 
   Widget _buildGrid(ThemeData theme) {
+    final filteredServers = _filteredServers;
     return LayoutBuilder(
       builder: (context, constraints) {
         final crossAxisCount = _crossAxisCount(constraints.maxWidth);
@@ -331,26 +372,37 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
                   child: _buildSummaryCard(theme),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverGrid(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    final server = _servers[index];
-                    final metrics = _metricsByServerId[server.id];
-                    return _FleetMetricsCard(
-                      server: server,
-                      metrics: metrics,
-                      metricColorBuilder: _metricColor,
-                    );
-                  }, childCount: _servers.length),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: crossAxisCount,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 16,
-                    mainAxisExtent: 286,
+              if (filteredServers.isEmpty && _isSearching)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      'No servers match your search.',
+                      style: TextStyle(color: _mutedColor),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.all(16),
+                  sliver: SliverGrid(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final server = filteredServers[index];
+                      final metrics = _metricsByServerId[server.id];
+                      return _FleetMetricsCard(
+                        server: server,
+                        metrics: metrics,
+                        metricColorBuilder: _metricColor,
+                      );
+                    }, childCount: filteredServers.length),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      mainAxisExtent: 286,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         );
@@ -366,20 +418,58 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
       backgroundColor: _backgroundColor,
       appBar: AppBar(
         backgroundColor: _backgroundColor,
-        title: const Text('Fleet Metrics'),
+        title:
+            _isSearching
+                ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: 'Search fleet...',
+                    border: InputBorder.none,
+                    hintStyle: TextStyle(color: _mutedColor),
+                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                    });
+                  },
+                )
+                : const Text('Fleet Metrics'),
         actions: [
-          IconButton(
-            onPressed: _isRefreshing ? null : _refreshFleet,
-            icon:
-                _isRefreshing
-                    ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                    : const Icon(Icons.refresh_rounded),
-            tooltip: 'Refresh',
-          ),
+          if (_isSearching)
+            IconButton(
+              onPressed: () {
+                if (_searchController.text.isEmpty) {
+                  Navigator.of(context).pop();
+                } else {
+                  _searchController.clear();
+                  setState(() {
+                    _searchQuery = '';
+                  });
+                }
+              },
+              icon: const Icon(Icons.clear),
+            )
+          else ...[
+            IconButton(
+              onPressed: _startSearch,
+              icon: const Icon(Icons.search),
+              tooltip: 'Search',
+            ),
+            IconButton(
+              onPressed: _isRefreshing ? null : _refreshFleet,
+              icon:
+                  _isRefreshing
+                      ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : const Icon(Icons.refresh_rounded),
+              tooltip: 'Refresh',
+            ),
+          ],
         ],
       ),
       body:

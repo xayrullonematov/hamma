@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:pinenacl/ed25519.dart' as ed25519;
 import 'package:pointycastle/export.dart' as pc;
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../background/background_keepalive.dart';
 import '../storage/trusted_host_key_storage.dart';
@@ -57,6 +58,14 @@ class SshService {
     })?
     onTrustHostKey,
   }) async {
+    Sentry.addBreadcrumb(
+      Breadcrumb(
+        message: 'Connecting to SSH host',
+        category: 'ssh',
+        data: {'host': host, 'port': port, 'username': username},
+      ),
+    );
+
     await disconnect();
 
     _lastHost = host;
@@ -67,98 +76,103 @@ class SshService {
     _lastPrivateKeyPassword = privateKeyPassword;
     _lastOnTrustHostKey = onTrustHostKey;
 
-    final trustedHostKey = await _trustedHostKeyStorage.loadTrustedHostKey(
-      host: host,
-      port: port,
-    );
-
-    List<SSHKeyPair>? identities;
-    if (privateKey != null && privateKey.isNotEmpty) {
-      try {
-        identities = SSHKeyPair.fromPem(privateKey, privateKeyPassword);
-      } catch (e) {
-        throw Exception('Invalid SSH private key or passphrase: $e');
-      }
-    }
-
-    final socket = await SSHSocket.connect(
-      host,
-      port,
-      timeout: const Duration(seconds: 15),
-    );
-
-    final client = SSHClient(
-      socket,
-      username: username,
-      identities: identities,
-      onPasswordRequest: () => password.isNotEmpty ? password : null,
-      onVerifyHostKey: (algorithm, fingerprintBytes) async {
-        final fingerprint = _formatFingerprint(fingerprintBytes);
-
-        if (trustedHostKey == null) {
-          if (onTrustHostKey == null) {
-            throw SshUnknownHostKeyException(
-              host: host,
-              port: port,
-              algorithm: algorithm,
-              fingerprint: fingerprint,
-            );
-          }
-
-          final accepted = await onTrustHostKey(
-            host: host,
-            port: port,
-            algorithm: algorithm,
-            fingerprint: fingerprint,
-          );
-          if (!accepted) {
-            throw SshUnknownHostKeyRejectedException(
-              host: host,
-              port: port,
-              algorithm: algorithm,
-              fingerprint: fingerprint,
-            );
-          }
-
-          await _trustedHostKeyStorage.saveTrustedHostKey(
-            host: host,
-            port: port,
-            record: TrustedHostKeyRecord(
-              algorithm: algorithm,
-              fingerprint: fingerprint,
-            ),
-          );
-          return true;
-        }
-
-        final isTrustedFingerprint =
-            trustedHostKey.fingerprint == fingerprint &&
-            trustedHostKey.algorithm == algorithm;
-        if (isTrustedFingerprint) {
-          return true;
-        }
-
-        throw SshHostKeyMismatchException(
-          host: host,
-          port: port,
-          expectedAlgorithm: trustedHostKey.algorithm,
-          expectedFingerprint: trustedHostKey.fingerprint,
-          actualAlgorithm: algorithm,
-          actualFingerprint: fingerprint,
-        );
-      },
-    );
-
-    await client.authenticated;
     try {
-      await BackgroundKeepalive.enable();
-    } catch (_) {
-      client.close();
+      final trustedHostKey = await _trustedHostKeyStorage.loadTrustedHostKey(
+        host: host,
+        port: port,
+      );
+
+      List<SSHKeyPair>? identities;
+      if (privateKey != null && privateKey.isNotEmpty) {
+        try {
+          identities = SSHKeyPair.fromPem(privateKey, privateKeyPassword);
+        } catch (e) {
+          throw Exception('Invalid SSH private key or passphrase: $e');
+        }
+      }
+
+      final socket = await SSHSocket.connect(
+        host,
+        port,
+        timeout: const Duration(seconds: 15),
+      );
+
+      final client = SSHClient(
+        socket,
+        username: username,
+        identities: identities,
+        onPasswordRequest: () => password.isNotEmpty ? password : null,
+        onVerifyHostKey: (algorithm, fingerprintBytes) async {
+          final fingerprint = _formatFingerprint(fingerprintBytes);
+
+          if (trustedHostKey == null) {
+            if (onTrustHostKey == null) {
+              throw SshUnknownHostKeyException(
+                host: host,
+                port: port,
+                algorithm: algorithm,
+                fingerprint: fingerprint,
+              );
+            }
+
+            final accepted = await onTrustHostKey(
+              host: host,
+              port: port,
+              algorithm: algorithm,
+              fingerprint: fingerprint,
+            );
+            if (!accepted) {
+              throw SshUnknownHostKeyRejectedException(
+                host: host,
+                port: port,
+                algorithm: algorithm,
+                fingerprint: fingerprint,
+              );
+            }
+
+            await _trustedHostKeyStorage.saveTrustedHostKey(
+              host: host,
+              port: port,
+              record: TrustedHostKeyRecord(
+                algorithm: algorithm,
+                fingerprint: fingerprint,
+              ),
+            );
+            return true;
+          }
+
+          final isTrustedFingerprint =
+              trustedHostKey.fingerprint == fingerprint &&
+              trustedHostKey.algorithm == algorithm;
+          if (isTrustedFingerprint) {
+            return true;
+          }
+
+          throw SshHostKeyMismatchException(
+            host: host,
+            port: port,
+            expectedAlgorithm: trustedHostKey.algorithm,
+            expectedFingerprint: trustedHostKey.fingerprint,
+            actualAlgorithm: algorithm,
+            actualFingerprint: fingerprint,
+          );
+        },
+      );
+
+      await client.authenticated;
+      try {
+        await BackgroundKeepalive.enable();
+      } catch (_) {
+        client.close();
+        rethrow;
+      }
+      _client = client;
+      _startHeartbeat();
+      _connectionStateController.add(true);
+    } catch (e, stackTrace) {
+      Sentry.captureException(e, stackTrace: stackTrace);
       rethrow;
     }
-    _client = client;
-    _startHeartbeat();
-    _connectionStateController.add(true);
   }
 
   Future<void> reconnect() async {
@@ -204,14 +218,23 @@ class SshService {
       throw StateError('SSH client is not connected.');
     }
 
+    Sentry.addBreadcrumb(
+      Breadcrumb(
+        message: 'Executing SSH command',
+        category: 'ssh',
+        data: {'command': command},
+      ),
+    );
+
     try {
       final output = await client.run(command);
       return utf8.decode(output);
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {
         _handleDisconnect();
         await disconnect();
       }
+      Sentry.captureException(error, stackTrace: stackTrace);
       rethrow;
     }
   }
@@ -224,11 +247,12 @@ class SshService {
 
     try {
       return await client.execute(command);
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {
         _handleDisconnect();
         await disconnect();
       }
+      Sentry.captureException(error, stackTrace: stackTrace);
       rethrow;
     }
   }
@@ -243,11 +267,12 @@ class SshService {
       return client.shell(
         pty: SSHPtyConfig(type: 'xterm-256color', width: width, height: height),
       );
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {
         _handleDisconnect();
         await disconnect();
       }
+      Sentry.captureException(error, stackTrace: stackTrace);
       rethrow;
     }
   }
