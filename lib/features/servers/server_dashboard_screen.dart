@@ -697,85 +697,351 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              decoration: _sectionDecoration(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1200),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  decoration: _sectionDecoration(),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: _connectionBadgeColor().withValues(
-                            alpha: 0.14,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              color: _connectionBadgeColor().withValues(
+                                alpha: 0.14,
+                              ),
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Icon(
+                              _connectionBadgeIcon(),
+                              color: _connectionBadgeColor(),
+                            ),
                           ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _server.name,
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${_server.username}@${_server.host}:${_server.port}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: _mutedColor,
+                                    fontFamily: 'monospace',
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: _connectionBadgeColor().withValues(
+                                alpha: 0.14,
+                              ),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: _connectionBadgeColor(),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _connectionBadgeLabel(),
+                                  style: TextStyle(
+                                    color: _connectionBadgeColor(),
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: _panelColor,
                           borderRadius: BorderRadius.circular(18),
                         ),
-                        child: Icon(
-                          _connectionBadgeIcon(),
-                          color: _connectionBadgeColor(),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _server.name,
-                              style: theme.textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '${_server.username}@${_server.host}:${_server.port}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: _mutedColor,
-                                fontFamily: 'monospace',
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _connectionBadgeColor().withValues(
-                            alpha: 0.14,
+                        child: Text(
+                          _displayStatus(),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.white,
                           ),
-                          borderRadius: BorderRadius.circular(999),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                      ),
+                      const SizedBox(height: 14),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed:
+                              _isBusy || !_sshService.isConnected
+                                  ? null
+                                  : _runConnectionTest,
+                          icon: const Icon(Icons.verified_outlined),
+                          label: const Text('Connection Test'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: _sectionDecoration(),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Main Actions', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 14),
+                      GridView(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 400,
+                          mainAxisExtent: 48,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                          childAspectRatio: 4,
+                        ),
+                        children: [
+                          FilledButton.icon(
+                            onPressed: _isBusy ? null : _connect,
+                            icon: const Icon(Icons.power_settings_new_rounded),
+                            label: Text(connectButtonLabel),
+                          ),
+                          FilledButton.icon(
+                            onPressed:
+                                _isBusy || !_sshService.isConnected
+                                    ? null
+                                    : _openTerminal,
+                            icon: const Icon(Icons.terminal_rounded),
+                            label: const Text('Open Terminal'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _isBusy ? null : _openCopilot,
+                            icon: const Icon(Icons.smart_toy_outlined),
+                            label: const Text('AI Assistant'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _isBusy ? null : _openFileExplorer,
+                            icon: const Icon(Icons.folder_open_outlined),
+                            label: const Text('File Explorer'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed:
+                                _isBusy || !_sshService.isConnected
+                                    ? null
+                                    : _openPortForwarding,
+                            icon: const Icon(Icons.router_outlined),
+                            label: const Text('Port Forwarding'),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: _isBusy ? null : _openSettings,
+                            icon: const Icon(Icons.settings_outlined),
+                            label: const Text('Settings'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: _sectionDecoration(),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Management', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 16),
+                      GridView(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 200,
+                          mainAxisExtent: 100,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        children: [
+                          _ManagementTile(
+                            icon: Icons.settings_input_component_outlined,
+                            label: 'Services',
+                            onTap: _sshService.isConnected ? _openServiceManagement : null,
+                          ),
+                          _ManagementTile(
+                            icon: Icons.memory_outlined,
+                            label: 'Processes',
+                            onTap: _sshService.isConnected ? _openProcessManager : null,
+                          ),
+                          _ManagementTile(
+                            icon: Icons.directions_boat_outlined,
+                            label: 'Docker',
+                            onTap: _sshService.isConnected ? _openDockerManager : null,
+                          ),
+                          _ManagementTile(
+                            icon: Icons.list_alt_rounded,
+                            label: 'Logs',
+                            onTap: _sshService.isConnected ? _openLogViewer : null,
+                          ),
+                          _ManagementTile(
+                            icon: Icons.system_update_alt_rounded,
+                            label: 'Packages',
+                            onTap: _sshService.isConnected ? _openPackageManager : null,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: _sectionDecoration(),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text('Quick Actions', style: theme.textTheme.titleMedium),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: _isBusy ? null : _openCustomActions,
+                            icon: const Icon(Icons.edit_note_rounded),
+                            tooltip: 'Manage custom actions',
+                          ),
+                          Text(
+                            _sshService.isConnected ? 'Live SSH' : 'Disconnected',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: _mutedColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _allQuickActions.length,
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 400,
+                              mainAxisExtent: 140,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                            ),
+                        itemBuilder: (context, index) {
+                          final action = _allQuickActions[index];
+                          final isRunning = _activeQuickActionId == action.id;
+                          final isEnabled = !_isBusy && _sshService.isConnected;
+
+                          return _QuickActionTile(
+                            label: action.label,
+                            command: action.command,
+                            icon: _quickActionIcon(action.id),
+                            isRunning: isRunning,
+                            isEnabled: isEnabled,
+                            onTap: isEnabled ? () => _runQuickAction(action) : null,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  decoration: _sectionDecoration(),
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quick Action Output',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: _terminalColor,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Column(
                           children: [
                             Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _connectionBadgeColor(),
-                                shape: BoxShape.circle,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF020617),
+                                borderRadius: BorderRadius.vertical(
+                                  top: Radius.circular(20),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const _TerminalDot(color: Color(0xFFEF4444)),
+                                  const SizedBox(width: 8),
+                                  const _TerminalDot(color: Color(0xFFF59E0B)),
+                                  const SizedBox(width: 8),
+                                  const _TerminalDot(color: Color(0xFF22C55E)),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'terminal-output',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: _mutedColor,
+                                      fontFamily: 'monospace',
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _connectionBadgeLabel(),
-                              style: TextStyle(
-                                color: _connectionBadgeColor(),
-                                fontWeight: FontWeight.w700,
+                            SizedBox(
+                              height: 280,
+                              child: Padding(
+                                padding: const EdgeInsets.all(14),
+                                child: SingleChildScrollView(
+                                  child: SelectableText(
+                                    _quickActionOutput,
+                                    style: const TextStyle(
+                                      color: Color(0xFFE2E8F0),
+                                      fontFamily: 'monospace',
+                                      height: 1.45,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -783,285 +1049,10 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: _panelColor,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Text(
-                      _displayStatus(),
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed:
-                          _isBusy || !_sshService.isConnected
-                              ? null
-                              : _runConnectionTest,
-                      icon: const Icon(Icons.verified_outlined),
-                      label: const Text('Connection Test'),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Container(
-              decoration: _sectionDecoration(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Main Actions', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _isBusy ? null : _connect,
-                          icon: const Icon(Icons.power_settings_new_rounded),
-                          label: Text(connectButtonLabel),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed:
-                              _isBusy || !_sshService.isConnected
-                                  ? null
-                                  : _openTerminal,
-                          icon: const Icon(Icons.terminal_rounded),
-                          label: const Text('Open Terminal'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isBusy ? null : _openCopilot,
-                          icon: const Icon(Icons.smart_toy_outlined),
-                          label: const Text('AI Assistant'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isBusy ? null : _openFileExplorer,
-                          icon: const Icon(Icons.folder_open_outlined),
-                          label: const Text('File Explorer'),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed:
-                              _isBusy || !_sshService.isConnected
-                                  ? null
-                                  : _openPortForwarding,
-                          icon: const Icon(Icons.router_outlined),
-                          label: const Text('Port Forwarding'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isBusy ? null : _openSettings,
-                          icon: const Icon(Icons.settings_outlined),
-                          label: const Text('Settings'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              decoration: _sectionDecoration(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Management', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 16),
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    childAspectRatio: 0.9,
-                    children: [
-                      _ManagementTile(
-                        icon: Icons.settings_input_component_outlined,
-                        label: 'Services',
-                        onTap: _sshService.isConnected ? _openServiceManagement : null,
-                      ),
-                      _ManagementTile(
-                        icon: Icons.memory_outlined,
-                        label: 'Processes',
-                        onTap: _sshService.isConnected ? _openProcessManager : null,
-                      ),
-                      _ManagementTile(
-                        icon: Icons.directions_boat_outlined,
-                        label: 'Docker',
-                        onTap: _sshService.isConnected ? _openDockerManager : null,
-                      ),
-                      _ManagementTile(
-                        icon: Icons.list_alt_rounded,
-                        label: 'Logs',
-                        onTap: _sshService.isConnected ? _openLogViewer : null,
-                      ),
-                      _ManagementTile(
-                        icon: Icons.system_update_alt_rounded,
-                        label: 'Packages',
-                        onTap: _sshService.isConnected ? _openPackageManager : null,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              decoration: _sectionDecoration(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text('Quick Actions', style: theme.textTheme.titleMedium),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: _isBusy ? null : _openCustomActions,
-                        icon: const Icon(Icons.edit_note_rounded),
-                        tooltip: 'Manage custom actions',
-                      ),
-                      Text(
-                        _sshService.isConnected ? 'Live SSH' : 'Disconnected',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: _mutedColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _allQuickActions.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          mainAxisSpacing: 12,
-                          crossAxisSpacing: 12,
-                          childAspectRatio: 1.24,
-                        ),
-                    itemBuilder: (context, index) {
-                      final action = _allQuickActions[index];
-                      final isRunning = _activeQuickActionId == action.id;
-                      final isEnabled = !_isBusy && _sshService.isConnected;
-
-                      return _QuickActionTile(
-                        label: action.label,
-                        command: action.command,
-                        icon: _quickActionIcon(action.id),
-                        isRunning: isRunning,
-                        isEnabled: isEnabled,
-                        onTap: isEnabled ? () => _runQuickAction(action) : null,
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              decoration: _sectionDecoration(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Quick Action Output',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: _terminalColor,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF020617),
-                            borderRadius: BorderRadius.vertical(
-                              top: Radius.circular(20),
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              const _TerminalDot(color: Color(0xFFEF4444)),
-                              const SizedBox(width: 8),
-                              const _TerminalDot(color: Color(0xFFF59E0B)),
-                              const SizedBox(width: 8),
-                              const _TerminalDot(color: Color(0xFF22C55E)),
-                              const SizedBox(width: 12),
-                              Text(
-                                'terminal-output',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: _mutedColor,
-                                  fontFamily: 'monospace',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        SizedBox(
-                          height: 280,
-                          child: Padding(
-                            padding: const EdgeInsets.all(14),
-                            child: SingleChildScrollView(
-                              child: SelectableText(
-                                _quickActionOutput,
-                                style: const TextStyle(
-                                  color: Color(0xFFE2E8F0),
-                                  fontFamily: 'monospace',
-                                  height: 1.45,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1103,6 +1094,8 @@ class _ManagementTile extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -1168,7 +1161,7 @@ class _QuickActionTile extends StatelessWidget {
                   const Spacer(),
                   Text(
                     label,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       color: Colors.white,
@@ -1178,7 +1171,7 @@ class _QuickActionTile extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                     command,
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: _ServerDashboardScreenState._mutedColor,

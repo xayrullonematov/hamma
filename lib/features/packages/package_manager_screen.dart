@@ -172,19 +172,24 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchUpgradable),
         ],
       ),
-      body: Column(
-        children: [
-          _buildHeader(),
-          _buildSearchBar(),
-          Expanded(
-            child: _isLoading 
-              ? const Center(child: CircularProgressIndicator())
-              : _searchResults.isNotEmpty 
-                ? _buildSearchResults()
-                : _buildUpgradableList(),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1400),
+          child: Column(
+            children: [
+              _buildHeader(),
+              _buildSearchBar(),
+              Expanded(
+                child: _isLoading 
+                  ? const Center(child: CircularProgressIndicator())
+                  : _searchResults.isNotEmpty 
+                    ? _buildSearchResults()
+                    : _buildUpgradableList(),
+              ),
+              _buildActionButtons(),
+            ],
           ),
-          _buildActionButtons(),
-        ],
+        ),
       ),
     );
   }
@@ -247,30 +252,54 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
         ],
       ));
     }
-    return ListView.builder(
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 450,
+        mainAxisExtent: 80,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
       itemCount: _upgradablePackages.length,
       itemBuilder: (context, index) {
         final pkg = _upgradablePackages[index];
-        return ListTile(
-          title: Text(pkg.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          subtitle: Text('${pkg.currentVersion} → ${pkg.newVersion}', style: const TextStyle(color: _mutedColor)),
-          trailing: const Icon(Icons.arrow_upward, color: Colors.green, size: 16),
+        return Card(
+          color: _surfaceColor,
+          child: Center(
+            child: ListTile(
+              title: Text(pkg.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: Text('${pkg.currentVersion} → ${pkg.newVersion}', style: const TextStyle(color: _mutedColor)),
+              trailing: const Icon(Icons.arrow_upward, color: Colors.green, size: 16),
+            ),
+          ),
         );
       },
     );
   }
 
   Widget _buildSearchResults() {
-    return ListView.builder(
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 450,
+        mainAxisExtent: 80,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
       itemCount: _searchResults.length,
       itemBuilder: (context, index) {
         final pkg = _searchResults[index];
-        return ListTile(
-          title: Text(pkg.name, style: const TextStyle(color: Colors.white)),
-          subtitle: Text(pkg.description, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _mutedColor)),
-          trailing: IconButton(
-            icon: const Icon(Icons.download, color: _primaryColor),
-            onPressed: () => _showStreamConsole('Installing ${pkg.name}...', 'sudo -S $_packageManager install -y ${pkg.name}', onDone: _fetchUpgradable),
+        return Card(
+          color: _surfaceColor,
+          child: Center(
+            child: ListTile(
+              title: Text(pkg.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white)),
+              subtitle: Text(pkg.description, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _mutedColor)),
+              trailing: IconButton(
+                icon: const Icon(Icons.download, color: _primaryColor),
+                onPressed: () => _showStreamConsole('Installing ${pkg.name}...', 'sudo -S $_packageManager install -y ${pkg.name}', onDone: _fetchUpgradable),
+              ),
+            ),
           ),
         );
       },
@@ -281,16 +310,21 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       color: _surfaceColor,
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton(onPressed: _updateLists, child: const Text('Update Lists')),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(onPressed: _updateLists, child: const Text('Update Lists')),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(onPressed: _upgradablePackages.isEmpty ? null : _upgradeAll, child: const Text('Upgrade All')),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: FilledButton(onPressed: _upgradablePackages.isEmpty ? null : _upgradeAll, child: const Text('Upgrade All')),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -384,40 +418,45 @@ class _StreamConsoleState extends State<_StreamConsole> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      height: MediaQuery.of(context).size.height * 0.8,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 16),
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
-              child: ListView.builder(
-                controller: _scrollController,
-                itemCount: _output.length,
-                itemBuilder: (context, index) {
-                  final line = _output[index];
-                  return Text(
-                    line.text, 
-                    style: TextStyle(
-                      color: line.isError ? const Color(0xFFEF4444) : const Color(0xFFE2E8F0), 
-                      fontFamily: 'monospace', 
-                      fontSize: 12,
-                    ),
-                  );
-                },
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 900),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          height: MediaQuery.of(context).size.height * 0.8,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(widget.title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
+                  child: ListView.builder(
+                    controller: _scrollController,
+                    itemCount: _output.length,
+                    itemBuilder: (context, index) {
+                      final line = _output[index];
+                      return Text(
+                        line.text, 
+                        style: TextStyle(
+                          color: line.isError ? const Color(0xFFEF4444) : const Color(0xFFE2E8F0), 
+                          fontFamily: 'monospace', 
+                          fontSize: 12,
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(height: 16),
+              if (_isDone)
+                SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))),
+            ],
           ),
-          const SizedBox(height: 16),
-          if (_isDone)
-            SizedBox(width: double.infinity, child: FilledButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))),
-        ],
+        ),
       ),
     );
   }

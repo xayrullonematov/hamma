@@ -404,82 +404,94 @@ class _ServerListScreenState extends State<ServerListScreen> {
                   ),
                 ),
               )
-              : CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _isSearching
-                                      ? 'Search Results'
-                                      : 'Server Dashboard',
-                                  style: theme.textTheme.headlineSmall,
+              : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1400),
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _isSearching
+                                          ? 'Search Results'
+                                          : 'Server Dashboard',
+                                      style: theme.textTheme.headlineSmall,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _isSearching
+                                          ? 'Showing results for "$_searchQuery"'
+                                          : 'Direct SSH access to your saved infrastructure.',
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  _isSearching
-                                      ? 'Showing results for "$_searchQuery"'
-                                      : 'Direct SSH access to your saved infrastructure.',
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF162033),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Text(
-                              '${filteredServers.length} ${_isSearching ? 'found' : 'saved'}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
                               ),
-                            ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF162033),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Text(
+                                  '${filteredServers.length} ${_isSearching ? 'found' : 'saved'}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (filteredServers.isEmpty && _isSearching)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: Text(
-                          'No servers match your search.',
-                          style: TextStyle(color: _subtitleColor),
                         ),
                       ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                      sliver: SliverList.separated(
-                        itemCount: filteredServers.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 14),
-                        itemBuilder: (context, index) {
-                          final server = filteredServers[index];
-                          return _ServerDashboardCard(
-                            server: server,
-                            onOpen: () => _openServer(server),
-                            onEdit: () => _editServer(server),
-                            onDelete: () => _deleteServer(server),
-                          );
-                        },
-                      ),
-                    ),
-                ],
+                      if (filteredServers.isEmpty && _isSearching)
+                        const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(
+                            child: Text(
+                              'No servers match your search.',
+                              style: TextStyle(color: _subtitleColor),
+                            ),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          sliver: SliverGrid(
+                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 450,
+                              mainAxisExtent: 180,
+                              mainAxisSpacing: 16,
+                              crossAxisSpacing: 16,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final server = filteredServers[index];
+                                return _ServerDashboardCard(
+                                  server: server,
+                                  onOpen: () => _openServer(server),
+                                  onEdit: () => _editServer(server),
+                                  onDelete: () => _deleteServer(server),
+                                );
+                              },
+                              childCount: filteredServers.length,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addServer,
@@ -567,7 +579,7 @@ class _ServerDashboardCard extends StatelessWidget {
                           fontSize: 13,
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const Spacer(),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
@@ -594,7 +606,8 @@ class _ServerDashboardCard extends StatelessWidget {
                   children: [
                     IconButton(
                       onPressed: onEdit,
-                      icon: const Icon(Icons.edit_outlined),
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      visualDensity: VisualDensity.compact,
                       style: IconButton.styleFrom(
                         backgroundColor: const Color(0xFF162033),
                         foregroundColor: Colors.white,
@@ -603,7 +616,8 @@ class _ServerDashboardCard extends StatelessWidget {
                     const SizedBox(height: 10),
                     IconButton(
                       onPressed: onDelete,
-                      icon: const Icon(Icons.delete_outline),
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      visualDensity: VisualDensity.compact,
                       style: IconButton.styleFrom(
                         backgroundColor: const Color(0xFF162033),
                         foregroundColor: const Color(0xFFFCA5A5),

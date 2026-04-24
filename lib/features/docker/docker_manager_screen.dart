@@ -140,18 +140,29 @@ class _DockerManagerScreenState extends State<DockerManagerScreen> {
                 )
               : _error != null && _containers.isEmpty
                   ? _buildEmptyState(Icons.error_outline, 'Error', _error!)
-                  : RefreshIndicator(
-                      onRefresh: _fetchContainers,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _containers.length,
-                        itemBuilder: (context, index) {
-                          return _ContainerCard(
-                            container: _containers[index],
-                            onAction: (action) => _runAction(_containers[index].id, action),
-                            onShowLogs: () => _showLogs(_containers[index]),
-                          );
-                        },
+                  : Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1400),
+                        child: RefreshIndicator(
+                          onRefresh: _fetchContainers,
+                          child: GridView.builder(
+                            padding: const EdgeInsets.all(16),
+                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 400,
+                              mainAxisExtent: 180,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                            ),
+                            itemCount: _containers.length,
+                            itemBuilder: (context, index) {
+                              return _ContainerCard(
+                                container: _containers[index],
+                                onAction: (action) => _runAction(_containers[index].id, action),
+                                onShowLogs: () => _showLogs(_containers[index]),
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     ),
     );
@@ -246,7 +257,6 @@ class _ContainerCard extends StatelessWidget {
     final stateColor = _getStateColor();
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: const Color(0xFF1E293B),
         borderRadius: BorderRadius.circular(20),
@@ -269,6 +279,8 @@ class _ContainerCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     container.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                   ),
                 ),
@@ -278,9 +290,19 @@ class _ContainerCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 4),
-                Text(container.image, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+                Text(
+                  container.image,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                ),
                 const SizedBox(height: 2),
-                Text(container.status, style: TextStyle(color: stateColor.withValues(alpha: 0.8), fontSize: 12)),
+                Text(
+                  container.status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: stateColor.withValues(alpha: 0.8), fontSize: 12),
+                ),
               ],
             ),
             trailing: PopupMenuButton<String>(
@@ -294,6 +316,7 @@ class _ContainerCard extends StatelessWidget {
               ],
             ),
           ),
+          const Spacer(),
           const Divider(color: Colors.white10, height: 1),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

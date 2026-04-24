@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'core/ai/ai_provider.dart';
 import 'core/background/background_keepalive.dart';
@@ -18,6 +19,19 @@ const bool kProduction = true;
 void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+
+    // Initialize window manager for desktop
+    await windowManager.ensureInitialized();
+    const windowOptions = WindowOptions(
+      size: Size(1100, 750),
+      minimumSize: Size(800, 600),
+      center: true,
+      titleBarStyle: TitleBarStyle.hidden,
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
 
     // Initialize notifications
     final notifications = FlutterLocalNotificationsPlugin();
@@ -306,6 +320,38 @@ class _AiServerAppState extends State<AiServerApp> {
           bodySmall: TextStyle(color: _textMuted),
         ),
       ),
+      builder: (context, child) {
+        return Column(
+          children: [
+            Container(
+              height: 32,
+              color: const Color(0xFF0F172A),
+              child: const DragToMoveArea(
+                child: Row(
+                  children: [
+                    SizedBox(width: 12),
+                    Text(
+                      'Hamma',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: _textMuted,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    Expanded(
+                      child: WindowCaption(
+                        brightness: Brightness.dark,
+                        backgroundColor: Colors.transparent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(child: child!),
+          ],
+        );
+      },
       home: initialScreen,
     );
   }

@@ -256,199 +256,204 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
       appBar: AppBar(title: Text(_isEditing ? 'Edit Server' : 'Add Server')),
       body: SafeArea(
         top: false,
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
-            children: [
-              _FormSectionCard(
-                title: 'Server Details',
-                subtitle: 'Basic connection information for this host.',
-                icon: Icons.dns_outlined,
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: _fieldDecoration('Name'),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Enter a server name.';
-                        }
-                        return null;
-                      },
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
+                children: [
+                  _FormSectionCard(
+                    title: 'Server Details',
+                    subtitle: 'Basic connection information for this host.',
+                    icon: Icons.dns_outlined,
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _nameController,
+                          decoration: _fieldDecoration('Name'),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Enter a server name.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _hostController,
+                          decoration: _fieldDecoration('Host / IP'),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Enter a host or IP.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        TextFormField(
+                          controller: _portController,
+                          keyboardType: TextInputType.number,
+                          decoration: _fieldDecoration('Port'),
+                          validator: (value) {
+                            final port = int.tryParse(value?.trim() ?? '');
+                            if (port == null || port <= 0 || port > 65535) {
+                              return 'Enter a port between 1 and 65535.';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _hostController,
-                      decoration: _fieldDecoration('Host / IP'),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Enter a host or IP.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _portController,
-                      keyboardType: TextInputType.number,
-                      decoration: _fieldDecoration('Port'),
-                      validator: (value) {
-                        final port = int.tryParse(value?.trim() ?? '');
-                        if (port == null || port <= 0 || port > 65535) {
-                          return 'Enter a port between 1 and 65535.';
-                        }
-                        return null;
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              _FormSectionCard(
-                title: 'Authentication',
-                subtitle: 'Credentials used for direct SSH access.',
-                icon: Icons.lock_outline,
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _usernameController,
-                      decoration: _fieldDecoration('Username'),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Enter a username.';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: SegmentedButton<AuthMethod>(
-                        segments: const [
-                          ButtonSegment<AuthMethod>(
-                            value: AuthMethod.password,
-                            label: Text('Password'),
-                          ),
-                          ButtonSegment<AuthMethod>(
-                            value: AuthMethod.sshKey,
-                            label: Text('SSH Key'),
-                          ),
-                        ],
-                        selected: <AuthMethod>{_authMethod},
-                        showSelectedIcon: false,
-                        onSelectionChanged: (selection) {
-                          setState(() {
-                            _authMethod = selection.first;
-                          });
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    if (_authMethod == AuthMethod.password)
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: true,
-                        decoration: _fieldDecoration('Password'),
-                        validator: (value) {
-                          final password = value?.trim() ?? '';
-                          if (_authMethod == AuthMethod.password &&
-                              password.isEmpty) {
-                            return 'Enter a password.';
-                          }
-                          return null;
-                        },
-                      ),
-                    if (_authMethod == AuthMethod.sshKey) ...[
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Private Key (Optional)',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
+                  ),
+                  const SizedBox(height: 16),
+                  _FormSectionCard(
+                    title: 'Authentication',
+                    subtitle: 'Credentials used for direct SSH access.',
+                    icon: Icons.lock_outline,
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _usernameController,
+                          decoration: _fieldDecoration('Username'),
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Enter a username.';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: SegmentedButton<AuthMethod>(
+                            segments: const [
+                              ButtonSegment<AuthMethod>(
+                                value: AuthMethod.password,
+                                label: Text('Password'),
                               ),
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed: _showKeyGenerator,
-                            icon: const Icon(Icons.key, size: 18),
-                            label: const Text('Generate'),
-                          ),
-                          TextButton.icon(
-                            onPressed: _importPrivateKey,
-                            icon: const Icon(Icons.file_upload, size: 18),
-                            label: const Text('Import'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _ObscuredMultilineTextFormField(
-                        controller: _privateKeyController,
-                        decoration: InputDecoration(
-                          hintText: 'Paste or import a PEM private key.',
-                          alignLabelWithHint: true,
-                          suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                            valueListenable: _privateKeyController,
-                            builder: (context, value, _) {
-                              if (value.text.isEmpty) return const SizedBox();
-                              return IconButton(
-                                icon: const Icon(Icons.copy_all),
-                                tooltip: 'Copy Public Key',
-                                onPressed: _copyExistingPublicKey,
-                              );
+                              ButtonSegment<AuthMethod>(
+                                value: AuthMethod.sshKey,
+                                label: Text('SSH Key'),
+                              ),
+                            ],
+                            selected: <AuthMethod>{_authMethod},
+                            showSelectedIcon: false,
+                            onSelectionChanged: (selection) {
+                              setState(() {
+                                _authMethod = selection.first;
+                              });
                             },
                           ),
-                          contentPadding: const EdgeInsets.fromLTRB(
-                            12,
-                            16,
-                            12,
-                            16,
-                          ),
                         ),
-                        validator: (value) {
-                          final privateKey = value?.trim() ?? '';
-                          if (_authMethod == AuthMethod.sshKey &&
-                              privateKey.isEmpty) {
-                            return 'Add a private key.';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _privateKeyPasswordController,
-                        obscureText: true,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        decoration: _fieldDecoration(
-                          'Private Key Passphrase (Optional)',
-                        ).copyWith(hintText: 'Leave empty if none'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _save,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+                        const SizedBox(height: 16),
+                        if (_authMethod == AuthMethod.password)
+                          TextFormField(
+                            controller: _passwordController,
+                            obscureText: true,
+                            decoration: _fieldDecoration('Password'),
+                            validator: (value) {
+                              final password = value?.trim() ?? '';
+                              if (_authMethod == AuthMethod.password &&
+                                  password.isEmpty) {
+                                return 'Enter a password.';
+                              }
+                              return null;
+                            },
+                          ),
+                        if (_authMethod == AuthMethod.sshKey) ...[
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Private Key (Optional)',
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              TextButton.icon(
+                                onPressed: _showKeyGenerator,
+                                icon: const Icon(Icons.key, size: 18),
+                                label: const Text('Generate'),
+                              ),
+                              TextButton.icon(
+                                onPressed: _importPrivateKey,
+                                icon: const Icon(Icons.file_upload, size: 18),
+                                label: const Text('Import'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _ObscuredMultilineTextFormField(
+                            controller: _privateKeyController,
+                            decoration: InputDecoration(
+                              hintText: 'Paste or import a PEM private key.',
+                              alignLabelWithHint: true,
+                              suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: _privateKeyController,
+                                builder: (context, value, _) {
+                                  if (value.text.isEmpty) return const SizedBox();
+                                  return IconButton(
+                                    icon: const Icon(Icons.copy_all),
+                                    tooltip: 'Copy Public Key',
+                                    onPressed: _copyExistingPublicKey,
+                                  );
+                                },
+                              ),
+                              contentPadding: const EdgeInsets.fromLTRB(
+                                12,
+                                16,
+                                12,
+                                16,
+                              ),
+                            ),
+                            validator: (value) {
+                              final privateKey = value?.trim() ?? '';
+                              if (_authMethod == AuthMethod.sshKey &&
+                                  privateKey.isEmpty) {
+                                return 'Add a private key.';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _privateKeyPasswordController,
+                            obscureText: true,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            decoration: _fieldDecoration(
+                              'Private Key Passphrase (Optional)',
+                            ).copyWith(hintText: 'Leave empty if none'),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-                child: Text(_isEditing ? 'Save Changes' : 'Save Server'),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: _save,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: Text(_isEditing ? 'Save Changes' : 'Save Server'),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your saved server profile stays on this device.',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(color: _mutedColor),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Your saved server profile stays on this device.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(color: _mutedColor),
-              ),
-            ],
+            ),
           ),
         ),
       ),

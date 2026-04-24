@@ -657,341 +657,346 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
-          children: [
-            _SettingsSectionCard(
-              title: 'AI Configuration',
-              subtitle:
-                  'Choose your default AI provider and manage the saved keys used by the copilot.',
-              icon: Icons.smart_toy_outlined,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Theme(
-                    data: theme.copyWith(canvasColor: _panelColor),
-                    child: DropdownButtonFormField<AiProvider>(
-                      value: _selectedProvider,
-                      decoration: const InputDecoration(
-                        labelText: 'Default Provider',
-                      ),
-                      items:
-                          AiProvider.values.map((provider) {
-                            return DropdownMenuItem<AiProvider>(
-                              value: provider,
-                              child: Text(provider.label),
-                            );
-                          }).toList(),
-                      onChanged:
-                          _isBusy
-                              ? null
-                              : (provider) {
-                                if (provider == null) {
-                                  return;
-                                }
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 800),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
+              children: [
+                _SettingsSectionCard(
+                  title: 'AI Configuration',
+                  subtitle:
+                      'Choose your default AI provider and manage the saved keys used by the copilot.',
+                  icon: Icons.smart_toy_outlined,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Theme(
+                        data: theme.copyWith(canvasColor: _panelColor),
+                        child: DropdownButtonFormField<AiProvider>(
+                          value: _selectedProvider,
+                          decoration: const InputDecoration(
+                            labelText: 'Default Provider',
+                          ),
+                          items:
+                              AiProvider.values.map((provider) {
+                                return DropdownMenuItem<AiProvider>(
+                                  value: provider,
+                                  child: Text(provider.label),
+                                );
+                              }).toList(),
+                          onChanged:
+                              _isBusy
+                                  ? null
+                                  : (provider) {
+                                    if (provider == null) {
+                                      return;
+                                    }
 
-                                _handleProviderChanged(provider);
-                              },
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: _panelColor,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Text(
-                      _selectedProvider.helperText,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: _mutedColor,
-                        height: 1.45,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildApiKeyField(
-                    controller: _openAiApiKeyController,
-                    label: 'OpenAI Key',
-                    helperText: 'Leave blank to clear the saved OpenAI key.',
-                  ),
-                  const SizedBox(height: 16),
-                  _buildApiKeyField(
-                    controller: _geminiApiKeyController,
-                    label: 'Gemini Key',
-                    helperText: 'Leave blank to clear the saved Gemini key.',
-                  ),
-                  const SizedBox(height: 16),
-                  _buildApiKeyField(
-                    controller: _openRouterApiKeyController,
-                    label: 'OpenRouter Key',
-                    helperText:
-                        'Leave blank to clear the saved OpenRouter key.',
-                  ),
-                  if (_selectedProvider == AiProvider.openRouter) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: _panelColor,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Text(
-                        'OpenRouter requires a specific model selection. Saved model: ${_openRouterModel ?? 'Default'}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: _mutedColor,
-                          height: 1.45,
+                                    _handleProviderChanged(provider);
+                                  },
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildOpenRouterModelSelector(theme),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            _SettingsSectionCard(
-              title: 'Health Monitoring',
-              subtitle:
-                  'Monitor server health in the background and receive alerts for downtime or high resource usage.',
-              icon: Icons.health_and_safety_outlined,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SwitchListTile(
-                    title: const Text('Enable Background Monitoring'),
-                    subtitle: const Text(
-                      'Periodically check all saved servers.',
-                    ),
-                    value: _healthMonitoringEnabled,
-                    onChanged:
-                        _isBusy
-                            ? null
-                            : (value) {
-                              setState(() {
-                                _healthMonitoringEnabled = value;
-                              });
-                            },
-                    contentPadding: EdgeInsets.zero,
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: _panelColor,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Text(
+                          _selectedProvider.helperText,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: _mutedColor,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _buildApiKeyField(
+                        controller: _openAiApiKeyController,
+                        label: 'OpenAI Key',
+                        helperText: 'Leave blank to clear the saved OpenAI key.',
+                      ),
+                      const SizedBox(height: 16),
+                      _buildApiKeyField(
+                        controller: _geminiApiKeyController,
+                        label: 'Gemini Key',
+                        helperText: 'Leave blank to clear the saved Gemini key.',
+                      ),
+                      const SizedBox(height: 16),
+                      _buildApiKeyField(
+                        controller: _openRouterApiKeyController,
+                        label: 'OpenRouter Key',
+                        helperText:
+                            'Leave blank to clear the saved OpenRouter key.',
+                      ),
+                      if (_selectedProvider == AiProvider.openRouter) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: _panelColor,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Text(
+                            'OpenRouter requires a specific model selection. Saved model: ${_openRouterModel ?? 'Default'}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: _mutedColor,
+                              height: 1.45,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildOpenRouterModelSelector(theme),
+                      ],
+                    ],
                   ),
-                  if (_healthMonitoringEnabled) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Check Interval: $_healthCheckInterval minutes',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    Slider(
-                      value: _healthCheckInterval.toDouble(),
-                      min: 15,
-                      max: 120,
-                      divisions: 7,
-                      label: '$_healthCheckInterval min',
-                      onChanged:
-                          _isBusy
-                              ? null
-                              : (value) {
-                                setState(() {
-                                  _healthCheckInterval = value.toInt();
-                                });
-                              },
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton(
-              onPressed: _isBusy ? null : _save,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
                 ),
-              ),
-              child:
-                  _isSaving
-                      ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                      : const Text('Save'),
-            ),
-            if (_status.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                _status,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: _mutedColor,
-                  height: 1.4,
+                const SizedBox(height: 20),
+                _SettingsSectionCard(
+                  title: 'Health Monitoring',
+                  subtitle:
+                      'Monitor server health in the background and receive alerts for downtime or high resource usage.',
+                  icon: Icons.health_and_safety_outlined,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SwitchListTile(
+                        title: const Text('Enable Background Monitoring'),
+                        subtitle: const Text(
+                          'Periodically check all saved servers.',
+                        ),
+                        value: _healthMonitoringEnabled,
+                        onChanged:
+                            _isBusy
+                                ? null
+                                : (value) {
+                                  setState(() {
+                                    _healthMonitoringEnabled = value;
+                                  });
+                                },
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      if (_healthMonitoringEnabled) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Check Interval: $_healthCheckInterval minutes',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                        Slider(
+                          value: _healthCheckInterval.toDouble(),
+                          min: 15,
+                          max: 120,
+                          divisions: 7,
+                          label: '$_healthCheckInterval min',
+                          onChanged:
+                              _isBusy
+                                  ? null
+                                  : (value) {
+                                    setState(() {
+                                      _healthCheckInterval = value.toInt();
+                                    });
+                                  },
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-            const SizedBox(height: 20),
-            _SettingsSectionCard(
-              title: 'Security',
-              subtitle:
-                  'Protect local app access with a custom 4-digit PIN and optional biometric unlock.',
-              icon: Icons.lock_outline,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: _panelColor,
+                const SizedBox(height: 20),
+                FilledButton(
+                  onPressed: _isBusy ? null : _save,
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(18),
                     ),
-                    child: Text(
-                      _hasAppPin == null
-                          ? 'Checking app lock status...'
-                          : _hasAppPin!
-                          ? 'App lock is enabled. Remove the current PIN from this device.'
-                          : 'No app PIN is set. Add one to require PIN or biometric unlock on launch.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: _mutedColor,
-                        height: 1.45,
-                      ),
-                    ),
                   ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.tonalIcon(
-                      onPressed:
-                          _hasAppPin == null || _isBusy
-                              ? null
-                              : _openAppLockSettings,
-                      icon: Icon(
-                        _hasAppPin == true
-                            ? Icons.lock_open_outlined
-                            : Icons.pin_outlined,
-                      ),
-                      label: Text(
-                        _hasAppPin == true ? 'Remove App PIN' : 'Set App PIN',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            _SettingsSectionCard(
-              title: 'Backup & Restore',
-              subtitle:
-                  'Create an AES-256 encrypted backup file for saved servers and AI settings, then restore it locally later.',
-              icon: Icons.cloud_sync_outlined,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: _panelColor,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Text(
-                      'Your backup stays local. Export creates an encrypted file and opens the native share sheet so you can save it to cloud storage yourself.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: _mutedColor,
-                        height: 1.45,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.tonalIcon(
-                      onPressed: _isBusy ? null : _exportBackup,
-                      icon:
-                          _isExportingBackup
-                              ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Icon(Icons.upload_file_outlined),
-                      label: Text(
-                        _isExportingBackup
-                            ? 'Exporting Backup'
-                            : 'Export Backup',
-                      ),
-                    ),
-                  ),
+                  child:
+                      _isSaving
+                          ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : const Text('Save'),
+                ),
+                if (_status.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isBusy ? null : _importBackup,
-                      icon:
-                          _isImportingBackup
-                              ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                              : const Icon(Icons.download_outlined),
-                      label: Text(
-                        _isImportingBackup
-                            ? 'Importing Backup'
-                            : 'Import Backup',
+                  Text(
+                    _status,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: _mutedColor,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                _SettingsSectionCard(
+                  title: 'Security',
+                  subtitle:
+                      'Protect local app access with a custom 4-digit PIN and optional biometric unlock.',
+                  icon: Icons.lock_outline,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: _panelColor,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Text(
+                          _hasAppPin == null
+                              ? 'Checking app lock status...'
+                              : _hasAppPin!
+                              ? 'App lock is enabled. Remove the current PIN from this device.'
+                              : 'No app PIN is set. Add one to require PIN or biometric unlock on launch.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: _mutedColor,
+                            height: 1.45,
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed:
+                              _hasAppPin == null || _isBusy
+                                  ? null
+                                  : _openAppLockSettings,
+                          icon: Icon(
+                            _hasAppPin == true
+                                ? Icons.lock_open_outlined
+                                : Icons.pin_outlined,
+                          ),
+                          label: Text(
+                            _hasAppPin == true ? 'Remove App PIN' : 'Set App PIN',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            _SettingsSectionCard(
-              title: 'Support',
-              subtitle: 'Access the help center and documentation.',
-              icon: Icons.support_agent_outlined,
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.tonalIcon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const HelpCenterScreen()),
-                        );
-                      },
-                      icon: const Icon(Icons.help_center_outlined),
-                      label: const Text('Help Center'),
-                    ),
+                ),
+                const SizedBox(height: 20),
+                _SettingsSectionCard(
+                  title: 'Backup & Restore',
+                  subtitle:
+                      'Create an AES-256 encrypted backup file for saved servers and AI settings, then restore it locally later.',
+                  icon: Icons.cloud_sync_outlined,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: _panelColor,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Text(
+                          'Your backup stays local. Export creates an encrypted file and opens the native share sheet so you can save it to cloud storage yourself.',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: _mutedColor,
+                            height: 1.45,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: _isBusy ? null : _exportBackup,
+                          icon:
+                              _isExportingBackup
+                                  ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                  : const Icon(Icons.upload_file_outlined),
+                          label: Text(
+                            _isExportingBackup
+                                ? 'Exporting Backup'
+                                : 'Export Backup',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _isBusy ? null : _importBackup,
+                          icon:
+                              _isImportingBackup
+                                  ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                  : const Icon(Icons.download_outlined),
+                          label: Text(
+                            _isImportingBackup
+                                ? 'Importing Backup'
+                                : 'Import Backup',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isBusy ? null : _launchFeedbackEmail,
-                      icon: const Icon(Icons.mail_outline),
-                      label: const Text('Contact Support'),
-                    ),
+                ),
+                const SizedBox(height: 20),
+                _SettingsSectionCard(
+                  title: 'Support',
+                  subtitle: 'Access the help center and documentation.',
+                  icon: Icons.support_agent_outlined,
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const HelpCenterScreen()),
+                            );
+                          },
+                          icon: const Icon(Icons.help_center_outlined),
+                          label: const Text('Help Center'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _isBusy ? null : _launchFeedbackEmail,
+                          icon: const Icon(Icons.mail_outline),
+                          label: const Text('Contact Support'),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Hamma v1.0.0',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: _mutedColor,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            Text(
-              'Hamma v1.0.0',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: _mutedColor,
-                height: 1.4,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1052,40 +1057,50 @@ Monitor your entire infrastructure at once:
 
     return Scaffold(
       appBar: AppBar(title: const Text('Help Center')),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: topics.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final topic = topics[index];
-          return Card(
-            child: ListTile(
-              title: Text(topic['title']!),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => Scaffold(
-                      appBar: AppBar(title: Text(topic['title']!)),
-                      body: SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: MarkdownBody(
-                          data: topic['markdown']!,
-                          selectable: true,
-                          styleSheet: MarkdownStyleSheet(
-                            h1: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
-                            p: const TextStyle(color: Color(0xFFE2E8F0), height: 1.6, fontSize: 15),
-                            listBullet: const TextStyle(color: Color(0xFF3B82F6)),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: topics.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemBuilder: (context, index) {
+              final topic = topics[index];
+              return Card(
+                child: ListTile(
+                  title: Text(topic['title']!),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => Scaffold(
+                          appBar: AppBar(title: Text(topic['title']!)),
+                          body: Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 900),
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.all(16),
+                                child: MarkdownBody(
+                                  data: topic['markdown']!,
+                                  selectable: true,
+                                  styleSheet: MarkdownStyleSheet(
+                                    h1: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+                                    p: const TextStyle(color: Color(0xFFE2E8F0), height: 1.6, fontSize: 15),
+                                    listBullet: const TextStyle(color: Color(0xFF3B82F6)),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                );
-              },
-            ),
-          );
-        },
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

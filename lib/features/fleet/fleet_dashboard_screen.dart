@@ -193,19 +193,6 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
     }
   }
 
-  int _crossAxisCount(double width) {
-    if (width >= 1360) {
-      return 4;
-    }
-    if (width >= 1024) {
-      return 3;
-    }
-    if (width >= 720) {
-      return 2;
-    }
-    return 1;
-  }
-
   int get _onlineServerCount {
     return _metricsByServerId.values
         .where((metrics) => metrics.isAvailable)
@@ -356,11 +343,10 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
 
   Widget _buildGrid(ThemeData theme) {
     final filteredServers = _filteredServers;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final crossAxisCount = _crossAxisCount(constraints.maxWidth);
-
-        return RefreshIndicator(
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1600),
+        child: RefreshIndicator(
           onRefresh: _refreshFleet,
           color: _primaryColor,
           child: CustomScrollView(
@@ -395,8 +381,8 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
                         metricColorBuilder: _metricColor,
                       );
                     }, childCount: filteredServers.length),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 450,
                       mainAxisSpacing: 16,
                       crossAxisSpacing: 16,
                       mainAxisExtent: 286,
@@ -405,15 +391,13 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
                 ),
             ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: AppBar(
@@ -479,7 +463,7 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
               ? _buildErrorState()
               : _servers.isEmpty
               ? _buildEmptyState()
-              : _buildGrid(theme),
+              : _buildGrid(Theme.of(context)),
       floatingActionButton:
           _servers.isEmpty
               ? null
@@ -537,138 +521,142 @@ class _BulkResultsOverlayState extends State<_BulkResultsOverlay> {
     final results = widget.resultsProvider();
     final isExecuting = widget.isExecutingProvider();
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1E293B),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
-              ),
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 800),
+        child: DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.4,
+          maxChildSize: 0.95,
+          builder: (context, scrollController) => Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF1E293B),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  const Icon(Icons.bolt, color: Color(0xFF3B82F6)),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Bulk Command Results',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          widget.command,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: const Color(0xFF94A3B8),
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                      ],
-                    ),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  if (isExecuting)
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.separated(
-                controller: scrollController,
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                itemCount: widget.servers.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 16),
-                itemBuilder: (context, index) {
-                  final server = widget.servers[index];
-                  final result = results[server.id] ?? 'Pending...';
-                  final isError = result.startsWith('Error:');
-                  final isPending =
-                      result == 'Executing...' || result == 'Pending...';
-
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0F172A),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color:
-                            isError
-                                ? const Color(0xFFEF4444).withValues(alpha: 0.3)
-                                : isPending
-                                ? Colors.transparent
-                                : const Color(0xFF22C55E).withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bolt, color: Color(0xFF3B82F6)),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              server.name,
-                              style: const TextStyle(
+                              'Bulk Command Results',
+                              style: theme.textTheme.titleMedium?.copyWith(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const Spacer(),
-                            if (!isPending)
-                              Icon(
-                                isError
-                                    ? Icons.error_outline
-                                    : Icons.check_circle_outline,
-                                size: 16,
-                                color:
-                                    isError
-                                        ? const Color(0xFFEF4444)
-                                        : const Color(0xFF22C55E),
+                            Text(
+                              widget.command,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFF94A3B8),
+                                fontFamily: 'monospace',
                               ),
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          result,
-                          style: TextStyle(
+                      ),
+                      if (isExecuting)
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    controller: scrollController,
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    itemCount: widget.servers.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final server = widget.servers[index];
+                      final result = results[server.id] ?? 'Pending...';
+                      final isError = result.startsWith('Error:');
+                      final isPending =
+                          result == 'Executing...' || result == 'Pending...';
+
+                      return Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F172A),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
                             color:
-                                isPending ? const Color(0xFF94A3B8) : Colors.white,
-                            fontSize: 13,
-                            fontFamily: 'monospace',
+                                isError
+                                    ? const Color(0xFFEF4444).withValues(alpha: 0.3)
+                                    : isPending
+                                    ? Colors.transparent
+                                    : const Color(0xFF22C55E).withValues(alpha: 0.3),
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  server.name,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const Spacer(),
+                                if (!isPending)
+                                  Icon(
+                                    isError
+                                        ? Icons.error_outline
+                                        : Icons.check_circle_outline,
+                                    size: 16,
+                                    color:
+                                        isError
+                                            ? const Color(0xFFEF4444)
+                                            : const Color(0xFF22C55E),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              result,
+                              style: TextStyle(
+                                color:
+                                    isPending ? const Color(0xFF94A3B8) : Colors.white,
+                                fontSize: 13,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
-
 
 class _FleetMetricsCard extends StatelessWidget {
   const _FleetMetricsCard({
@@ -763,28 +751,30 @@ class _FleetMetricsCard extends StatelessWidget {
                 color: _panelColor,
                 borderRadius: BorderRadius.circular(22),
               ),
-              child: Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                runAlignment: WrapAlignment.center,
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _MetricDial(
-                    label: 'CPU',
-                    percentage: metrics?.cpuPercentage,
-                    color: metricColorBuilder(metrics?.cpuPercentage),
-                  ),
-                  _MetricDial(
-                    label: 'RAM',
-                    percentage: metrics?.ramPercentage,
-                    color: metricColorBuilder(metrics?.ramPercentage),
-                  ),
-                  _MetricDial(
-                    label: 'Disk',
-                    percentage: metrics?.diskPercentage,
-                    color: metricColorBuilder(metrics?.diskPercentage),
-                  ),
-                ],
+              child: Center(
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  runAlignment: WrapAlignment.center,
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    _MetricDial(
+                      label: 'CPU',
+                      percentage: metrics?.cpuPercentage,
+                      color: metricColorBuilder(metrics?.cpuPercentage),
+                    ),
+                    _MetricDial(
+                      label: 'RAM',
+                      percentage: metrics?.ramPercentage,
+                      color: metricColorBuilder(metrics?.ramPercentage),
+                    ),
+                    _MetricDial(
+                      label: 'Disk',
+                      percentage: metrics?.diskPercentage,
+                      color: metricColorBuilder(metrics?.diskPercentage),
+                    ),
+                  ],
+                ),
               ),
             ),
             const Spacer(),
@@ -824,22 +814,22 @@ class _MetricDial extends StatelessWidget {
     final progress = ((percentage ?? 0) / 100).clamp(0.0, 1.0);
 
     return SizedBox(
-      width: 88,
+      width: 80,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           SizedBox(
-            width: 72,
-            height: 72,
+            width: 64,
+            height: 64,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 SizedBox(
-                  width: 72,
-                  height: 72,
+                  width: 64,
+                  height: 64,
                   child: CircularProgressIndicator(
                     value: 1,
-                    strokeWidth: 8,
+                    strokeWidth: 6,
                     color: _trackColor,
                   ),
                 ),
@@ -848,11 +838,11 @@ class _MetricDial extends StatelessWidget {
                   duration: const Duration(milliseconds: 500),
                   builder: (context, animatedValue, _) {
                     return SizedBox(
-                      width: 72,
-                      height: 72,
+                      width: 64,
+                      height: 64,
                       child: CircularProgressIndicator(
                         value: animatedValue,
-                        strokeWidth: 8,
+                        strokeWidth: 6,
                         backgroundColor: Colors.transparent,
                         valueColor: AlwaysStoppedAnimation<Color>(color),
                       ),
@@ -861,7 +851,7 @@ class _MetricDial extends StatelessWidget {
                 ),
                 Text(
                   percentage == null ? '--' : '${percentage!.round()}%',
-                  style: theme.textTheme.labelLarge?.copyWith(
+                  style: theme.textTheme.labelSmall?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
                   ),
@@ -875,6 +865,7 @@ class _MetricDial extends StatelessWidget {
             style: theme.textTheme.bodySmall?.copyWith(
               color: _mutedColor,
               fontWeight: FontWeight.w700,
+              fontSize: 10,
               letterSpacing: 0.3,
             ),
           ),

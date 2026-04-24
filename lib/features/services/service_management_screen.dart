@@ -190,51 +190,63 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                  _applySearch();
-                });
-              },
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'Search services...',
-                hintStyle: const TextStyle(color: _mutedColor),
-                prefixIcon: const Icon(Icons.search, color: _mutedColor),
-                filled: true,
-                fillColor: _surfaceColor,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: _isLoading && _allServices.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-                    onRefresh: _fetchServices,
-                    child: ListView.builder(
-                      itemCount: _filteredServices.length,
-                      itemBuilder: (context, index) {
-                        final service = _filteredServices[index];
-                        return _ServiceTile(
-                          service: service,
-                          isTransitioning: _transitioningServiceName == service.name,
-                          onAction: (action) => _runAction(service, action),
-                        );
-                      },
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1400),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) {
+                    setState(() {
+                      _searchQuery = value;
+                      _applySearch();
+                    });
+                  },
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: 'Search services...',
+                    hintStyle: const TextStyle(color: _mutedColor),
+                    prefixIcon: const Icon(Icons.search, color: _mutedColor),
+                    filled: true,
+                    fillColor: _surfaceColor,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
                   ),
+                ),
+              ),
+              Expanded(
+                child: _isLoading && _allServices.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : RefreshIndicator(
+                        onRefresh: _fetchServices,
+                        child: GridView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 450,
+                            mainAxisExtent: 100,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          itemCount: _filteredServices.length,
+                          itemBuilder: (context, index) {
+                            final service = _filteredServices[index];
+                            return _ServiceCard(
+                              service: service,
+                              isTransitioning: _transitioningServiceName == service.name,
+                              onAction: (action) => _runAction(service, action),
+                            );
+                          },
+                        ),
+                      ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -258,8 +270,8 @@ class LinuxService {
   bool get isActive => active == 'active';
 }
 
-class _ServiceTile extends StatelessWidget {
-  const _ServiceTile({
+class _ServiceCard extends StatelessWidget {
+  const _ServiceCard({
     required this.service,
     required this.isTransitioning,
     required this.onAction,
@@ -275,7 +287,6 @@ class _ServiceTile extends StatelessWidget {
     final color = isActive ? const Color(0xFF22C55E) : const Color(0xFF94A3B8);
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF1E293B),
         borderRadius: BorderRadius.circular(16),
@@ -283,44 +294,50 @@ class _ServiceTile extends StatelessWidget {
           BoxShadow(color: Color(0x22000000), blurRadius: 10, offset: Offset(0, 4)),
         ],
       ),
-      child: ListTile(
-        leading: isTransitioning
-            ? const SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+      child: Center(
+        child: ListTile(
+          leading: isTransitioning
+              ? const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              )
-            : Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
+          title: Text(
+            service.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          subtitle: Text(
+            service.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+          ),
+          trailing: IgnorePointer(
+            ignoring: isTransitioning,
+            child: Opacity(
+              opacity: isTransitioning ? 0.5 : 1.0,
+              child: PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: Color(0xFF94A3B8)),
+                onSelected: onAction,
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'start', child: Text('Start')),
+                  const PopupMenuItem(value: 'stop', child: Text('Stop')),
+                  const PopupMenuItem(value: 'restart', child: Text('Restart')),
+                ],
               ),
-        title: Text(
-          service.name,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        subtitle: Text(
-          service.description,
-          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
-        ),
-        trailing: IgnorePointer(
-          ignoring: isTransitioning,
-          child: Opacity(
-            opacity: isTransitioning ? 0.5 : 1.0,
-            child: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Color(0xFF94A3B8)),
-              onSelected: onAction,
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 'start', child: Text('Start')),
-                const PopupMenuItem(value: 'stop', child: Text('Stop')),
-                const PopupMenuItem(value: 'restart', child: Text('Restart')),
-              ],
             ),
           ),
         ),
