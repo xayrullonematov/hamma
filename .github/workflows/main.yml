@@ -12,7 +12,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
       
-      # FIX 1: Explicitly setup Java 17 using Temurin for modern Android builds
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -42,7 +41,6 @@ jobs:
     container:
       image: ubuntu:20.04
     steps:
-      # FIX 2: Install dependencies BEFORE checkout so git, curl, and unzip exist
       - name: Install Linux dependencies
         run: |
           export DEBIAN_FRONTEND=noninteractive
@@ -52,7 +50,6 @@ jobs:
             libcurl4-openssl-dev build-essential clang cmake ninja-build \
             libdbus-1-dev libnm-dev libstdc++-dev
 
-      # FIX 3: Tell git it is safe to operate as root inside the Docker container
       - name: Configure Git Safe Directory
         run: git config --global --add safe.directory '*'
 
@@ -68,7 +65,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
         
-      # FIX 4: Explicitly map the C/C++ compilers so CMake finds them
       - name: Build Linux
         run: |
           export CC=/usr/bin/clang
