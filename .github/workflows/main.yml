@@ -11,15 +11,26 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+      
+      # FIX 1: Explicitly setup Java 17 using Temurin for modern Android builds
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: 3.x
+          
       - name: Install dependencies
         run: flutter pub get
+        
       - name: Build APK
         run: flutter build apk --release --split-per-abi
+        
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -28,29 +39,42 @@ jobs:
 
   build_linux:
     runs-on: ubuntu-latest
-    # This container approach is the industry fix for GLIBC errors in 2026
     container:
       image: ubuntu:20.04
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
+      # FIX 2: Install dependencies BEFORE checkout so git, curl, and unzip exist
       - name: Install Linux dependencies
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update
-          apt-get install -y curl git xz-utils zip libglu1-mesa-dev \
+          apt-get install -y curl git unzip ca-certificates xz-utils zip libglu1-mesa \
             libgtk-3-dev liblzma-dev pkg-config libsecret-1-dev \
             libcurl4-openssl-dev build-essential clang cmake ninja-build \
-            libdbus-1-dev libnm-dev
+            libdbus-1-dev libnm-dev libstdc++-dev
+
+      # FIX 3: Tell git it is safe to operate as root inside the Docker container
+      - name: Configure Git Safe Directory
+        run: git config --global --add safe.directory '*'
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: 3.x
+          
       - name: Install dependencies
         run: flutter pub get
+        
+      # FIX 4: Explicitly map the C/C++ compilers so CMake finds them
       - name: Build Linux
-        run: flutter build linux --release
+        run: |
+          export CC=/usr/bin/clang
+          export CXX=/usr/bin/clang++
+          flutter build linux --release
+          
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
@@ -62,15 +86,19 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: 3.x
+          
       - name: Install dependencies
         run: flutter pub get
+        
       - name: Build Windows
         run: flutter build windows --release
+        
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
