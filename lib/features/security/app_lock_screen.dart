@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../../core/storage/app_lock_storage.dart';
@@ -35,6 +36,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
   static const _shadowColor = Color(0x22000000);
 
   final LocalAuthentication _localAuthentication = LocalAuthentication();
+  final FocusNode _focusNode = FocusNode();
 
   String _input = '';
   String? _pendingSetupPin;
@@ -51,12 +53,19 @@ class _AppLockScreenState extends State<AppLockScreen> {
     _initialize();
   }
 
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
   Future<void> _initialize() async {
     if (widget.mode == AppLockMode.setup) {
       setState(() {
         _status = 'Create a 4-digit PIN to protect the app.';
         _isLoading = false;
       });
+      _focusNode.requestFocus();
       return;
     }
 
@@ -85,6 +94,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
             : 'Enter your current PIN to remove the app lock.';
         _isLoading = false;
       });
+      _focusNode.requestFocus();
 
       if (widget.mode == AppLockMode.verify && biometricsAvailable) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -401,103 +411,146 @@ class _AppLockScreenState extends State<AppLockScreen> {
     );
   }
 
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      final logicalKey = event.logicalKey;
+
+      if (logicalKey == LogicalKeyboardKey.backspace) {
+        _handleBackspace();
+        return;
+      }
+
+      // Handle number keys (0-9) and numpad keys (0-9)
+      final numberMap = {
+        LogicalKeyboardKey.digit0: '0',
+        LogicalKeyboardKey.digit1: '1',
+        LogicalKeyboardKey.digit2: '2',
+        LogicalKeyboardKey.digit3: '3',
+        LogicalKeyboardKey.digit4: '4',
+        LogicalKeyboardKey.digit5: '5',
+        LogicalKeyboardKey.digit6: '6',
+        LogicalKeyboardKey.digit7: '7',
+        LogicalKeyboardKey.digit8: '8',
+        LogicalKeyboardKey.digit9: '9',
+        LogicalKeyboardKey.numpad0: '0',
+        LogicalKeyboardKey.numpad1: '1',
+        LogicalKeyboardKey.numpad2: '2',
+        LogicalKeyboardKey.numpad3: '3',
+        LogicalKeyboardKey.numpad4: '4',
+        LogicalKeyboardKey.numpad5: '5',
+        LogicalKeyboardKey.numpad6: '6',
+        LogicalKeyboardKey.numpad7: '7',
+        LogicalKeyboardKey.numpad8: '8',
+        LogicalKeyboardKey.numpad9: '9',
+      };
+
+      if (numberMap.containsKey(logicalKey)) {
+        _handleDigitTap(numberMap[logicalKey]!);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final canPop = Navigator.of(context).canPop();
 
-    return Scaffold(
-      backgroundColor: _backgroundColor,
-      appBar: AppBar(
-        automaticallyImplyLeading:
-            !(widget.mode == AppLockMode.verify && widget.nextScreen != null) &&
-                canPop,
-        title: Text(_titleText),
-      ),
-      body: SafeArea(
-        top: false,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: _surfaceColor,
-                  borderRadius: BorderRadius.circular(28),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: _shadowColor,
-                      blurRadius: 24,
-                      offset: Offset(0, 12),
-                    ),
-                  ],
-                ),
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: _primaryColor.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(20),
+    return KeyboardListener(
+      focusNode: _focusNode,
+      onKeyEvent: _handleKeyEvent,
+      child: Scaffold(
+        backgroundColor: _backgroundColor,
+        appBar: AppBar(
+          automaticallyImplyLeading:
+              !(widget.mode == AppLockMode.verify && widget.nextScreen != null) &&
+                  canPop,
+          title: Text(_titleText),
+        ),
+        body: SafeArea(
+          top: false,
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _surfaceColor,
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: _shadowColor,
+                        blurRadius: 24,
+                        offset: Offset(0, 12),
                       ),
-                      child: const Icon(
-                        Icons.lock_outline,
-                        color: _primaryColor,
-                        size: 32,
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: _primaryColor.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Icon(
+                          Icons.lock_outline,
+                          color: _primaryColor,
+                          size: 32,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 18),
-                    Text(
-                      _titleText,
-                      style:
-                          Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _subtitleText,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: _mutedColor,
-                            height: 1.4,
-                          ),
-                    ),
-                    const SizedBox(height: 28),
-                    _buildPinIndicator(),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      height: 24,
-                      child: Center(
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Text(
-                                _status,
-                                textAlign: TextAlign.center,
-                                style:
-                                    Theme.of(context).textTheme.bodySmall?.copyWith(
-                                          color: _status
-                                                      .toLowerCase()
-                                                      .contains('incorrect') ||
-                                                  _status
-                                                      .toLowerCase()
-                                                      .contains('did not match')
-                                              ? _dangerColor
-                                              : _mutedColor,
-                                        ),
-                              ),
+                      const SizedBox(height: 18),
+                      Text(
+                        _titleText,
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    _buildKeypad(),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        _subtitleText,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: _mutedColor,
+                              height: 1.4,
+                            ),
+                      ),
+                      const SizedBox(height: 28),
+                      _buildPinIndicator(),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 24,
+                        child: Center(
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : Text(
+                                  _status,
+                                  textAlign: TextAlign.center,
+                                  style:
+                                      Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            color: _status
+                                                        .toLowerCase()
+                                                        .contains('incorrect') ||
+                                                    _status
+                                                        .toLowerCase()
+                                                        .contains('did not match')
+                                                ? _dangerColor
+                                                : _mutedColor,
+                                          ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _buildKeypad(),
+                    ],
+                  ),
                 ),
               ),
             ),

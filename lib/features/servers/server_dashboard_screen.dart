@@ -46,37 +46,23 @@ class ServerDashboardScreen extends StatefulWidget {
 }
 
 class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
-  static const _connectionTestCommand = 'uname -a';
   static const _surfaceColor = Color(0xFF1E293B);
   static const _panelColor = Color(0xFF162033);
-  static const _terminalColor = Color(0xFF0B1120);
   static const _mutedColor = Color(0xFF94A3B8);
-  static const _slateColor = Color(0xFF64748B);
   static const _successColor = Color(0xFF22C55E);
   static const _dangerColor = Color(0xFFEF4444);
   static const _shadowColor = Color(0x22000000);
 
   final SshService _sshService = SshService();
   final ApiKeyStorage _apiKeyStorage = const ApiKeyStorage();
-  final CustomActionsStorage _customActionsStorage =
-      const CustomActionsStorage();
   late AiProvider _aiProvider;
   late String _apiKey;
   late String? _openRouterModel;
 
-  bool _isBusy = false;
-  bool _isShowingMessage = false;
-  String? _activeQuickActionId;
-  String? _status;
-  String _quickActionOutput = 'Quick action results will appear here.';
-  ConnectionTestState _connectionTestState = ConnectionTestState.idle;
-  List<QuickAction> _customQuickActions = const [];
+  bool _isConnecting = true;
+  int _activeTabIndex = 0;
 
   ServerProfile get _server => widget.server;
-  List<QuickAction> get _allQuickActions => [
-    ...kQuickActions,
-    ..._customQuickActions,
-  ];
 
   @override
   void initState() {
@@ -84,21 +70,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     _aiProvider = widget.aiProvider;
     _apiKey = widget.apiKey;
     _openRouterModel = widget.openRouterModel;
-    _loadCustomQuickActions();
-  }
-
-  @override
-  void didUpdateWidget(covariant ServerDashboardScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.aiProvider != widget.aiProvider) {
-      _aiProvider = widget.aiProvider;
-    }
-    if (oldWidget.apiKey != widget.apiKey) {
-      _apiKey = widget.apiKey;
-    }
-    if (oldWidget.openRouterModel != widget.openRouterModel) {
-      _openRouterModel = widget.openRouterModel;
-    }
+    _connect();
   }
 
   @override
@@ -107,39 +79,17 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     super.dispose();
   }
 
-  Future<void> _saveAiSettings(
-    AiProvider provider,
-    String apiKey,
-    String? openRouterModel,
-  ) async {
-    await widget.onSaveAiSettings(provider, apiKey, openRouterModel);
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _aiProvider = provider;
-      _apiKey = apiKey;
-      _openRouterModel = openRouterModel;
-    });
-  }
-
   Future<void> _connect() async {
     if (!_server.isValid) {
       _showMessage('Saved server profile is incomplete');
       setState(() {
-        _status = null;
-        _connectionTestState = ConnectionTestState.failed;
+        _isConnecting = false;
       });
       return;
     }
 
-    final buttonLabel = _sshService.isConnected ? 'Reconnecting' : 'Connecting';
-
     setState(() {
-      _isBusy = true;
-      _status = '$buttonLabel to ${_server.host}:${_server.port}';
-      _connectionTestState = ConnectionTestState.idle;
+      _isConnecting = true;
     });
 
     try {
@@ -152,114 +102,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         privateKeyPassword: _server.privateKeyPassword,
         onTrustHostKey: _confirmHostKeyTrust,
       );
-
-      setState(() {
-        _status = null;
-        _connectionTestState = ConnectionTestState.idle;
-      });
     } catch (error) {
       _showMessage(error.toString());
-      setState(() {
-        _status = null;
-        _connectionTestState = ConnectionTestState.failed;
-      });
     } finally {
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          _isConnecting = false;
         });
       }
-    }
-  }
-
-  Future<void> _runConnectionTest() async {
-    setState(() {
-      _isBusy = true;
-      _status = 'Running connection test';
-    });
-
-    try {
-      await _sshService.execute(_connectionTestCommand);
-      setState(() {
-        _status = null;
-        _connectionTestState = ConnectionTestState.connected;
-      });
-    } catch (error) {
-      final message = error.toString();
-      if (_looksLikeDisconnect(message)) {
-        await _sshService.disconnect();
-      }
-      _showMessage(message);
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _status = null;
-        _connectionTestState = ConnectionTestState.failed;
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isBusy = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _runQuickAction(QuickAction action) async {
-    if (_isDestructiveQuickAction(action)) {
-      final confirmed = await _confirmDestructiveQuickAction(action);
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    setState(() {
-      _isBusy = true;
-      _activeQuickActionId = action.id;
-      _status = 'Running "${action.label}"';
-    });
-
-    try {
-      final output = await _sshService.execute(action.command);
-      setState(() {
-        _status = null;
-        _quickActionOutput = output.isEmpty ? '(no output)' : output;
-      });
-    } catch (error) {
-      await _handleQuickActionError(error: error);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isBusy = false;
-          _activeQuickActionId = null;
-        });
-      }
-    }
-  }
-
-  Future<void> _loadCustomQuickActions() async {
-    try {
-      final actions = await _customActionsStorage.loadActions();
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _customQuickActions = actions;
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _showMessage(error.toString());
-        }
-      });
     }
   }
 
@@ -305,749 +155,255 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         false;
   }
 
-  bool _isDestructiveQuickAction(QuickAction action) {
-    return action.id == 'restart-server';
-  }
-
-  Future<bool> _confirmDestructiveQuickAction(QuickAction action) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: Text(action.label),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Command: ${action.command}'),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'This will restart the server and may disconnect your session immediately.',
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Run'),
-                ),
-              ],
-            );
-          },
-        ) ??
-        false;
-  }
-
-  Future<void> _handleQuickActionError({required Object error}) async {
-    final message = error.toString();
-    if (_looksLikeDisconnect(message)) {
-      await _sshService.disconnect();
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _status = null;
-        _connectionTestState = ConnectionTestState.failed;
-        _quickActionOutput = message;
-      });
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _status = null;
-      _quickActionOutput = message;
-    });
-  }
-
-  bool _looksLikeDisconnect(String message) {
-    final normalized = message.toLowerCase();
-    const patterns = [
-      'not connected',
-      'connection reset',
-      'broken pipe',
-      'socketexception',
-      'connection closed',
-      'channel is not open',
-      'failed host handshake',
-    ];
-
-    return patterns.any(normalized.contains);
-  }
-
-  void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder:
-            (_) => SettingsScreen(
-              initialProvider: _aiProvider,
-              initialApiKey: _apiKey,
-              initialOpenRouterModel: _openRouterModel,
-              onSaveAiSettings: _saveAiSettings,
-              onBackupImported: widget.onBackupImported,
-            ),
-      ),
-    );
-  }
-
   void _showMessage(String message) {
-    if (!mounted || message.trim().isEmpty || _isShowingMessage) {
+    if (!mounted || message.trim().isEmpty) {
       return;
     }
-
-    _isShowingMessage = true;
 
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text(message))).closed.then((_) {
-      _isShowingMessage = false;
-    });
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  String _getDashboardCopilotContext() {
-    final parts = <String>[
-      'Server: ${_server.name}',
-      'Host: ${_server.host}:${_server.port}',
-      'User: ${_server.username}',
-      'Connection state: ${_sshService.isConnected ? 'connected' : 'disconnected'}',
-    ];
-
-    if (_status != null && _status!.trim().isNotEmpty) {
-      parts.add('Dashboard status: ${_status!.trim()}');
-    }
-
-    final quickActionOutput = _quickActionOutput.trim();
-    if (quickActionOutput.isNotEmpty &&
-        quickActionOutput != 'Quick action results will appear here.') {
-      parts.add('Last quick action output:\n$quickActionOutput');
-    }
-
-    return parts.join('\n\n');
+  Widget _buildSidebar() {
+    return Container(
+      width: 260,
+      color: _panelColor,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _server.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _sshService.isConnected ? _successColor : _dangerColor,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _sshService.isConnected ? 'Connected' : 'Disconnected',
+                      style: TextStyle(
+                        color: _sshService.isConnected ? _successColor : _dangerColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Colors.white10),
+          const SizedBox(height: 16),
+          _SidebarItem(
+            icon: Icons.terminal_rounded,
+            label: 'Terminal',
+            isActive: _activeTabIndex == 0,
+            onTap: () => setState(() => _activeTabIndex = 0),
+          ),
+          _SidebarItem(
+            icon: Icons.folder_open_rounded,
+            label: 'SFTP Explorer',
+            isActive: _activeTabIndex == 1,
+            onTap: () => setState(() => _activeTabIndex = 1),
+          ),
+          _SidebarItem(
+            icon: Icons.directions_boat_rounded,
+            label: 'Docker',
+            isActive: _activeTabIndex == 2,
+            onTap: () => setState(() => _activeTabIndex = 2),
+          ),
+          _SidebarItem(
+            icon: Icons.settings_input_component_rounded,
+            label: 'Services',
+            isActive: _activeTabIndex == 3,
+            onTap: () => setState(() => _activeTabIndex = 3),
+          ),
+          _SidebarItem(
+            icon: Icons.system_update_alt_rounded,
+            label: 'Packages',
+            isActive: _activeTabIndex == 4,
+            onTap: () => setState(() => _activeTabIndex = 4),
+          ),
+          const Spacer(),
+          const Divider(height: 1, color: Colors.white10),
+          _SidebarItem(
+            icon: Icons.settings_outlined,
+            label: 'Settings',
+            isActive: false,
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder:
+                      (_) => SettingsScreen(
+                        initialProvider: _aiProvider,
+                        initialApiKey: _apiKey,
+                        initialOpenRouterModel: _openRouterModel,
+                        onSaveAiSettings: (p, k, m) async {
+                          await widget.onSaveAiSettings(p, k, m);
+                          setState(() {
+                            _aiProvider = p;
+                            _apiKey = k;
+                            _openRouterModel = m;
+                          });
+                        },
+                        onBackupImported: widget.onBackupImported,
+                      ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
   }
 
-  Future<String?> _runCopilotCommand(String command) async {
-    if (!_sshService.isConnected) {
-      throw StateError(
-        'SSH is disconnected. Reconnect before running commands.',
+  Widget _buildActiveContent() {
+    if (_isConnecting) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text(
+              'Establishing SSH Connection...',
+              style: TextStyle(color: _mutedColor),
+            ),
+          ],
+        ),
       );
     }
 
-    try {
-      final output = await _sshService.execute(command);
-      if (!mounted) {
-        return output;
-      }
-
-      setState(() {
-        _status = null;
-        _quickActionOutput = output.isEmpty ? '(no output)' : output;
-      });
-
-      return output;
-    } catch (error) {
-      final message = error.toString();
-      if (_looksLikeDisconnect(message)) {
-        await _sshService.disconnect();
-        if (mounted) {
-          setState(() {
-            _status = null;
-            _connectionTestState = ConnectionTestState.failed;
-          });
-        }
-      }
-      rethrow;
+    if (!_sshService.isConnected) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline_rounded, size: 48, color: _dangerColor),
+            const SizedBox(height: 16),
+            const Text(
+              'Connection Failed',
+              style: TextStyle(color: Colors.white, fontSize: 18),
+            ),
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: _connect,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry Connection'),
+            ),
+          ],
+        ),
+      );
     }
-  }
 
-  Future<void> _openCopilot() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: false,
-      builder: (_) {
-        return FractionallySizedBox(
-          heightFactor: 0.82,
-          child: AiCopilotSheet(
-            serverId: _server.id,
-            provider: _aiProvider,
-            apiKeyStorage: _apiKeyStorage,
-            openRouterModel: _openRouterModel,
-            executionTarget: AiCopilotExecutionTarget.dashboard,
-            canRunCommands: () => _sshService.isConnected,
-            getContext: _getDashboardCopilotContext,
-            onRunCommand: _runCopilotCommand,
-            executionUnavailableMessage:
-                'SSH is disconnected. Reconnect before running commands.',
-          ),
+    switch (_activeTabIndex) {
+      case 0:
+        return TerminalScreen(
+          sshService: _sshService,
+          serverName: _server.name,
+          aiProvider: _aiProvider,
+          apiKeyStorage: _apiKeyStorage,
+          openRouterModel: _openRouterModel,
         );
-      },
-    );
-  }
-
-  String _displayStatus() {
-    if (_status != null && _status!.isNotEmpty) {
-      return _status!;
-    }
-
-    switch (_connectionTestState) {
-      case ConnectionTestState.idle:
-        return _sshService.isConnected
-            ? 'SSH session is open. Run a connection test to verify the session.'
-            : 'Connect to enable terminal, AI, and quick actions.';
-      case ConnectionTestState.connected:
-        return 'SSH verified and ready for server actions.';
-      case ConnectionTestState.failed:
-        return 'Connection failed. Reconnect and try again.';
-    }
-  }
-
-  Color _connectionBadgeColor() {
-    if (_connectionTestState == ConnectionTestState.failed) {
-      return _dangerColor;
-    }
-    if (_sshService.isConnected) {
-      return _successColor;
-    }
-    return _slateColor;
-  }
-
-  String _connectionBadgeLabel() {
-    if (_connectionTestState == ConnectionTestState.failed) {
-      return 'Failed';
-    }
-    if (_sshService.isConnected) {
-      return 'Connected';
-    }
-    return 'Untested';
-  }
-
-  IconData _connectionBadgeIcon() {
-    if (_connectionTestState == ConnectionTestState.failed) {
-      return Icons.error_outline_rounded;
-    }
-    if (_sshService.isConnected) {
-      return Icons.cloud_done_outlined;
-    }
-    return Icons.shield_outlined;
-  }
-
-  IconData _quickActionIcon(String actionId) {
-    final customAction = _allQuickActions.where(
-      (action) => action.id == actionId,
-    );
-    if (customAction.isNotEmpty && customAction.first.isCustom) {
-      return Icons.terminal_rounded;
-    }
-
-    switch (actionId) {
-      case 'restart-server':
-        return Icons.restart_alt_rounded;
-      case 'system-info':
-        return Icons.memory_rounded;
-      case 'disk-usage':
-        return Icons.storage_rounded;
-      case 'running-processes':
-        return Icons.view_list_rounded;
+      case 1:
+        return FileExplorerScreen(server: _server);
+      case 2:
+        return DockerManagerScreen(
+          sshService: _sshService,
+          serverName: _server.name,
+        );
+      case 3:
+        return ServiceManagementScreen(
+          sshService: _sshService,
+          serverName: _server.name,
+        );
+      case 4:
+        return PackageManagerScreen(
+          sshService: _sshService,
+          serverName: _server.name,
+        );
       default:
-        return Icons.terminal_rounded;
+        return const Center(child: Text('Coming Soon'));
     }
-  }
-
-  Future<void> _openCustomActions() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const CustomActionsScreen()),
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    await _loadCustomQuickActions();
-  }
-
-  void _openTerminal() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder:
-            (_) => TerminalScreen(
-              sshService: _sshService,
-              serverName: _server.name,
-              aiProvider: _aiProvider,
-              apiKeyStorage: _apiKeyStorage,
-              openRouterModel: _openRouterModel,
-            ),
-      ),
-    );
-  }
-
-  void _openFileExplorer() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => FileExplorerScreen(server: _server),
-      ),
-    );
-  }
-
-  void _openServiceManagement() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder:
-            (_) => ServiceManagementScreen(
-              sshService: _sshService,
-              serverName: _server.name,
-            ),
-      ),
-    );
-  }
-
-  void _openProcessManager() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder:
-            (_) => ProcessManagerScreen(
-              sshService: _sshService,
-              serverName: _server.name,
-            ),
-      ),
-    );
-  }
-
-  void _openDockerManager() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder:
-            (_) => DockerManagerScreen(
-              sshService: _sshService,
-              serverName: _server.name,
-            ),
-      ),
-    );
-  }
-
-  void _openLogViewer() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder:
-            (_) => LogViewerScreen(
-              sshService: _sshService,
-              serverName: _server.name,
-            ),
-      ),
-    );
-  }
-
-  void _openPackageManager() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder:
-            (_) => PackageManagerScreen(
-              sshService: _sshService,
-              serverName: _server.name,
-            ),
-      ),
-    );
-  }
-
-  Future<void> _openPortForwarding() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: false,
-      builder: (_) {
-        return FractionallySizedBox(
-          heightFactor: 0.82,
-          child: PortForwardingSheet(sshService: _sshService),
-        );
-      },
-    );
-  }
-
-  BoxDecoration _sectionDecoration() {
-    return BoxDecoration(
-      color: _surfaceColor,
-      borderRadius: BorderRadius.circular(24),
-      boxShadow: const [
-        BoxShadow(color: _shadowColor, blurRadius: 18, offset: Offset(0, 10)),
-      ],
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final connectButtonLabel =
-        _sshService.isConnected ? 'Reconnect' : 'Connect';
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_server.name),
-        actions: [
-          IconButton(
-            onPressed: _openSettings,
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Settings',
+      backgroundColor: const Color(0xFF0F172A),
+      body: Row(
+        children: [
+          _buildSidebar(),
+          Expanded(
+            child: Container(
+              color: const Color(0xFF0B1120),
+              child: _buildActiveContent(),
+            ),
           ),
         ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1200),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Container(
-                  decoration: _sectionDecoration(),
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 56,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              color: _connectionBadgeColor().withValues(
-                                alpha: 0.14,
-                              ),
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Icon(
-                              _connectionBadgeIcon(),
-                              color: _connectionBadgeColor(),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _server.name,
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  '${_server.username}@${_server.host}:${_server.port}',
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: _mutedColor,
-                                    fontFamily: 'monospace',
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _connectionBadgeColor().withValues(
-                                alpha: 0.14,
-                              ),
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: _connectionBadgeColor(),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  _connectionBadgeLabel(),
-                                  style: TextStyle(
-                                    color: _connectionBadgeColor(),
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: _panelColor,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Text(
-                          _displayStatus(),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          onPressed:
-                              _isBusy || !_sshService.isConnected
-                                  ? null
-                                  : _runConnectionTest,
-                          icon: const Icon(Icons.verified_outlined),
-                          label: const Text('Connection Test'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  decoration: _sectionDecoration(),
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Main Actions', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 14),
-                      GridView(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 400,
-                          mainAxisExtent: 48,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                          childAspectRatio: 4,
-                        ),
-                        children: [
-                          FilledButton.icon(
-                            onPressed: _isBusy ? null : _connect,
-                            icon: const Icon(Icons.power_settings_new_rounded),
-                            label: Text(connectButtonLabel),
-                          ),
-                          FilledButton.icon(
-                            onPressed:
-                                _isBusy || !_sshService.isConnected
-                                    ? null
-                                    : _openTerminal,
-                            icon: const Icon(Icons.terminal_rounded),
-                            label: const Text('Open Terminal'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _isBusy ? null : _openCopilot,
-                            icon: const Icon(Icons.smart_toy_outlined),
-                            label: const Text('AI Assistant'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _isBusy ? null : _openFileExplorer,
-                            icon: const Icon(Icons.folder_open_outlined),
-                            label: const Text('File Explorer'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed:
-                                _isBusy || !_sshService.isConnected
-                                    ? null
-                                    : _openPortForwarding,
-                            icon: const Icon(Icons.router_outlined),
-                            label: const Text('Port Forwarding'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _isBusy ? null : _openSettings,
-                            icon: const Icon(Icons.settings_outlined),
-                            label: const Text('Settings'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  decoration: _sectionDecoration(),
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Management', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 16),
-                      GridView(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 200,
-                          mainAxisExtent: 100,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        children: [
-                          _ManagementTile(
-                            icon: Icons.settings_input_component_outlined,
-                            label: 'Services',
-                            onTap: _sshService.isConnected ? _openServiceManagement : null,
-                          ),
-                          _ManagementTile(
-                            icon: Icons.memory_outlined,
-                            label: 'Processes',
-                            onTap: _sshService.isConnected ? _openProcessManager : null,
-                          ),
-                          _ManagementTile(
-                            icon: Icons.directions_boat_outlined,
-                            label: 'Docker',
-                            onTap: _sshService.isConnected ? _openDockerManager : null,
-                          ),
-                          _ManagementTile(
-                            icon: Icons.list_alt_rounded,
-                            label: 'Logs',
-                            onTap: _sshService.isConnected ? _openLogViewer : null,
-                          ),
-                          _ManagementTile(
-                            icon: Icons.system_update_alt_rounded,
-                            label: 'Packages',
-                            onTap: _sshService.isConnected ? _openPackageManager : null,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  decoration: _sectionDecoration(),
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text('Quick Actions', style: theme.textTheme.titleMedium),
-                          const Spacer(),
-                          IconButton(
-                            onPressed: _isBusy ? null : _openCustomActions,
-                            icon: const Icon(Icons.edit_note_rounded),
-                            tooltip: 'Manage custom actions',
-                          ),
-                          Text(
-                            _sshService.isConnected ? 'Live SSH' : 'Disconnected',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: _mutedColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 14),
-                      GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: _allQuickActions.length,
-                        gridDelegate:
-                            const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 400,
-                              mainAxisExtent: 140,
-                              mainAxisSpacing: 12,
-                              crossAxisSpacing: 12,
-                            ),
-                        itemBuilder: (context, index) {
-                          final action = _allQuickActions[index];
-                          final isRunning = _activeQuickActionId == action.id;
-                          final isEnabled = !_isBusy && _sshService.isConnected;
+    );
+  }
+}
 
-                          return _QuickActionTile(
-                            label: action.label,
-                            command: action.command,
-                            icon: _quickActionIcon(action.id),
-                            isRunning: isRunning,
-                            isEnabled: isEnabled,
-                            onTap: isEnabled ? () => _runQuickAction(action) : null,
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+class _SidebarItem extends StatelessWidget {
+  const _SidebarItem({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Material(
+        color: isActive ? Colors.white.withOpacity(0.08) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: isActive ? Colors.white : const Color(0xFF94A3B8),
                 ),
-                const SizedBox(height: 16),
-                Container(
-                  decoration: _sectionDecoration(),
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Quick Action Output',
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 14),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: _terminalColor,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Column(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 12,
-                              ),
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF020617),
-                                borderRadius: BorderRadius.vertical(
-                                  top: Radius.circular(20),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const _TerminalDot(color: Color(0xFFEF4444)),
-                                  const SizedBox(width: 8),
-                                  const _TerminalDot(color: Color(0xFFF59E0B)),
-                                  const SizedBox(width: 8),
-                                  const _TerminalDot(color: Color(0xFF22C55E)),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    'terminal-output',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: _mutedColor,
-                                      fontFamily: 'monospace',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            SizedBox(
-                              height: 280,
-                              child: Padding(
-                                padding: const EdgeInsets.all(14),
-                                child: SingleChildScrollView(
-                                  child: SelectableText(
-                                    _quickActionOutput,
-                                    style: const TextStyle(
-                                      color: Color(0xFFE2E8F0),
-                                      fontFamily: 'monospace',
-                                      height: 1.45,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                const SizedBox(width: 16),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isActive ? Colors.white : const Color(0xFF94A3B8),
+                    fontSize: 14,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
                   ),
                 ),
               ],
