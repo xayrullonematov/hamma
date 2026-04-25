@@ -51,15 +51,15 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   static const _mutedColor = Color(0xFF94A3B8);
   static const _successColor = Color(0xFF22C55E);
   static const _dangerColor = Color(0xFFEF4444);
+  static const _warningColor = Color(0xFFF59E0B);
   static const _shadowColor = Color(0x22000000);
 
-  final SshService _sshService = SshService();
+  late final SshService _sshService;
   final ApiKeyStorage _apiKeyStorage = const ApiKeyStorage();
   late AiProvider _aiProvider;
   late String _apiKey;
   late String? _openRouterModel;
 
-  bool _isConnecting = true;
   int _activeTabIndex = 0;
 
   ServerProfile get _server => widget.server;
@@ -67,30 +67,29 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _sshService = SshService.forServer(_server.id);
     _aiProvider = widget.aiProvider;
     _apiKey = widget.apiKey;
     _openRouterModel = widget.openRouterModel;
-    _connect();
+    
+    // Only auto-connect if not already connected/connecting
+    if (_sshService.currentStatus.isDisconnected || _sshService.currentStatus.isFailed) {
+      _connect();
+    }
   }
 
   @override
   void dispose() {
-    _sshService.disconnect();
+    // We don't disconnect here because we want the connection to persist
+    // when the user goes back to the server list.
     super.dispose();
   }
 
   Future<void> _connect() async {
     if (!_server.isValid) {
       _showMessage('Saved server profile is incomplete');
-      setState(() {
-        _isConnecting = false;
-      });
       return;
     }
-
-    setState(() {
-      _isConnecting = true;
-    });
 
     try {
       await _sshService.connect(
@@ -103,56 +102,15 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         onTrustHostKey: _confirmHostKeyTrust,
       );
     } catch (error) {
-      _showMessage(error.toString());
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isConnecting = false;
-        });
-      }
+      if (mounted) _showMessage(error.toString());
     }
   }
 
-  Future<bool> _confirmHostKeyTrust({
-    required String host,
-    required int port,
-    required String algorithm,
-    required String fingerprint,
-  }) async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (context) {
-            return AlertDialog(
-              title: const Text('Trust SSH Host Key'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('First connection to $host:$port'),
-                  const SizedBox(height: 12),
-                  Text('Algorithm: $algorithm'),
-                  const SizedBox(height: 8),
-                  SelectableText('Fingerprint: $fingerprint'),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Only trust this key if you have verified it with your server provider or the server itself.',
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('Trust'),
-                ),
-              ],
-            );
-          },
-        ) ??
-        false;
+  String _formatTime(DateTime? dt) {
+    if (dt == null) return 'Never';
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '$h:$m';
   }
 
   void _showMessage(String message) {
@@ -165,7 +123,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Widget _buildSidebar() {
+  Widget _buildSidebar(ConnectionStatus status) {
+    final isConnected = status.isConnected;
+    
     return Container(
       width: 260,
       color: _panelColor,
@@ -188,25 +148,30 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: _sshService.isConnected ? _successColor : _dangerColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
+                    _StatusIndicator(status: status),
                     const SizedBox(width: 8),
-                    Text(
-                      _sshService.isConnected ? 'Connected' : 'Disconnected',
-                      style: TextStyle(
-                        color: _sshService.isConnected ? _successColor : _dangerColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Text(
+                        status.state == SshConnectionState.connected 
+                            ? 'Connected' 
+                            : (status.isConnecting ? 'Connecting...' : 'Disconnected'),
+                        style: TextStyle(
+                          color: _getStatusColor(status),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ],
                 ),
+                if (status.lastSuccessfulConnection != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, left: 16),
+                    child: Text(
+                      'Last: ${_formatTime(status.lastSuccessfulConnection)}',
+                      style: const TextStyle(color: _mutedColor, fontSize: 10),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -222,27 +187,45 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             icon: Icons.folder_open_rounded,
             label: 'SFTP Explorer',
             isActive: _activeTabIndex == 1,
+            isEnabled: isConnected,
             onTap: () => setState(() => _activeTabIndex = 1),
           ),
           _SidebarItem(
             icon: Icons.directions_boat_rounded,
             label: 'Docker',
             isActive: _activeTabIndex == 2,
+            isEnabled: isConnected,
             onTap: () => setState(() => _activeTabIndex = 2),
           ),
           _SidebarItem(
             icon: Icons.settings_input_component_rounded,
             label: 'Services',
             isActive: _activeTabIndex == 3,
+            isEnabled: isConnected,
             onTap: () => setState(() => _activeTabIndex = 3),
           ),
           _SidebarItem(
             icon: Icons.system_update_alt_rounded,
             label: 'Packages',
             isActive: _activeTabIndex == 4,
+            isEnabled: isConnected,
             onTap: () => setState(() => _activeTabIndex = 4),
           ),
           const Spacer(),
+          if (!isConnected && !status.isConnecting)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: FilledButton.icon(
+                onPressed: _connect,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text('Reconnect'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: _primaryColor.withOpacity(0.1),
+                  foregroundColor: _primaryColor,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
           const Divider(height: 1, color: Colors.white10),
           _SidebarItem(
             icon: Icons.settings_outlined,
@@ -276,36 +259,62 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     );
   }
 
-  Widget _buildActiveContent() {
-    if (_isConnecting) {
-      return const Center(
+  Color _getStatusColor(ConnectionStatus status) {
+    switch (status.state) {
+      case SshConnectionState.connected:
+        return _successColor;
+      case SshConnectionState.connecting:
+      case SshConnectionState.reconnecting:
+        return _warningColor;
+      case SshConnectionState.failed:
+      case SshConnectionState.disconnected:
+        return _dangerColor;
+    }
+  }
+
+  static const _primaryColor = Color(0xFF3B82F6);
+
+  Widget _buildActiveContent(ConnectionStatus status) {
+    if (status.isConnecting && !status.isConnected) {
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
             Text(
-              'Establishing SSH Connection...',
-              style: TextStyle(color: _mutedColor),
+              status.state == SshConnectionState.reconnecting 
+                  ? 'Reconnecting (Attempt ${status.reconnectAttempts}/${status.maxReconnectAttempts})...'
+                  : 'Establishing SSH Connection...',
+              style: const TextStyle(color: _mutedColor),
             ),
           ],
         ),
       );
     }
 
-    if (!_sshService.isConnected) {
+    if (!status.isConnected) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.error_outline_rounded, size: 48, color: _dangerColor),
             const SizedBox(height: 16),
-            const Text(
-              'Connection Failed',
-              style: TextStyle(color: Colors.white, fontSize: 18),
+            Text(
+              status.exception?.userMessage ?? (status.isFailed ? 'Connection Failed' : 'Disconnected'),
+              style: const TextStyle(color: Colors.white, fontSize: 18),
             ),
-            const SizedBox(height: 8),
-            TextButton.icon(
+            if (status.exception?.suggestedAction != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+                child: Text(
+                  status.exception!.suggestedAction!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _mutedColor, fontSize: 13),
+                ),
+              ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
               onPressed: _connect,
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Retry Connection'),
@@ -348,19 +357,114 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      body: Row(
-        children: [
-          _buildSidebar(),
-          Expanded(
-            child: Container(
-              color: const Color(0xFF0B1120),
-              child: _buildActiveContent(),
+    return ValueListenableBuilder<ConnectionStatus>(
+      valueListenable: _sshService.statusNotifier,
+      builder: (context, status, _) {
+        return Scaffold(
+          backgroundColor: const Color(0xFF0F172A),
+          body: Row(
+            children: [
+              _buildSidebar(status),
+              Expanded(
+                child: Container(
+                  color: const Color(0xFF0B1120),
+                  child: _buildActiveContent(status),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SidebarItem extends StatelessWidget {
+  const _SidebarItem({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+    this.isEnabled = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+  final bool isEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Opacity(
+        opacity: isEnabled ? 1.0 : 0.4,
+        child: Material(
+          color: isActive ? Colors.white.withOpacity(0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            onTap: isEnabled ? onTap : null,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: 20,
+                    color: isActive ? Colors.white : const Color(0xFF94A3B8),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: isActive ? Colors.white : const Color(0xFF94A3B8),
+                      fontSize: 14,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
+        ),
       ),
+    );
+  }
+}
+
+class _StatusIndicator extends StatelessWidget {
+  const _StatusIndicator({required this.status});
+  final ConnectionStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    if (status.isConnecting && !status.isConnected) {
+      return const SizedBox(
+        width: 10,
+        height: 10,
+        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFF59E0B)),
+      );
+    }
+    
+    Color color;
+    switch (status.state) {
+      case SshConnectionState.connected:
+        color = const Color(0xFF22C55E);
+        break;
+      case SshConnectionState.failed:
+      case SshConnectionState.disconnected:
+        color = const Color(0xFFEF4444);
+        break;
+      default:
+        color = Colors.grey;
+    }
+
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }
 }

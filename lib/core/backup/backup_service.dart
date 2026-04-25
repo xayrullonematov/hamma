@@ -5,143 +5,229 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:pointycastle/export.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:workmanager/workmanager.dart';
 
-import '../ai/ai_provider.dart';
-import '../models/server_profile.dart';
-import '../storage/api_key_storage.dart';
-import '../storage/saved_servers_storage.dart';
+import '../ssh/sftp_service.dart';
+import '../storage/app_lock_storage.dart';
+import 'backup_storage.dart';
 
 class BackupService {
   const BackupService({
-    SavedServersStorage? savedServersStorage,
-    ApiKeyStorage? apiKeyStorage,
-  }) : _savedServersStorage =
-           savedServersStorage ?? const SavedServersStorage(),
-       _apiKeyStorage = apiKeyStorage ?? const ApiKeyStorage();
+    FlutterSecureStorage? secureStorage,
+    AppLockStorage? appLockStorage,
+    BackupStorage? backupStorage,
+    SftpService? sftpService,
+  }) : _secureStorage = secureStorage ?? const FlutterSecureStorage(),
+       _appLockStorage = appLockStorage ?? const AppLockStorage(),
+       _backupStorage = backupStorage ?? const BackupStorage(),
+       _sftpService = sftpService;
 
-  final SavedServersStorage _savedServersStorage;
-  final ApiKeyStorage _apiKeyStorage;
+  final FlutterSecureStorage _secureStorage;
+  final AppLockStorage _appLockStorage;
+  final BackupStorage _backupStorage;
+  final SftpService? _sftpService;
 
-  Future<void> exportBackup(String password) async {
-    _validatePassword(password);
+  static const _backupFilename = 'hamma_backup.aes';
+  static const _backupTaskName = 'com.hamma.daily_backup';
+
+  /// Performs a backup based on the saved configuration.
+  Future<void> backupToDestination({String? manualPassword}) async {
+    final config = await _backupStorage.loadConfig();
+    final password = manualPassword ?? await _appLockStorage.readPin();
+
+    if (password == null || password.isEmpty) {
+      throw const BackupException(
+        'A master PIN or password is required for backup encryption.',
+      );
+    }
 
     try {
-      final servers = await _savedServersStorage.loadServers();
-      final aiSettings = await _apiKeyStorage.loadSettings();
-      final encodedPayload = jsonEncode({
-        'servers': servers.map((server) => server.toJson()).toList(),
-        'aiSettings': aiSettings.toJson(),
-      });
+      final backupFile = await _createEncryptedBackup(password);
 
-      final key = _deriveKey(password);
-      final ivBytes = _randomBytes(16);
-      final iv = encrypt.IV(ivBytes);
-      final encrypter = encrypt.Encrypter(
-        encrypt.AES(key, mode: encrypt.AESMode.gcm),
-      );
-      final encryptedPayload = encrypter.encrypt(encodedPayload, iv: iv);
+      switch (config.destination) {
+        case BackupDestination.local:
+          await Share.shareXFiles(
+            [XFile(backupFile.path)],
+            subject: 'Hamma Backup',
+          );
+          break;
 
-      final outputBytes = Uint8List.fromList([
-        ...ivBytes,
-        ...encryptedPayload.bytes,
-      ]);
+        case BackupDestination.sftp:
+          await _uploadToSftp(config, backupFile);
+          break;
 
-      final temporaryDirectory = await getTemporaryDirectory();
-      final backupFile = File('${temporaryDirectory.path}/hamma_backup.aes');
-      await backupFile.writeAsBytes(outputBytes, flush: true);
+        case BackupDestination.webdav:
+          await _uploadToWebDav(config, backupFile);
+          break;
 
-      await Share.shareXFiles(
-        [XFile(backupFile.path)],
-        subject: 'Hamma Backup',
-        text: 'Encrypted Hamma backup file',
-      );
-    } catch (error) {
-      if (error is BackupException) {
-        rethrow;
+        case BackupDestination.syncthing:
+          await _copyToSyncthing(config, backupFile);
+          break;
       }
 
-      throw BackupException('Could not export backup: $error');
+      await _backupStorage.saveConfig(
+        BackupConfig(
+          destination: config.destination,
+          sftpHost: config.sftpHost,
+          sftpPort: config.sftpPort,
+          sftpUsername: config.sftpUsername,
+          sftpPassword: config.sftpPassword,
+          sftpPath: config.sftpPath,
+          webdavUrl: config.webdavUrl,
+          webdavUsername: config.webdavUsername,
+          webdavPassword: config.webdavPassword,
+          syncthingPath: config.syncthingPath,
+          autoBackupEnabled: config.autoBackupEnabled,
+          lastBackupTime: DateTime.now(),
+          lastBackupStatus: 'Success',
+        ),
+      );
+    } catch (e) {
+      await _backupStorage.saveConfig(
+        BackupConfig(
+          destination: config.destination,
+          sftpHost: config.sftpHost,
+          sftpPort: config.sftpPort,
+          sftpUsername: config.sftpUsername,
+          sftpPassword: config.sftpPassword,
+          sftpPath: config.sftpPath,
+          webdavUrl: config.webdavUrl,
+          webdavUsername: config.webdavUsername,
+          webdavPassword: config.webdavPassword,
+          syncthingPath: config.syncthingPath,
+          autoBackupEnabled: config.autoBackupEnabled,
+          lastBackupTime: DateTime.now(),
+          lastBackupStatus: 'Failed: $e',
+        ),
+      );
+      rethrow;
     }
   }
 
-  Future<void> importBackup(String password, String filePath) async {
-    _validatePassword(password);
+  /// Restores data from a destination.
+  Future<void> restoreFromDestination({
+    String? manualPassword,
+    String? localFilePath,
+  }) async {
+    final config = await _backupStorage.loadConfig();
+    final password = manualPassword ?? await _appLockStorage.readPin();
+
+    if (password == null || password.isEmpty) {
+      throw const BackupException(
+        'A master PIN or password is required for backup decryption.',
+      );
+    }
+
+    File? fileToRestore;
 
     try {
-      final inputBytes = await File(filePath).readAsBytes();
-      if (inputBytes.length <= 16) {
-        throw const BackupException('Incorrect password or corrupted file');
+      if (localFilePath != null) {
+        fileToRestore = File(localFilePath);
+      } else {
+        switch (config.destination) {
+          case BackupDestination.local:
+            final result = await FilePicker.platform.pickFiles();
+            if (result == null || result.files.isEmpty) return;
+            fileToRestore = File(result.files.single.path!);
+            break;
+          case BackupDestination.sftp:
+            fileToRestore = await _downloadFromSftp(config);
+            break;
+          case BackupDestination.webdav:
+            fileToRestore = await _downloadFromWebDav(config);
+            break;
+          case BackupDestination.syncthing:
+            fileToRestore = await _getFromSyncthing(config);
+            break;
+        }
       }
 
-      final ivBytes = Uint8List.fromList(inputBytes.sublist(0, 16));
-      final encryptedBytes = Uint8List.fromList(inputBytes.sublist(16));
-      final key = _deriveKey(password);
-      final iv = encrypt.IV(ivBytes);
-      final encrypter = encrypt.Encrypter(
-        encrypt.AES(key, mode: encrypt.AESMode.gcm),
-      );
+      if (fileToRestore == null || !await fileToRestore.exists()) {
+        throw const BackupException('Backup file not found.');
+      }
 
+      await _decryptAndRestore(password, fileToRestore);
+    } catch (e) {
+      throw BackupException('Restore failed: $e');
+    }
+  }
+
+  Future<File> _createEncryptedBackup(String password) async {
+    // Collect ALL data from FlutterSecureStorage
+    final allData = await _secureStorage.readAll();
+    final encodedPayload = jsonEncode(allData);
+
+    final salt = _randomBytes(16);
+    final keyBytes = _deriveKey(password, salt);
+    final ivBytes = _randomBytes(16);
+
+    final key = encrypt.Key(keyBytes);
+    final iv = encrypt.IV(ivBytes);
+    final encrypter = encrypt.Encrypter(
+      encrypt.AES(key, mode: encrypt.AESMode.gcm),
+    );
+
+    final encrypted = encrypter.encrypt(encodedPayload, iv: iv);
+
+    final outputBytes = Uint8List.fromList([
+      ...salt,
+      ...ivBytes,
+      ...encrypted.bytes,
+    ]);
+
+    final tempDir = await getTemporaryDirectory();
+    final backupFile = File(p.join(tempDir.path, _backupFilename));
+    await backupFile.writeAsBytes(outputBytes, flush: true);
+
+    return backupFile;
+  }
+
+  Future<void> _decryptAndRestore(String password, File file) async {
+    final inputBytes = await file.readAsBytes();
+    if (inputBytes.length <= 32) {
+      throw const BackupException('Corrupted backup file.');
+    }
+
+    final salt = Uint8List.fromList(inputBytes.sublist(0, 16));
+    final ivBytes = Uint8List.fromList(inputBytes.sublist(16, 32));
+    final encryptedBytes = Uint8List.fromList(inputBytes.sublist(32));
+
+    final keyBytes = _deriveKey(password, salt);
+    final key = encrypt.Key(keyBytes);
+    final iv = encrypt.IV(ivBytes);
+    final encrypter = encrypt.Encrypter(
+      encrypt.AES(key, mode: encrypt.AESMode.gcm),
+    );
+
+    try {
       final decryptedPayload = encrypter.decrypt(
         encrypt.Encrypted(encryptedBytes),
         iv: iv,
       );
-      final decodedPayload = jsonDecode(decryptedPayload);
-      if (decodedPayload is! Map) {
-        throw const BackupException('Incorrect password or corrupted file');
+      final decodedData = jsonDecode(decryptedPayload) as Map<String, dynamic>;
+
+      // Restore all keys to FlutterSecureStorage
+      // We clear first to ensure a clean state
+      await _secureStorage.deleteAll();
+      for (final entry in decodedData.entries) {
+        await _secureStorage.write(key: entry.key, value: entry.value);
       }
-
-      final payload = Map<String, dynamic>.from(decodedPayload);
-      final rawServers = payload['servers'];
-      final rawAiSettings = payload['aiSettings'];
-      if (rawServers is! List || rawAiSettings is! Map) {
-        throw const BackupException('Incorrect password or corrupted file');
-      }
-
-      final servers = rawServers
-          .map<ServerProfile>((item) {
-            if (item is! Map) {
-              throw const BackupException(
-                'Incorrect password or corrupted file',
-              );
-            }
-
-            return ServerProfile.fromJson(Map<String, dynamic>.from(item));
-          })
-          .toList(growable: false);
-      final aiSettings = AiSettings.fromJson(
-        Map<String, dynamic>.from(rawAiSettings),
-      );
-
-      await _savedServersStorage.saveServers(servers);
-      for (final provider in AiProvider.values) {
-        final key = aiSettings.apiKeyFor(provider);
-        if (key.isEmpty) {
-          await _apiKeyStorage.deleteApiKey(provider);
-          continue;
-        }
-
-        await _apiKeyStorage.saveApiKey(provider, key);
-      }
-      await _apiKeyStorage.saveSettings(
-        provider: aiSettings.provider,
-        apiKey: aiSettings.apiKey,
-        openRouterModel: aiSettings.openRouterModel,
-      );
-    } catch (error) {
-      if (error is BackupException &&
-          error.message == 'Master password is required.') {
-        rethrow;
-      }
-
-      throw const BackupException('Incorrect password or corrupted file');
+    } catch (e) {
+      throw const BackupException('Incorrect password or corrupted file.');
     }
   }
 
-  encrypt.Key _deriveKey(String password) {
-    final keyBytes = sha256.convert(utf8.encode(password)).bytes;
-    return encrypt.Key(Uint8List.fromList(keyBytes));
+  Uint8List _deriveKey(String password, Uint8List salt) {
+    final pbkdf2 = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+      ..init(Pbkdf2Parameters(salt, 10000, 32));
+    return pbkdf2.process(Uint8List.fromList(utf8.encode(password)));
   }
 
   Uint8List _randomBytes(int length) {
@@ -151,18 +237,129 @@ class BackupService {
     );
   }
 
-  void _validatePassword(String password) {
-    if (password.trim().isEmpty) {
-      throw const BackupException('Master password is required.');
+  // Transport Methods
+
+  Future<void> _uploadToSftp(BackupConfig config, File file) async {
+    final sftp = _sftpService ?? SftpService();
+    try {
+      await sftp.connect(
+        host: config.sftpHost,
+        port: config.sftpPort,
+        username: config.sftpUsername,
+        password: config.sftpPassword,
+      );
+      final remotePath = p.join(config.sftpPath, _backupFilename);
+      await sftp.uploadFile(file.path, remotePath);
+    } finally {
+      await sftp.dispose();
     }
+  }
+
+  Future<File> _downloadFromSftp(BackupConfig config) async {
+    final sftp = _sftpService ?? SftpService();
+    final tempDir = await getTemporaryDirectory();
+    final localPath = p.join(tempDir.path, 'restored_backup.aes');
+    try {
+      await sftp.connect(
+        host: config.sftpHost,
+        port: config.sftpPort,
+        username: config.sftpUsername,
+        password: config.sftpPassword,
+      );
+      final remotePath = p.join(config.sftpPath, _backupFilename);
+      await sftp.downloadFile(remotePath, localPath);
+      return File(localPath);
+    } finally {
+      await sftp.dispose();
+    }
+  }
+
+  Future<void> _uploadToWebDav(BackupConfig config, File file) async {
+    final bytes = await file.readAsBytes();
+    final uri = Uri.parse(
+      '${config.webdavUrl}/${_backupFilename}'.replaceAll(
+        RegExp(r'(?<!:)/+'),
+        '/',
+      ),
+    );
+    final auth = base64Encode(
+      utf8.encode('${config.webdavUsername}:${config.webdavPassword}'),
+    );
+
+    final response = await http.put(
+      uri,
+      headers: {'Authorization': 'Basic $auth'},
+      body: bytes,
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('WebDAV upload failed: ${response.statusCode}');
+    }
+  }
+
+  Future<File> _downloadFromWebDav(BackupConfig config) async {
+    final uri = Uri.parse(
+      '${config.webdavUrl}/${_backupFilename}'.replaceAll(
+        RegExp(r'(?<!:)/+'),
+        '/',
+      ),
+    );
+    final auth = base64Encode(
+      utf8.encode('${config.webdavUsername}:${config.webdavPassword}'),
+    );
+
+    final response = await http.get(
+      uri,
+      headers: {'Authorization': 'Basic $auth'},
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('WebDAV download failed: ${response.statusCode}');
+    }
+
+    final tempDir = await getTemporaryDirectory();
+    final localFile = File(p.join(tempDir.path, 'restored_backup.aes'));
+    await localFile.writeAsBytes(response.bodyBytes);
+    return localFile;
+  }
+
+  Future<void> _copyToSyncthing(BackupConfig config, File file) async {
+    final targetPath = p.join(config.syncthingPath, _backupFilename);
+    await file.copy(targetPath);
+  }
+
+  Future<File> _getFromSyncthing(BackupConfig config) async {
+    final sourcePath = p.join(config.syncthingPath, _backupFilename);
+    final file = File(sourcePath);
+    if (!await file.exists()) {
+      throw Exception('Backup file not found in Syncthing folder.');
+    }
+    return file;
+  }
+
+  // Scheduling
+
+  Future<void> scheduleDailyBackup() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+
+    await Workmanager().registerPeriodicTask(
+      _backupTaskName,
+      _backupTaskName,
+      frequency: const Duration(hours: 24),
+      existingWorkPolicy: ExistingWorkPolicy.replace,
+      constraints: Constraints(networkType: NetworkType.connected),
+    );
+  }
+
+  Future<void> cancelDailyBackup() async {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    await Workmanager().cancelByUniqueName(_backupTaskName);
   }
 }
 
 class BackupException implements Exception {
   const BackupException(this.message);
-
   final String message;
-
   @override
   String toString() => message;
 }

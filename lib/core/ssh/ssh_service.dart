@@ -5,24 +5,50 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:flutter/foundation.dart';
 import 'package:pinenacl/ed25519.dart' as ed25519;
 import 'package:pointycastle/export.dart' as pc;
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../background/background_keepalive.dart';
 import '../storage/trusted_host_key_storage.dart';
+import 'connection_status.dart';
+import 'ssh_exception.dart';
 
 class SshService {
+  static final Map<String, SshService> _instances = {};
+
+  /// Gets or creates a shared SshService instance for a specific server.
+  static SshService forServer(String serverId) {
+    return _instances.putIfAbsent(serverId, () => SshService());
+  }
+
+  /// Removes a server instance from the registry.
+  static void removeInstance(String serverId) {
+    _instances.remove(serverId);
+  }
+
   SshService({TrustedHostKeyStorage? trustedHostKeyStorage})
     : _trustedHostKeyStorage =
-          trustedHostKeyStorage ?? const TrustedHostKeyStorage();
+          trustedHostKeyStorage ?? const TrustedHostKeyStorage() {
+    _statusNotifier = ValueNotifier<ConnectionStatus>(_currentStatus);
+  }
 
   SSHClient? _client;
   final Map<int, ServerSocket> _activeForwards = {};
   final TrustedHostKeyStorage _trustedHostKeyStorage;
-  final StreamController<bool> _connectionStateController =
-      StreamController<bool>.broadcast();
+  
+  final StreamController<ConnectionStatus> _statusController =
+      StreamController<ConnectionStatus>.broadcast();
+  late final ValueNotifier<ConnectionStatus> _statusNotifier;
+  ConnectionStatus _currentStatus = ConnectionStatus.disconnected();
+  int _reconnectAttempts = 0;
+  final int _maxReconnectAttempts = 5;
+  bool _autoReconnectEnabled = true;
+  DateTime? _lastSuccessfulConnection;
+
   Timer? _heartbeatTimer;
+  Timer? _reconnectTimer;
 
   // Store last connection parameters for reconnection
   String? _lastHost;
@@ -38,10 +64,66 @@ class SshService {
     required String fingerprint,
   })? _lastOnTrustHostKey;
 
-  bool get isConnected => _client != null;
+  bool get isConnected => _currentStatus.isConnected;
   String? get password => _lastPassword;
-  Stream<bool> get connectionState => _connectionStateController.stream;
+  Stream<ConnectionStatus> get status => _statusController.stream;
+  ConnectionStatus get currentStatus => _currentStatus;
+  ValueListenable<ConnectionStatus> get statusNotifier => _statusNotifier;
+  bool get autoReconnectEnabled => _autoReconnectEnabled;
+  
+  // Keep the old stream for backward compatibility if needed, but updated to emits bools based on status
+  Stream<bool> get connectionState => status.map((s) => s.isConnected);
+
   List<int> get activeForwardedPorts => _activeForwards.keys.toList();
+
+  void _updateStatus(ConnectionStatus status) {
+    _currentStatus = status;
+    _statusController.add(status);
+    _statusNotifier.value = status;
+  }
+
+  SshException _mapError(dynamic e) {
+    if (e is SshException) return e;
+
+    final message = e.toString().toLowerCase();
+
+    if (e is SocketException) {
+      if (message.contains('timed out')) {
+        return SshTimeoutException(originalError: e);
+      }
+      return SshNetworkException(
+        userMessage: 'Could not reach the server.',
+        suggestedAction: 'Check your internet connection and the server address.',
+        originalError: e,
+      );
+    }
+
+    if (message.contains('handshake failed') || message.contains('connection reset')) {
+      return SshNetworkException(
+        userMessage: 'The connection was interrupted during handshake.',
+        suggestedAction: 'This can happen due to poor network or server-side firewall.',
+        originalError: e,
+      );
+    }
+
+    if (message.contains('authentication failed') || message.contains('access denied')) {
+      return SshAuthenticationException(
+        userMessage: 'Authentication failed.',
+        suggestedAction: 'Verify your username, password, or private key.',
+        originalError: e,
+      );
+    }
+
+    if (message.contains('timeout') || message.contains('timed out')) {
+      return SshTimeoutException(originalError: e);
+    }
+
+    return SshUnknownException(
+      userMessage: 'An unexpected SSH error occurred.',
+      suggestedAction: 'Try again later or contact support if the issue persists.',
+      originalError: e,
+    );
+  }
 
   Future<void> connect({
     required String host,
@@ -66,7 +148,13 @@ class SshService {
       ),
     );
 
-    await disconnect();
+    if (_currentStatus.state != SshConnectionState.reconnecting) {
+      _updateStatus(ConnectionStatus.connecting());
+    }
+
+    // Use internal cleanup that doesn't cancel auto-reconnect if we are in the middle of it
+    // but here we are starting a NEW connection, so we should cancel.
+    await disconnect(updateStatus: false, cancelAuto: true);
 
     _lastHost = host;
     _lastPort = port;
@@ -167,10 +255,14 @@ class SshService {
         rethrow;
       }
       _client = client;
+      _reconnectAttempts = 0;
+      _lastSuccessfulConnection = DateTime.now();
       _startHeartbeat();
-      _connectionStateController.add(true);
+      _updateStatus(ConnectionStatus.connected(lastSuccessfulConnection: _lastSuccessfulConnection));
     } catch (e, stackTrace) {
       Sentry.captureException(e, stackTrace: stackTrace);
+      final sshError = _mapError(e);
+      _updateStatus(ConnectionStatus.failed(sshError, lastSuccessfulConnection: _lastSuccessfulConnection));
       rethrow;
     }
   }
@@ -180,15 +272,33 @@ class SshService {
       throw StateError('No previous connection to reconnect to.');
     }
 
-    await connect(
-      host: _lastHost!,
-      port: _lastPort!,
-      username: _lastUsername!,
-      password: _lastPassword!,
-      privateKey: _lastPrivateKey,
-      privateKeyPassword: _lastPrivateKeyPassword,
-      onTrustHostKey: _lastOnTrustHostKey,
-    );
+    cancelAutoReconnect();
+
+    _reconnectAttempts++;
+    _updateStatus(ConnectionStatus.reconnecting(
+      attempts: _reconnectAttempts,
+      maxAttempts: _maxReconnectAttempts,
+      lastSuccessfulConnection: _lastSuccessfulConnection,
+    ));
+
+    try {
+      await connect(
+        host: _lastHost!,
+        port: _lastPort!,
+        username: _lastUsername!,
+        password: _lastPassword!,
+        privateKey: _lastPrivateKey,
+        privateKeyPassword: _lastPrivateKeyPassword,
+        onTrustHostKey: _lastOnTrustHostKey,
+      );
+    } catch (e) {
+      // Re-throw the error but ensure the status is failed if connect didn't catch it correctly
+      if (_currentStatus.state != SshConnectionState.failed) {
+        final sshError = _mapError(e);
+        _updateStatus(ConnectionStatus.failed(sshError, lastSuccessfulConnection: _lastSuccessfulConnection));
+      }
+      rethrow;
+    }
   }
 
   void _startHeartbeat() {
@@ -198,17 +308,79 @@ class SshService {
         try {
           _client!.ping();
         } catch (_) {
-          _handleDisconnect();
+          _handleDisconnect(reason: 'Heartbeat failed');
         }
       }
     });
   }
 
-  void _handleDisconnect() {
-    if (_client != null) {
+  void _handleDisconnect({String? reason}) {
+    if (_client != null || _currentStatus.isConnected) {
       _client = null;
       _heartbeatTimer?.cancel();
-      _connectionStateController.add(false);
+      _updateStatus(ConnectionStatus.disconnected());
+      
+      if (_autoReconnectEnabled && _lastHost != null) {
+        _triggerAutoReconnect();
+      }
+    }
+  }
+
+  void _triggerAutoReconnect() {
+    cancelAutoReconnect();
+    
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      _updateStatus(ConnectionStatus.failed(
+        const SshUnknownException(
+          userMessage: 'Automatic reconnection failed.',
+          suggestedAction: 'Please try to reconnect manually when the server is back online.',
+        ),
+        lastSuccessfulConnection: _lastSuccessfulConnection,
+      ));
+      return;
+    }
+
+    // Exponential backoff: 5s, 10s, 20s, 30s, 60s
+    final backoffSeconds = [5, 10, 20, 30, 60];
+    final delay = Duration(seconds: backoffSeconds[min(_reconnectAttempts, backoffSeconds.length - 1)]);
+
+    _reconnectTimer = Timer(delay, () async {
+      try {
+        await reconnect();
+      } catch (_) {
+        // If reconnect failed, reconnect() already set state to failed.
+        // If auto-reconnect is still enabled, we trigger the next attempt.
+        if (_autoReconnectEnabled && _currentStatus.isFailed && _reconnectAttempts < _maxReconnectAttempts) {
+          _triggerAutoReconnect();
+        }
+      }
+    });
+  }
+
+  void enableAutoReconnect() {
+    _autoReconnectEnabled = true;
+    if (_currentStatus.isDisconnected && _lastHost != null) {
+      _triggerAutoReconnect();
+    }
+  }
+
+  void disableAutoReconnect() {
+    _autoReconnectEnabled = false;
+    cancelAutoReconnect();
+  }
+
+  void cancelAutoReconnect() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+  }
+
+  bool isHealthy() {
+    if (_client == null) return false;
+    try {
+      _client!.ping();
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -231,8 +403,8 @@ class SshService {
       return utf8.decode(output);
     } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {
-        _handleDisconnect();
-        await disconnect();
+        _handleDisconnect(reason: 'Command failed: $error');
+        await disconnect(updateStatus: false, cancelAuto: false);
       }
       Sentry.captureException(error, stackTrace: stackTrace);
       rethrow;
@@ -249,8 +421,8 @@ class SshService {
       return await client.execute(command);
     } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {
-        _handleDisconnect();
-        await disconnect();
+        _handleDisconnect(reason: 'Stream command failed: $error');
+        await disconnect(updateStatus: false, cancelAuto: false);
       }
       Sentry.captureException(error, stackTrace: stackTrace);
       rethrow;
@@ -269,8 +441,8 @@ class SshService {
       );
     } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {
-        _handleDisconnect();
-        await disconnect();
+        _handleDisconnect(reason: 'Shell failed: $error');
+        await disconnect(updateStatus: false, cancelAuto: false);
       }
       Sentry.captureException(error, stackTrace: stackTrace);
       rethrow;
@@ -327,8 +499,10 @@ class SshService {
     }
   }
 
-  Future<void> disconnect() async {
+  Future<void> disconnect({bool updateStatus = true, bool cancelAuto = true}) async {
     _heartbeatTimer?.cancel();
+    if (cancelAuto) cancelAutoReconnect();
+    
     final forwardedSockets = _activeForwards.values.toList();
     _activeForwards.clear();
     for (final serverSocket in forwardedSockets) {
@@ -340,7 +514,9 @@ class SshService {
     }
     _client?.close();
     _client = null;
-    _connectionStateController.add(false);
+    if (updateStatus) {
+      _updateStatus(ConnectionStatus.disconnected());
+    }
     await BackgroundKeepalive.disable();
   }
 
@@ -519,70 +695,3 @@ class SshService {
   }
 }
 
-class SshUnknownHostKeyException implements Exception {
-  const SshUnknownHostKeyException({
-    required this.host,
-    required this.port,
-    required this.algorithm,
-    required this.fingerprint,
-  });
-
-  final String host;
-  final int port;
-  final String algorithm;
-  final String fingerprint;
-
-  @override
-  String toString() {
-    return 'Unknown SSH host key for $host:$port.\n'
-        'Algorithm: $algorithm\n'
-        'Fingerprint: $fingerprint';
-  }
-}
-
-class SshUnknownHostKeyRejectedException implements Exception {
-  const SshUnknownHostKeyRejectedException({
-    required this.host,
-    required this.port,
-    required this.algorithm,
-    required this.fingerprint,
-  });
-
-  final String host;
-  final int port;
-  final String algorithm;
-  final String fingerprint;
-
-  @override
-  String toString() {
-    return 'SSH host key was not trusted for $host:$port.\n'
-        'Algorithm: $algorithm\n'
-        'Fingerprint: $fingerprint';
-  }
-}
-
-class SshHostKeyMismatchException implements Exception {
-  const SshHostKeyMismatchException({
-    required this.host,
-    required this.port,
-    required this.expectedAlgorithm,
-    required this.expectedFingerprint,
-    required this.actualAlgorithm,
-    required this.actualFingerprint,
-  });
-
-  final String host;
-  final int port;
-  final String expectedAlgorithm;
-  final String expectedFingerprint;
-  final String actualAlgorithm;
-  final String actualFingerprint;
-
-  @override
-  String toString() {
-    return 'SSH host key mismatch for $host:$port.\n'
-        'Expected: $expectedAlgorithm $expectedFingerprint\n'
-        'Received: $actualAlgorithm $actualFingerprint\n'
-        'Do not continue unless you have verified the server key changed.';
-  }
-}

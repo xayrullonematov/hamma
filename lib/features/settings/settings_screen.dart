@@ -13,6 +13,7 @@ import '../../core/backup/backup_service.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/app_lock_storage.dart';
 import '../../core/storage/app_prefs_storage.dart';
+import '../../core/storage/backup_storage.dart';
 import '../security/app_lock_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -53,6 +54,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final BackupService _backupService = const BackupService();
   final ApiKeyStorage _apiKeyStorage = const ApiKeyStorage();
   final AppPrefsStorage _appPrefsStorage = const AppPrefsStorage();
+  final BackupStorage _backupStorage = const BackupStorage();
+
+  late BackupConfig _backupConfig;
+  late final TextEditingController _sftpHostController;
+  late final TextEditingController _sftpPortController;
+  late final TextEditingController _sftpUsernameController;
+  late final TextEditingController _sftpPasswordController;
+  late final TextEditingController _sftpPathController;
+  late final TextEditingController _webdavUrlController;
+  late final TextEditingController _webdavUsernameController;
+  late final TextEditingController _webdavPasswordController;
+  late final TextEditingController _syncthingPathController;
 
   late AiProvider _selectedProvider;
   String? _openRouterModel;
@@ -97,12 +110,42 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _openRouterModelController = TextEditingController(
       text: _openRouterModel ?? '',
     );
+
+    _backupConfig = const BackupConfig(destination: BackupDestination.local);
+    _sftpHostController = TextEditingController();
+    _sftpPortController = TextEditingController(text: '22');
+    _sftpUsernameController = TextEditingController();
+    _sftpPasswordController = TextEditingController();
+    _sftpPathController = TextEditingController();
+    _webdavUrlController = TextEditingController();
+    _webdavUsernameController = TextEditingController();
+    _webdavPasswordController = TextEditingController();
+    _syncthingPathController = TextEditingController();
+
     _loadStoredApiKeys();
     _loadAppPinStatus();
     _loadHealthMonitoringSettings();
+    _loadBackupSettings();
     if (_selectedProvider == AiProvider.openRouter) {
       _loadOpenRouterModels();
     }
+  }
+
+  Future<void> _loadBackupSettings() async {
+    final config = await _backupStorage.loadConfig();
+    if (!mounted) return;
+    setState(() {
+      _backupConfig = config;
+      _sftpHostController.text = config.sftpHost;
+      _sftpPortController.text = config.sftpPort.toString();
+      _sftpUsernameController.text = config.sftpUsername;
+      _sftpPasswordController.text = config.sftpPassword;
+      _sftpPathController.text = config.sftpPath;
+      _webdavUrlController.text = config.webdavUrl;
+      _webdavUsernameController.text = config.webdavUsername;
+      _webdavPasswordController.text = config.webdavPassword;
+      _syncthingPathController.text = config.syncthingPath;
+    });
   }
 
   @override
@@ -111,6 +154,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _geminiApiKeyController.dispose();
     _openRouterApiKeyController.dispose();
     _openRouterModelController.dispose();
+    _sftpHostController.dispose();
+    _sftpPortController.dispose();
+    _sftpUsernameController.dispose();
+    _sftpPasswordController.dispose();
+    _sftpPathController.dispose();
+    _webdavUrlController.dispose();
+    _webdavUsernameController.dispose();
+    _webdavPasswordController.dispose();
+    _syncthingPathController.dispose();
     super.dispose();
   }
 
@@ -196,6 +248,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       } else {
         await BackgroundKeepalive.disable();
+      }
+
+      final newBackupConfig = BackupConfig(
+        destination: _backupConfig.destination,
+        sftpHost: _sftpHostController.text.trim(),
+        sftpPort: int.tryParse(_sftpPortController.text) ?? 22,
+        sftpUsername: _sftpUsernameController.text.trim(),
+        sftpPassword: _sftpPasswordController.text.trim(),
+        sftpPath: _sftpPathController.text.trim(),
+        webdavUrl: _webdavUrlController.text.trim(),
+        webdavUsername: _webdavUsernameController.text.trim(),
+        webdavPassword: _webdavPasswordController.text.trim(),
+        syncthingPath: _syncthingPathController.text.trim(),
+        autoBackupEnabled: _backupConfig.autoBackupEnabled,
+        lastBackupTime: _backupConfig.lastBackupTime,
+        lastBackupStatus: _backupConfig.lastBackupStatus,
+      );
+
+      await _backupStorage.saveConfig(newBackupConfig);
+      _backupConfig = newBackupConfig;
+
+      if (_backupConfig.autoBackupEnabled) {
+        await _backupService.scheduleDailyBackup();
+      } else {
+        await _backupService.cancelDailyBackup();
       }
 
       if (!mounted) {
@@ -290,14 +367,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _exportBackup() async {
-    final password = await _promptForMasterPassword(
-      title: 'Create Master Password',
-      message:
-          'Choose a master password to encrypt your backup file. You will need the same password to restore it later.',
-      confirmLabel: 'Export Backup',
-    );
-    if (password == null) {
-      return;
+    final hasPin = await _appLockStorage.hasPin();
+    String? password;
+
+    if (!hasPin) {
+      password = await _promptForMasterPassword(
+        title: 'Create Master Password',
+        message:
+            'Choose a master password to encrypt your backup file. You will need the same password to restore it later.',
+        confirmLabel: 'Export Backup',
+      );
+      if (password == null) return;
     }
 
     setState(() {
@@ -305,18 +385,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      await _backupService.exportBackup(password);
-      if (!mounted) {
-        return;
-      }
-
-      _showSnackBar('Backup exported. Use the share sheet to save it.');
+      await _backupService.backupToDestination(manualPassword: password);
+      await _loadBackupSettings();
+      _showSnackBar('Backup complete.');
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      _showSnackBar(error.toString());
+      _showSnackBar('Backup failed: $error');
     } finally {
       if (mounted) {
         setState(() {
@@ -327,25 +400,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _importBackup() async {
-    final pickedFile = await FilePicker.platform.pickFiles();
-    if (pickedFile == null || pickedFile.files.isEmpty) {
-      return;
-    }
+    final hasPin = await _appLockStorage.hasPin();
+    String? password;
 
-    final filePath = pickedFile.files.single.path;
-    if (filePath == null || filePath.trim().isEmpty) {
-      _showSnackBar('Selected backup file could not be opened.');
-      return;
-    }
-
-    final password = await _promptForMasterPassword(
-      title: 'Enter Master Password',
-      message:
-          'Enter the master password that was used when this backup file was created.',
-      confirmLabel: 'Import Backup',
-    );
-    if (password == null) {
-      return;
+    if (!hasPin) {
+      password = await _promptForMasterPassword(
+        title: 'Enter Master Password',
+        message:
+            'Enter the master password that was used when this backup file was created.',
+        confirmLabel: 'Import Backup',
+      );
+      if (password == null) return;
     }
 
     setState(() {
@@ -353,32 +418,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     try {
-      await _backupService.importBackup(password, filePath);
-      final importedSettings = await _apiKeyStorage.loadSettings();
+      await _backupService.restoreFromDestination(manualPassword: password);
 
-      await widget.onSaveAiSettings(
-        importedSettings.provider,
-        importedSettings.apiKey,
-        importedSettings.openRouterModel,
-      );
-
-      final onBackupImported = widget.onBackupImported;
-      if (onBackupImported != null) {
-        await onBackupImported();
+      // Reload app state after restore
+      if (widget.onBackupImported != null) {
+        await widget.onBackupImported!();
       }
 
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       _showSnackBar('Backup restored successfully.');
       Navigator.of(context).pop();
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      _showSnackBar(error.toString());
+      _showSnackBar('Restore failed: $error');
     } finally {
       if (mounted) {
         setState(() {
@@ -887,69 +938,186 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _SettingsSectionCard(
                   title: 'Backup & Restore',
                   subtitle:
-                      'Create an AES-256 encrypted backup file for saved servers and AI settings, then restore it locally later.',
+                      'Securely backup your servers, AI keys, and chat history to your own server or local storage.',
                   icon: Icons.cloud_sync_outlined,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: _panelColor,
-                          borderRadius: BorderRadius.circular(18),
+                      DropdownButtonFormField<BackupDestination>(
+                        value: _backupConfig.destination,
+                        decoration: const InputDecoration(
+                          labelText: 'Backup Destination',
                         ),
-                        child: Text(
-                          'Your backup stays local. Export creates an encrypted file and opens the native share sheet so you can save it to cloud storage yourself.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: _mutedColor,
-                            height: 1.45,
-                          ),
-                        ),
+                        items:
+                            BackupDestination.values.map((dest) {
+                              return DropdownMenuItem(
+                                value: dest,
+                                child: Text(dest.name.toUpperCase()),
+                              );
+                            }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _backupConfig = BackupConfig(
+                                destination: value,
+                                sftpHost: _backupConfig.sftpHost,
+                                sftpPort: _backupConfig.sftpPort,
+                                sftpUsername: _backupConfig.sftpUsername,
+                                sftpPassword: _backupConfig.sftpPassword,
+                                sftpPath: _backupConfig.sftpPath,
+                                webdavUrl: _backupConfig.webdavUrl,
+                                webdavUsername: _backupConfig.webdavUsername,
+                                webdavPassword: _backupConfig.webdavPassword,
+                                syncthingPath: _backupConfig.syncthingPath,
+                                autoBackupEnabled:
+                                    _backupConfig.autoBackupEnabled,
+                                lastBackupTime: _backupConfig.lastBackupTime,
+                                lastBackupStatus: _backupConfig.lastBackupStatus,
+                              );
+                            });
+                          }
+                        },
                       ),
                       const SizedBox(height: 16),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.tonalIcon(
-                          onPressed: _isBusy ? null : _exportBackup,
-                          icon:
-                              _isExportingBackup
-                                  ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                  : const Icon(Icons.upload_file_outlined),
-                          label: Text(
-                            _isExportingBackup
-                                ? 'Exporting Backup'
-                                : 'Export Backup',
-                          ),
+                      if (_backupConfig.destination == BackupDestination.sftp) ...[
+                        _buildApiKeyField(
+                          controller: _sftpHostController,
+                          label: 'SFTP Host',
+                          helperText: 'Hostname or IP of your server',
                         ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _buildApiKeyField(
+                                controller: _sftpUsernameController,
+                                label: 'Username',
+                                helperText: '',
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildApiKeyField(
+                                controller: _sftpPortController,
+                                label: 'Port',
+                                helperText: '',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _buildApiKeyField(
+                          controller: _sftpPasswordController,
+                          label: 'Password',
+                          helperText: 'SSH Password',
+                        ),
+                        const SizedBox(height: 12),
+                        _buildApiKeyField(
+                          controller: _sftpPathController,
+                          label: 'Backup Directory',
+                          helperText: 'Absolute path on server',
+                        ),
+                      ],
+                      if (_backupConfig.destination == BackupDestination.webdav) ...[
+                        _buildApiKeyField(
+                          controller: _webdavUrlController,
+                          label: 'WebDAV URL',
+                          helperText: 'e.g. https://nextcloud.com/remote.php/dav/files/user/',
+                        ),
+                        const SizedBox(height: 12),
+                        _buildApiKeyField(
+                          controller: _webdavUsernameController,
+                          label: 'Username',
+                          helperText: '',
+                        ),
+                        const SizedBox(height: 12),
+                        _buildApiKeyField(
+                          controller: _webdavPasswordController,
+                          label: 'Password / App Token',
+                          helperText: '',
+                        ),
+                      ],
+                      if (_backupConfig.destination == BackupDestination.syncthing) ...[
+                        _buildApiKeyField(
+                          controller: _syncthingPathController,
+                          label: 'Syncthing Local Path',
+                          helperText: 'The folder Syncthing monitors on this device',
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      SwitchListTile(
+                        title: const Text('Daily Automatic Backup'),
+                        subtitle: const Text(
+                          'Background backup when connected to Wi-Fi.',
+                        ),
+                        value: _backupConfig.autoBackupEnabled,
+                        onChanged: (value) {
+                          setState(() {
+                            _backupConfig = BackupConfig(
+                              destination: _backupConfig.destination,
+                              sftpHost: _backupConfig.sftpHost,
+                              sftpPort: _backupConfig.sftpPort,
+                              sftpUsername: _backupConfig.sftpUsername,
+                              sftpPassword: _backupConfig.sftpPassword,
+                              sftpPath: _backupConfig.sftpPath,
+                              webdavUrl: _backupConfig.webdavUrl,
+                              webdavUsername: _backupConfig.webdavUsername,
+                              webdavPassword: _backupConfig.webdavPassword,
+                              syncthingPath: _backupConfig.syncthingPath,
+                              autoBackupEnabled: value,
+                              lastBackupTime: _backupConfig.lastBackupTime,
+                              lastBackupStatus: _backupConfig.lastBackupStatus,
+                            );
+                          });
+                        },
+                        contentPadding: EdgeInsets.zero,
                       ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _isBusy ? null : _importBackup,
-                          icon:
-                              _isImportingBackup
-                                  ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                  : const Icon(Icons.download_outlined),
-                          label: Text(
-                            _isImportingBackup
-                                ? 'Importing Backup'
-                                : 'Import Backup',
+                      const Divider(height: 32, color: Color(0xFF334155)),
+                      if (_backupConfig.lastBackupTime != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            'Last Backup: ${_backupConfig.lastBackupTime!.toLocal().toString().split('.')[0]} (${_backupConfig.lastBackupStatus ?? 'Unknown'})',
+                            style: theme.textTheme.bodySmall,
                           ),
                         ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.tonalIcon(
+                              onPressed: _isBusy ? null : _exportBackup,
+                              icon:
+                                  _isExportingBackup
+                                      ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : const Icon(Icons.backup_outlined),
+                              label: const Text('Backup Now'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _isBusy ? null : _importBackup,
+                              icon:
+                                  _isImportingBackup
+                                      ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : const Icon(Icons.restore_outlined),
+                              label: const Text('Restore'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
+import '../../core/ssh/connection_status.dart';
+import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/saved_servers_storage.dart';
 import '../fleet/fleet_dashboard_screen.dart';
 import '../settings/settings_screen.dart';
@@ -478,11 +480,19 @@ class _ServerListScreenState extends State<ServerListScreen> {
                             delegate: SliverChildBuilderDelegate(
                               (context, index) {
                                 final server = filteredServers[index];
-                                return _ServerDashboardCard(
-                                  server: server,
-                                  onOpen: () => _openServer(server),
-                                  onEdit: () => _editServer(server),
-                                  onDelete: () => _deleteServer(server),
+                                final sshService = SshService.forServer(server.id);
+                                
+                                return ValueListenableBuilder<ConnectionStatus>(
+                                  valueListenable: sshService.statusNotifier,
+                                  builder: (context, status, _) {
+                                    return _ServerDashboardCard(
+                                      server: server,
+                                      status: status,
+                                      onOpen: () => _openServer(server),
+                                      onEdit: () => _editServer(server),
+                                      onDelete: () => _deleteServer(server),
+                                    );
+                                  },
                                 );
                               },
                               childCount: filteredServers.length,
@@ -505,19 +515,51 @@ class _ServerListScreenState extends State<ServerListScreen> {
 class _ServerDashboardCard extends StatelessWidget {
   const _ServerDashboardCard({
     required this.server,
+    required this.status,
     required this.onOpen,
     required this.onEdit,
     required this.onDelete,
   });
 
   final ServerProfile server;
+  final ConnectionStatus status;
   final VoidCallback onOpen;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  Color _getStatusColor() {
+    switch (status.state) {
+      case SshConnectionState.connected:
+        return const Color(0xFF22C55E);
+      case SshConnectionState.connecting:
+      case SshConnectionState.reconnecting:
+        return const Color(0xFFF59E0B);
+      case SshConnectionState.failed:
+        return const Color(0xFFEF4444);
+      case SshConnectionState.disconnected:
+        return const Color(0xFF94A3B8);
+    }
+  }
+
+  String _getStatusLabel() {
+    switch (status.state) {
+      case SshConnectionState.connected:
+        return 'Connected';
+      case SshConnectionState.connecting:
+        return 'Connecting...';
+      case SshConnectionState.reconnecting:
+        return 'Reconnecting (${status.reconnectAttempts}/${status.maxReconnectAttempts})...';
+      case SshConnectionState.failed:
+        return status.exception?.userMessage ?? 'Failed';
+      case SshConnectionState.disconnected:
+        return 'Direct SSH';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final statusColor = _getStatusColor();
 
     return Material(
       color: Colors.transparent,
@@ -550,9 +592,11 @@ class _ServerDashboardCard extends StatelessWidget {
                     ),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Icon(
-                    Icons.dns_outlined,
-                    color: _ServerListScreenState._cardAccent,
+                  child: Icon(
+                    status.isConnected ? Icons.dns : Icons.dns_outlined,
+                    color: status.isConnected 
+                        ? const Color(0xFF22C55E) 
+                        : _ServerListScreenState._cardAccent,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -580,23 +624,26 @@ class _ServerDashboardCard extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF162033),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Text(
-                          'Direct SSH',
-                          style: TextStyle(
-                            color: _ServerListScreenState._subtitleColor,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _getStatusLabel(),
+                            style: TextStyle(
+                              color: statusColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
