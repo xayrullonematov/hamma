@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:http/http.dart' as http;
@@ -50,11 +49,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _geminiApiKeyController;
   late final TextEditingController _openRouterApiKeyController;
   late final TextEditingController _openRouterModelController;
-  final AppLockStorage _appLockStorage = const AppLockStorage();
-  final BackupService _backupService = const BackupService();
-  final ApiKeyStorage _apiKeyStorage = const ApiKeyStorage();
-  final AppPrefsStorage _appPrefsStorage = const AppPrefsStorage();
-  final BackupStorage _backupStorage = const BackupStorage();
+  final AppLockStorage _appLockStorage = AppLockStorage();
+  final BackupService _backupService = BackupService();
+  final ApiKeyStorage _apiKeyStorage = ApiKeyStorage();
+  final AppPrefsStorage _appPrefsStorage = AppPrefsStorage();
+  final BackupStorage _backupStorage = BackupStorage();
 
   late BackupConfig _backupConfig;
   late final TextEditingController _sftpHostController;

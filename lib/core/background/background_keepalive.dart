@@ -100,7 +100,7 @@ Future<bool> _handleHealthTask() async {
 
 Future<bool> _handleBackupTask() async {
   try {
-    const backupService = BackupService();
+    final backupService = BackupService();
     await backupService.backupToDestination();
     return true;
   } catch (_) {

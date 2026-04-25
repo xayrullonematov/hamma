@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -16,7 +15,7 @@ import 'package:workmanager/workmanager.dart';
 
 import '../ssh/sftp_service.dart';
 import '../storage/app_lock_storage.dart';
-import 'backup_storage.dart';
+import '../storage/backup_storage.dart';
 
 class BackupService {
   const BackupService({
@@ -149,7 +148,7 @@ class BackupService {
         }
       }
 
-      if (fileToRestore == null || !await fileToRestore.exists()) {
+      if (!await fileToRestore.exists()) {
         throw const BackupException('Backup file not found.');
       }
 
@@ -277,7 +276,7 @@ class BackupService {
   Future<void> _uploadToWebDav(BackupConfig config, File file) async {
     final bytes = await file.readAsBytes();
     final uri = Uri.parse(
-      '${config.webdavUrl}/${_backupFilename}'.replaceAll(
+      '${config.webdavUrl}/$_backupFilename'.replaceAll(
         RegExp(r'(?<!:)/+'),
         '/',
       ),
@@ -299,7 +298,7 @@ class BackupService {
 
   Future<File> _downloadFromWebDav(BackupConfig config) async {
     final uri = Uri.parse(
-      '${config.webdavUrl}/${_backupFilename}'.replaceAll(
+      '${config.webdavUrl}/$_backupFilename'.replaceAll(
         RegExp(r'(?<!:)/+'),
         '/',
       ),

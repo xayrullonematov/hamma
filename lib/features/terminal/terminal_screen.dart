@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -261,7 +259,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
                     _terminal,
                     focusNode: _terminalFocusNode,
                     autofocus: true,
-                    enabled: widget.sshService.isConnected,
                   ),
                 ),
               ),
@@ -344,7 +341,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
                 ),
                 if (subLabel != null)
                   Padding(
-                    padding: const EdgeInsets.top(2),
+                    padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       subLabel,
                       maxLines: 1,

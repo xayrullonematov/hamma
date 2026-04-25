@@ -2,17 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
+import '../../core/ssh/connection_status.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/api_key_storage.dart';
-import '../../core/storage/custom_actions_storage.dart';
-import '../ai_assistant/ai_copilot_sheet.dart';
-import '../port_forwarding/port_forwarding_sheet.dart';
-import '../processes/process_manager_screen.dart';
 import '../docker/docker_manager_screen.dart';
-import '../logs/log_viewer_screen.dart';
 import '../packages/package_manager_screen.dart';
-import '../quick_actions/custom_actions_screen.dart';
-import '../quick_actions/quick_actions.dart';
 import '../sftp/file_explorer_screen.dart';
 import '../services/service_management_screen.dart';
 import '../settings/settings_screen.dart';
@@ -46,13 +40,11 @@ class ServerDashboardScreen extends StatefulWidget {
 }
 
 class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
-  static const _surfaceColor = Color(0xFF1E293B);
   static const _panelColor = Color(0xFF162033);
   static const _mutedColor = Color(0xFF94A3B8);
   static const _successColor = Color(0xFF22C55E);
   static const _dangerColor = Color(0xFFEF4444);
   static const _warningColor = Color(0xFFF59E0B);
-  static const _shadowColor = Color(0x22000000);
 
   late final SshService _sshService;
   final ApiKeyStorage _apiKeyStorage = const ApiKeyStorage();
@@ -104,6 +96,48 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     } catch (error) {
       if (mounted) _showMessage(error.toString());
     }
+  }
+
+  Future<bool> _confirmHostKeyTrust({
+    required String host,
+    required int port,
+    required String algorithm,
+    required String fingerprint,
+  }) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) {
+            return AlertDialog(
+              title: const Text('Trust SSH Host Key'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('First connection to $host:$port'),
+                  const SizedBox(height: 12),
+                  Text('Algorithm: $algorithm'),
+                  const SizedBox(height: 8),
+                  SelectableText('Fingerprint: $fingerprint'),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Only trust this key if you have verified it with your server provider or the server itself.',
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  child: const Text('Trust'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
   }
 
   String _formatTime(DateTime? dt) {
@@ -220,7 +254,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                 icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: const Text('Reconnect'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: _primaryColor.withOpacity(0.1),
+                  backgroundColor: _primaryColor.withValues(alpha: 0.1),
                   foregroundColor: _primaryColor,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
@@ -401,7 +435,7 @@ class _SidebarItem extends StatelessWidget {
       child: Opacity(
         opacity: isEnabled ? 1.0 : 0.4,
         child: Material(
-          color: isActive ? Colors.white.withOpacity(0.08) : Colors.transparent,
+          color: isActive ? Colors.white.withValues(alpha: 0.08) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           child: InkWell(
             onTap: isEnabled ? onTap : null,
@@ -464,200 +498,6 @@ class _StatusIndicator extends StatelessWidget {
     return Container(
       width: 8,
       height: 8,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-    );
-  }
-}
-
-class _SidebarItem extends StatelessWidget {
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Material(
-        color: isActive ? Colors.white.withOpacity(0.08) : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 20,
-                  color: isActive ? Colors.white : const Color(0xFF94A3B8),
-                ),
-                const SizedBox(width: 16),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: isActive ? Colors.white : const Color(0xFF94A3B8),
-                    fontSize: 14,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ManagementTile extends StatelessWidget {
-  const _ManagementTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isEnabled = onTap != null;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Opacity(
-          opacity: isEnabled ? 1 : 0.5,
-          child: Container(
-            decoration: BoxDecoration(
-              color: _ServerDashboardScreenState._panelColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: const Color(0xFF3B82F6), size: 28),
-                const SizedBox(height: 8),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickActionTile extends StatelessWidget {
-  const _QuickActionTile({
-    required this.label,
-    required this.command,
-    required this.icon,
-    required this.isRunning,
-    required this.isEnabled,
-    required this.onTap,
-  });
-
-  final String label;
-  final String command;
-  final IconData icon;
-  final bool isRunning;
-  final bool isEnabled;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Opacity(
-      opacity: isEnabled || isRunning ? 1 : 0.58,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Ink(
-            decoration: BoxDecoration(
-              color: _ServerDashboardScreenState._panelColor,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6).withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child:
-                        isRunning
-                            ? const Padding(
-                              padding: EdgeInsets.all(10),
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                            : Icon(icon, color: const Color(0xFF3B82F6)),
-                  ),
-                  const Spacer(),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    command,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: _ServerDashboardScreenState._mutedColor,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _TerminalDot extends StatelessWidget {
-  const _TerminalDot({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 10,
-      height: 10,
       decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     );
   }

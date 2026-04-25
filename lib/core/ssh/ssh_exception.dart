@@ -64,7 +64,16 @@ class SshUnknownHostKeyException extends SshHostKeyException {
 }
 
 class SshUnknownHostKeyRejectedException extends SshHostKeyException {
+  final String host;
+  final int port;
+  final String algorithm;
+  final String fingerprint;
+
   const SshUnknownHostKeyRejectedException({
+    required this.host,
+    required this.port,
+    required this.algorithm,
+    required this.fingerprint,
     super.originalError,
   }) : super(
           userMessage: 'The server identity was rejected by the user.',

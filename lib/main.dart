@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -21,17 +22,19 @@ void main() {
     WidgetsFlutterBinding.ensureInitialized();
 
     // Initialize window manager for desktop
-    await windowManager.ensureInitialized();
-    const windowOptions = WindowOptions(
-      size: Size(1100, 750),
-      minimumSize: Size(800, 600),
-      center: true,
-      titleBarStyle: TitleBarStyle.hidden,
-    );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
+    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+      await windowManager.ensureInitialized();
+      const windowOptions = WindowOptions(
+        size: Size(1100, 750),
+        minimumSize: Size(800, 600),
+        center: true,
+        titleBarStyle: TitleBarStyle.hidden,
+      );
+      windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    }
 
     // Initialize notifications
     final notifications = FlutterLocalNotificationsPlugin();
@@ -321,6 +324,9 @@ class _AiServerAppState extends State<AiServerApp> {
         ),
       ),
       builder: (context, child) {
+        if (!Platform.isLinux && !Platform.isWindows && !Platform.isMacOS) {
+          return child!;
+        }
         return Column(
           children: [
             Container(

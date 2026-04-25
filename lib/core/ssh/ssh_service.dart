@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
-
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pinenacl/ed25519.dart' as ed25519;
@@ -14,6 +12,8 @@ import '../background/background_keepalive.dart';
 import '../storage/trusted_host_key_storage.dart';
 import 'connection_status.dart';
 import 'ssh_exception.dart';
+
+export 'ssh_exception.dart';
 
 class SshService {
   static final Map<String, SshService> _instances = {};
