@@ -9,6 +9,7 @@ import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/chat_history_storage.dart';
+import 'widgets/interactive_command_block.dart';
 
 class AiCopilotSheet extends StatefulWidget {
   const AiCopilotSheet({
@@ -51,6 +52,16 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   static const _warningColor = Color(0xFFD97706);
   static const _shadowColor = Color(0x22000000);
   static const _openRouterModelsUrl = 'https://openrouter.ai/api/v1/models';
+
+  static const _quickActionPrompts = [
+    "Analyze Logs",
+    "Check Resource Hogs",
+    "List Open Ports",
+    "Update System",
+    "Restart Service",
+    "Prune Docker",
+    "Firewall Audit",
+  ];
 
   late AiCommandService _aiCommandService;
   final ChatHistoryStorage _chatHistoryStorage = const ChatHistoryStorage();
@@ -522,15 +533,15 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     }
   }
 
-  void _appendChatMessage({required String role, required String content}) {
+  void _appendChatMessage({required String role, required String content, CommandAnalysis? analysis}) {
     final normalizedContent = content.trim();
-    if (normalizedContent.isEmpty) {
+    if (normalizedContent.isEmpty && analysis == null) {
       return;
     }
 
     final updatedMessages = [
       ..._chatMessages,
-      _ChatMessage(role: role, content: normalizedContent),
+      _ChatMessage(role: role, content: normalizedContent, analysis: analysis),
     ];
 
     setState(() {
@@ -599,6 +610,92 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     }
   }
 
+  Future<void> _handleQuickAction(String actionPrompt) async {
+    if (_isGenerating || _isRunningStep || !_hasActiveApiKey) return;
+    
+    _appendChatMessage(role: 'user', content: actionPrompt);
+    
+    setState(() {
+      _isGenerating = true;
+      _status = 'Generating analyzed command...';
+    });
+
+    try {
+      final analysis = await _aiCommandService.generateCommand(
+        actionPrompt,
+        contextOutput: widget.getContext(),
+      );
+      
+      if (!mounted) return;
+
+      _appendChatMessage(
+        role: 'assistant',
+        content: analysis.explanation,
+        analysis: analysis,
+      );
+      
+      setState(() {
+        _status = 'Suggestion ready';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = _friendlyErrorMessage(
+          error: error,
+          fallbackPrefix: 'Failed to generate command',
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGenerating = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _generateAnalyzedCommand(String prompt) async {
+    setState(() {
+      _isGenerating = true;
+      _status = 'Analyzing...';
+    });
+
+    _appendChatMessage(role: 'user', content: prompt);
+
+    try {
+      final analysis = await _aiCommandService.generateCommand(
+        prompt,
+        contextOutput: widget.getContext(),
+      );
+      
+      if (!mounted) return;
+
+      _appendChatMessage(
+        role: 'assistant',
+        content: analysis.explanation,
+        analysis: analysis,
+      );
+      
+      setState(() {
+        _status = 'Suggestion ready';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = _friendlyErrorMessage(
+          error: error,
+          fallbackPrefix: 'Failed to generate analyzed command',
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGenerating = false;
+        });
+      }
+    }
+  }
+
   Future<void> _generateCommands() async {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) {
@@ -615,56 +712,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       return;
     }
 
-    setState(() {
-      _isGenerating = true;
-      _status = 'Generating step plan';
-      if (widget.executionTarget == AiCopilotExecutionTarget.dashboard) {
-        _commandOutput = '';
-      }
-    });
-
-    try {
-      final plan = await _aiCommandService.generateCommandPlan(
-        _buildCommandPrompt(prompt),
-      );
-      if (!mounted) {
-        return;
-      }
-
-      _disposePlanSteps();
-
-      setState(() {
-        _planSteps =
-            plan
-                .map(
-                  (step) => _CopilotPlanStep(
-                    title: step.title,
-                    description: step.description,
-                    controller: TextEditingController(text: step.command),
-                    state: CopilotPlanStepState.pending,
-                  ),
-                )
-                .toList();
-        _status = 'Step plan ready';
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _status = _friendlyErrorMessage(
-          error: error,
-          fallbackPrefix: 'Failed to generate step plan',
-        );
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isGenerating = false;
-        });
-      }
-    }
+    await _generateAnalyzedCommand(prompt);
+    _promptController.clear();
   }
 
   Future<void> _generateChatResponse() async {
@@ -685,6 +734,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
     final existingChatMessages = List<_ChatMessage>.from(_chatMessages);
     _appendChatMessage(role: 'user', content: prompt);
+    _promptController.clear();
 
     setState(() {
       _isGenerating = true;
@@ -712,6 +762,96 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         _status = _friendlyErrorMessage(
           error: error,
           fallbackPrefix: 'Failed to generate response',
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGenerating = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _executeCommandWithRiskCheck(String command, CommandRiskLevel riskLevel, String explanation) async {
+    if (riskLevel == CommandRiskLevel.low) {
+      await widget.onRunCommand(command);
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Execution'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: _riskColor(riskLevel), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  riskLevel.name.toUpperCase(),
+                  style: TextStyle(
+                    color: _riskColor(riskLevel),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(explanation),
+            const SizedBox(height: 16),
+            const Text('Are you sure you want to run this command on the server?'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Run Anyway'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await widget.onRunCommand(command);
+    }
+  }
+
+  Future<void> _explainCommand(String command) async {
+    _appendChatMessage(role: 'user', content: 'Explain: $command');
+    
+    setState(() {
+      _isGenerating = true;
+      _status = 'Generating explanation...';
+    });
+
+    try {
+      final response = await _aiCommandService.generateChatResponse(
+        'Please provide a deep technical explanation of the following Linux command:\n\n$command',
+        history: _chatMessages.map((m) => {'role': m.role, 'content': m.content}).toList(),
+      );
+      
+      if (!mounted) return;
+
+      _appendChatMessage(role: 'assistant', content: response);
+      
+      setState(() {
+        _status = 'Explanation ready';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = _friendlyErrorMessage(
+          error: error,
+          fallbackPrefix: 'Failed to generate explanation',
         );
       });
     } finally {
@@ -820,10 +960,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     required int stepNumber,
     required String stepTitle,
     required String command,
-    required CommandRiskAssessment assessment,
+    required CommandAnalysis assessment,
     String? warningText,
   }) async {
-    final color = _riskColor(assessment.level);
+    final color = _riskColor(assessment.riskLevel);
     final targetLabel =
         widget.executionTarget == AiCopilotExecutionTarget.terminal
             ? 'sent to the active shell'
@@ -872,7 +1012,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      _riskLabel(assessment.level),
+                      _riskLabel(assessment.riskLevel),
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.w600,
@@ -901,23 +1041,27 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
   String _riskLabel(CommandRiskLevel level) {
     switch (level) {
-      case CommandRiskLevel.safe:
-        return 'SAFE';
-      case CommandRiskLevel.warning:
-        return 'WARNING';
-      case CommandRiskLevel.dangerous:
-        return 'DANGEROUS';
+      case CommandRiskLevel.low:
+        return 'LOW RISK';
+      case CommandRiskLevel.moderate:
+        return 'MODERATE RISK';
+      case CommandRiskLevel.high:
+        return 'HIGH RISK';
+      case CommandRiskLevel.critical:
+        return 'CRITICAL RISK';
     }
   }
 
   Color _riskColor(CommandRiskLevel level) {
     switch (level) {
-      case CommandRiskLevel.safe:
+      case CommandRiskLevel.low:
         return const Color(0xFF15803D);
-      case CommandRiskLevel.warning:
+      case CommandRiskLevel.moderate:
         return const Color(0xFFD97706);
-      case CommandRiskLevel.dangerous:
+      case CommandRiskLevel.high:
         return const Color(0xFFDC2626);
+      case CommandRiskLevel.critical:
+        return const Color(0xFFFF0000);
     }
   }
 
@@ -1033,24 +1177,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     }
 
     return '$fallbackPrefix. Please try again.';
-  }
-
-  String _buildCommandPrompt(String userPrompt) {
-    final contextSection = _buildContextSection();
-    final sessionType =
-        widget.executionTarget == AiCopilotExecutionTarget.terminal
-            ? 'a live Linux terminal session'
-            : 'a Linux server dashboard session';
-
-    return 'You are helping with $sessionType.\n\n'
-        '$contextSection'
-        'User request:\n'
-        '$userPrompt\n\n'
-        'Return ONLY a JSON array of steps. '
-        'Each step must be either:\n'
-        '1. a string command, or\n'
-        '2. an object with "title", "command", and optional "description".\n'
-        'Use one shell command per step. No markdown. No code fences. No explanation outside JSON.';
   }
 
   String _buildChatPrompt(
@@ -1485,12 +1611,11 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                   Expanded(
                     child: _StepTimelineCard(
                       title: step.title,
-                      description: step.description,
                       controller: step.controller,
                       stateLabel: _stepStateLabel(step.state),
                       stateColor: _stepStateColor(step.state),
-                      riskLabel: _riskLabel(assessment.level),
-                      riskColor: _riskColor(assessment.level),
+                      riskLabel: _riskLabel(assessment.riskLevel),
+                      riskColor: _riskColor(assessment.riskLevel),
                       riskExplanation: assessment.explanation,
                       warningText:
                           pendingPrevious.isEmpty
@@ -1574,15 +1699,33 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                               ),
                             ),
                           )
-                          : _ChatBubble(
-                            child: SelectableText(
-                              message.content,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: Colors.white,
-                                height: 1.5,
-                              ),
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _ChatBubble(
+                                  child: SelectableText(
+                                    message.content,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: Colors.white,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
+                                if (message.analysis != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 8.0),
+                                    child: InteractiveCommandBlock(
+                                      analysis: message.analysis!,
+                                      onRunCommand: (cmd) => _executeCommandWithRiskCheck(
+                                        cmd,
+                                        message.analysis!.riskLevel,
+                                        message.analysis!.explanation,
+                                      ),
+                                      onExplainCommand: _explainCommand,
+                                    ),
+                                  ),
+                              ],
                             ),
-                          ),
                 ),
               ),
             );
@@ -1599,90 +1742,119 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     );
   }
 
+  Widget _buildQuickActions() {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _quickActionPrompts.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final prompt = _quickActionPrompts[index];
+          return ActionChip(
+            label: Text(prompt, style: const TextStyle(fontSize: 12)),
+            onPressed: () => _handleQuickAction(prompt),
+            backgroundColor: _panelColor,
+            labelStyle: const TextStyle(color: Colors.white),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildComposer(ThemeData theme) {
-    return Container(
-      decoration: _surfaceDecoration(),
-      padding: const EdgeInsets.all(8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _promptController,
-              enabled: !_isLoadingActiveApiKey && _hasActiveApiKey,
-              minLines: 1,
-              maxLines: 4,
-              style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: _promptHintText(),
-                hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                  color: _mutedColor,
-                ),
-                filled: true,
-                fillColor: _panelColor,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 16,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: const BorderSide(
-                    color: _primaryColor,
-                    width: 1.2,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildQuickActions(),
+        const SizedBox(height: 8),
+        Container(
+          decoration: _surfaceDecoration(),
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _promptController,
+                  enabled: !_isLoadingActiveApiKey && _hasActiveApiKey,
+                  minLines: 1,
+                  maxLines: 4,
+                  style: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: _promptHintText(),
+                    hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                      color: _mutedColor,
+                    ),
+                    filled: true,
+                    fillColor: _panelColor,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 16,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: const BorderSide(
+                        color: _primaryColor,
+                        width: 1.2,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              const SizedBox(width: 10),
+              Container(
+                decoration: BoxDecoration(
+                  color:
+                      _isGenerating ||
+                              _isRunningStep ||
+                              _isLoadingActiveApiKey ||
+                              !_hasActiveApiKey
+                          ? _panelColor
+                          : _primaryColor,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: IconButton(
+                  onPressed:
+                      _isGenerating ||
+                              _isRunningStep ||
+                              _isHistoryLoading ||
+                              _isLoadingActiveApiKey ||
+                              !_hasActiveApiKey
+                          ? null
+                          : _submitPrompt,
+                  icon:
+                      _isGenerating
+                          ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                          : const Icon(Icons.send_rounded),
+                  color: Colors.white,
+                  tooltip:
+                      _mode == CopilotMode.commandHelper
+                          ? 'Generate plan'
+                          : 'Send prompt',
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Container(
-            decoration: BoxDecoration(
-              color:
-                  _isGenerating ||
-                          _isRunningStep ||
-                          _isLoadingActiveApiKey ||
-                          !_hasActiveApiKey
-                      ? _panelColor
-                      : _primaryColor,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: IconButton(
-              onPressed:
-                  _isGenerating ||
-                          _isRunningStep ||
-                          _isHistoryLoading ||
-                          _isLoadingActiveApiKey ||
-                          !_hasActiveApiKey
-                      ? null
-                      : _submitPrompt,
-              icon:
-                  _isGenerating
-                      ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                      : const Icon(Icons.send_rounded),
-              color: Colors.white,
-              tooltip:
-                  _mode == CopilotMode.commandHelper
-                      ? 'Generate plan'
-                      : 'Send prompt',
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1788,20 +1960,19 @@ class _CopilotPlanStep {
     required this.title,
     required this.controller,
     required this.state,
-    this.description,
   });
 
   final String title;
-  final String? description;
   final TextEditingController controller;
   CopilotPlanStepState state;
 }
 
 class _ChatMessage {
-  const _ChatMessage({required this.role, required this.content});
+  const _ChatMessage({required this.role, required this.content, this.analysis});
 
   final String role;
   final String content;
+  final CommandAnalysis? analysis;
 }
 
 class _StepNode extends StatelessWidget {
@@ -1833,7 +2004,6 @@ class _StepNode extends StatelessWidget {
 class _StepTimelineCard extends StatelessWidget {
   const _StepTimelineCard({
     required this.title,
-    required this.description,
     required this.controller,
     required this.stateLabel,
     required this.stateColor,
@@ -1848,7 +2018,6 @@ class _StepTimelineCard extends StatelessWidget {
   });
 
   final String title;
-  final String? description;
   final TextEditingController controller;
   final String stateLabel;
   final Color stateColor;
@@ -1928,16 +2097,6 @@ class _StepTimelineCard extends StatelessWidget {
                   color: _AiCopilotSheetState._warningColor,
                   fontWeight: FontWeight.w600,
                 ),
-              ),
-            ),
-          ],
-          if (description != null && description!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              description!,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: _AiCopilotSheetState._mutedColor,
-                height: 1.45,
               ),
             ),
           ],

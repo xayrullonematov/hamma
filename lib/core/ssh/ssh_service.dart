@@ -114,7 +114,7 @@ class SshService {
       );
     }
 
-    if (message.contains('timeout') || message.contains('timed out')) {
+    if (e is TimeoutException || message.contains('timeout') || message.contains('timed out')) {
       return SshTimeoutException(originalError: e);
     }
 
@@ -148,12 +148,16 @@ class SshService {
       ),
     );
 
+    // If this is a fresh manual connection (not from reconnect loop), reset attempts
     if (_currentStatus.state != SshConnectionState.reconnecting) {
+      _reconnectAttempts = 0;
       _updateStatus(ConnectionStatus.connecting());
     }
 
-    // Use internal cleanup that doesn't cancel auto-reconnect if we are in the middle of it
-    // but here we are starting a NEW connection, so we should cancel.
+    // Connect always cancels any pending auto-reconnect timer
+    cancelAutoReconnect();
+    
+    // Cleanup existing client if any
     await disconnect(updateStatus: false, cancelAuto: true);
 
     _lastHost = host;
@@ -255,7 +259,7 @@ class SshService {
         rethrow;
       }
       _client = client;
-      _reconnectAttempts = 0;
+      _reconnectAttempts = 0; // Reset on true success
       _lastSuccessfulConnection = DateTime.now();
       _startHeartbeat();
       _updateStatus(ConnectionStatus.connected(lastSuccessfulConnection: _lastSuccessfulConnection));
@@ -263,6 +267,15 @@ class SshService {
       Sentry.captureException(e, stackTrace: stackTrace);
       final sshError = _mapError(e);
       _updateStatus(ConnectionStatus.failed(sshError, lastSuccessfulConnection: _lastSuccessfulConnection));
+      
+      // Trigger auto-reconnect if enabled and error is recoverable (not auth or host key issue)
+      if (_autoReconnectEnabled && 
+          _lastHost != null && 
+          sshError is! SshAuthenticationException && 
+          sshError is! SshHostKeyException) {
+        _triggerAutoReconnect();
+      }
+      
       rethrow;
     }
   }
@@ -292,11 +305,7 @@ class SshService {
         onTrustHostKey: _lastOnTrustHostKey,
       );
     } catch (e) {
-      // Re-throw the error but ensure the status is failed if connect didn't catch it correctly
-      if (_currentStatus.state != SshConnectionState.failed) {
-        final sshError = _mapError(e);
-        _updateStatus(ConnectionStatus.failed(sshError, lastSuccessfulConnection: _lastSuccessfulConnection));
-      }
+      // connect() already set status to failed.
       rethrow;
     }
   }
@@ -318,10 +327,12 @@ class SshService {
     if (_client != null || _currentStatus.isConnected) {
       _client = null;
       _heartbeatTimer?.cancel();
-      _updateStatus(ConnectionStatus.disconnected());
       
-      if (_autoReconnectEnabled && _lastHost != null) {
+      // If auto-reconnect is enabled, we move to a "waiting" reconnecting state
+      if (_autoReconnectEnabled && _lastHost != null && _reconnectAttempts < _maxReconnectAttempts) {
         _triggerAutoReconnect();
+      } else {
+        _updateStatus(ConnectionStatus.disconnected());
       }
     }
   }
@@ -340,19 +351,29 @@ class SshService {
       return;
     }
 
-    // Exponential backoff: 5s, 10s, 20s, 30s, 60s
+    // Show "Reconnecting (Attempt X/5)" immediately so user knows we are trying
+    _updateStatus(ConnectionStatus.reconnecting(
+      attempts: _reconnectAttempts + 1,
+      maxAttempts: _maxReconnectAttempts,
+      lastSuccessfulConnection: _lastSuccessfulConnection,
+    ));
+
+    // Exponential-ish backoff: 5s, 10s, 20s, 30s, 60s
     final backoffSeconds = [5, 10, 20, 30, 60];
     final delay = Duration(seconds: backoffSeconds[min(_reconnectAttempts, backoffSeconds.length - 1)]);
 
     _reconnectTimer = Timer(delay, () async {
+      // Guard: Ensure we still want to reconnect
+      if (!_autoReconnectEnabled || _currentStatus.isConnected || _currentStatus.isDisconnected) {
+        return;
+      }
+      
       try {
         await reconnect();
       } catch (_) {
-        // If reconnect failed, reconnect() already set state to failed.
-        // If auto-reconnect is still enabled, we trigger the next attempt.
-        if (_autoReconnectEnabled && _currentStatus.isFailed && _reconnectAttempts < _maxReconnectAttempts) {
-          _triggerAutoReconnect();
-        }
+        // reconnect() failed, loop triggers again from connect()'s catch block or we do it here if needed
+        // Since connect() handles triggering auto-reconnect on failure, we don't need to do it here
+        // to avoid double-timers.
       }
     });
   }
@@ -404,7 +425,6 @@ class SshService {
     } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {
         _handleDisconnect(reason: 'Command failed: $error');
-        await disconnect(updateStatus: false, cancelAuto: false);
       }
       Sentry.captureException(error, stackTrace: stackTrace);
       rethrow;
@@ -422,7 +442,6 @@ class SshService {
     } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {
         _handleDisconnect(reason: 'Stream command failed: $error');
-        await disconnect(updateStatus: false, cancelAuto: false);
       }
       Sentry.captureException(error, stackTrace: stackTrace);
       rethrow;
@@ -442,7 +461,6 @@ class SshService {
     } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {
         _handleDisconnect(reason: 'Shell failed: $error');
-        await disconnect(updateStatus: false, cancelAuto: false);
       }
       Sentry.captureException(error, stackTrace: stackTrace);
       rethrow;
@@ -694,4 +712,3 @@ class SshService {
     return patterns.any(message.contains);
   }
 }
-

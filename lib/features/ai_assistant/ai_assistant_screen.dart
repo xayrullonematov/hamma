@@ -320,9 +320,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   Future<bool> _showRiskDialog(
     String command,
-    CommandRiskAssessment assessment,
+    CommandAnalysis assessment,
   ) async {
-    final color = _riskColor(assessment.level);
+    final color = _riskColor(assessment.riskLevel);
     return await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
@@ -352,7 +352,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                     Icon(Icons.warning_amber_rounded, color: color, size: 20),
                     const SizedBox(width: 8),
                     Text(
-                      _riskLabel(assessment.level),
+                      _riskLabel(assessment.riskLevel),
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.bold,
@@ -396,23 +396,27 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
 
   String _riskLabel(CommandRiskLevel level) {
     switch (level) {
-      case CommandRiskLevel.safe:
-        return 'SAFE';
-      case CommandRiskLevel.warning:
-        return 'WARNING';
-      case CommandRiskLevel.dangerous:
-        return 'DANGEROUS';
+      case CommandRiskLevel.low:
+        return 'LOW RISK';
+      case CommandRiskLevel.moderate:
+        return 'MODERATE RISK';
+      case CommandRiskLevel.high:
+        return 'HIGH RISK';
+      case CommandRiskLevel.critical:
+        return 'CRITICAL RISK';
     }
   }
 
   Color _riskColor(CommandRiskLevel level) {
     switch (level) {
-      case CommandRiskLevel.safe:
+      case CommandRiskLevel.low:
         return const Color(0xFF22C55E);
-      case CommandRiskLevel.warning:
+      case CommandRiskLevel.moderate:
         return const Color(0xFFF59E0B);
-      case CommandRiskLevel.dangerous:
+      case CommandRiskLevel.high:
         return const Color(0xFFEF4444);
+      case CommandRiskLevel.critical:
+        return const Color(0xFFFF0000);
     }
   }
 
@@ -639,7 +643,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   Widget _buildCommandCard(int msgIndex, String command) {
     final output = _messages[msgIndex]['outputs']?[command];
     final assessment = _riskAssessor.assess(command);
-    final color = _riskColor(assessment.level);
+    final color = _riskColor(assessment.riskLevel);
     final isError = output?.startsWith('Error:') ?? false;
 
     return Container(
@@ -700,7 +704,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                       Icon(Icons.shield_outlined, color: color, size: 12),
                       const SizedBox(width: 4),
                       Text(
-                        _riskLabel(assessment.level),
+                        _riskLabel(assessment.riskLevel),
                         style: TextStyle(
                           color: color,
                           fontSize: 10,

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'ai_provider.dart';
+import 'command_risk_assessor.dart';
 
 class AiApiConfig {
   const AiApiConfig({
@@ -111,13 +112,80 @@ class AiCommandService {
     }
   }
 
-  Future<String> _chatWithOpenAi(HttpClient client, String prompt, List<Map<String, String>> history) async {
+  Future<CommandAnalysis> generateCommand(String prompt, {String? contextOutput}) async {
+    final trimmedPrompt = prompt.trim();
+    if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
+
+    if (!config.isConfigured) {
+      throw AiCommandServiceException('${config.provider.label} API key is not set.');
+    }
+
+    const systemInstruction =
+        'You are a Linux sysadmin. Analyze the context and provide a safe command. '
+        'You MUST return strictly valid JSON matching this schema: '
+        '{ "command": "<the bash command>", "risk_level": "<low|moderate|high>", "explanation": "<short explanation>" }';
+
+    String fullPrompt = trimmedPrompt;
+    if (contextOutput != null && contextOutput.isNotEmpty) {
+      fullPrompt = 'Context:\n$contextOutput\n\nTask: $trimmedPrompt';
+    }
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 15);
+
+    try {
+      String response;
+      switch (config.provider) {
+        case AiProvider.openAi:
+          response = await _chatWithOpenAi(client, fullPrompt, [], systemInstruction: systemInstruction);
+          break;
+        case AiProvider.gemini:
+          response = await _chatWithGemini(client, fullPrompt, [], systemInstruction: systemInstruction);
+          break;
+        case AiProvider.openRouter:
+          response = await _chatWithOpenAi(client, fullPrompt, [], systemInstruction: systemInstruction);
+          break;
+      }
+
+      final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(response);
+      final jsonString = jsonMatch?.group(0) ?? response;
+      final decoded = jsonDecode(jsonString) as Map<String, dynamic>;
+
+      var analysis = CommandAnalysis.fromJson(decoded);
+
+      final fastRisk = CommandRiskAssessor.assessFast(analysis.command);
+      if (fastRisk == CommandRiskLevel.critical) {
+        analysis = CommandAnalysis(
+          command: analysis.command,
+          riskLevel: CommandRiskLevel.critical,
+          explanation:
+              'CRITICAL SAFETY WARNING: This command contains patterns that are highly dangerous. ${analysis.explanation}',
+        );
+      }
+
+      return analysis;
+    } on FormatException catch (e) {
+      throw AiCommandServiceException('AI response was not valid JSON: $e');
+    } catch (e) {
+      if (e is AiCommandServiceException) rethrow;
+      throw AiCommandServiceException('Command generation failed: $e');
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  Future<String> _chatWithOpenAi(
+    HttpClient client,
+    String prompt,
+    List<Map<String, String>> history, {
+    String? systemInstruction,
+  }) async {
     final request = await client.postUrl(Uri.parse('${config.baseUrl}/chat/completions')).timeout(const Duration(seconds: 15));
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${config.apiKey}');
 
     final messages = [
-      {'role': 'system', 'content': _chatInstruction},
+      {'role': 'system', 'content': systemInstruction ?? _chatInstruction},
       ...history,
       {'role': 'user', 'content': prompt},
     ];
@@ -138,7 +206,12 @@ class AiCommandService {
     return _extractOpenAiContent(responseBody) ?? '';
   }
 
-  Future<String> _chatWithGemini(HttpClient client, String prompt, List<Map<String, String>> history) async {
+  Future<String> _chatWithGemini(
+    HttpClient client,
+    String prompt,
+    List<Map<String, String>> history, {
+    String? systemInstruction,
+  }) async {
     final request = await client.postUrl(Uri.parse('${config.baseUrl}/models/${config.model}:generateContent')).timeout(const Duration(seconds: 15));
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
     request.headers.set('x-goog-api-key', config.apiKey);
@@ -146,13 +219,17 @@ class AiCommandService {
     final contents = history.map((m) {
       return {
         'role': m['role'] == 'assistant' ? 'model' : 'user',
-        'parts': [{'text': m['content']}]
+        'parts': [
+          {'text': m['content']}
+        ]
       };
     }).toList();
 
     contents.add({
       'role': 'user',
-      'parts': [{'text': 'System Instruction: $_chatInstruction\n\nUser: $prompt'}]
+      'parts': [
+        {'text': 'System Instruction: ${systemInstruction ?? _chatInstruction}\n\nUser: $prompt'}
+      ]
     });
 
     request.write(jsonEncode({'contents': contents}));
@@ -190,7 +267,6 @@ class AiCommandService {
     final trimmedPrompt = prompt.trim();
     if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
 
-    // Use the existing chat logic to get a structured response
     final response = await generateChatResponse(
       'Based on the following request, provide a list of shell commands to execute. '
       'Format each command in a markdown bash block. '
@@ -213,17 +289,10 @@ class AiCommandService {
     }
 
     if (steps.isEmpty && response.isNotEmpty) {
-      // Fallback: If no code blocks but text exists, it might be an explanation of why it can't do it
       throw AiCommandServiceException(response);
     }
 
     return steps;
-  }
-
-  Future<List<String>> generateCommands(String prompt) async {
-    final trimmedPrompt = prompt.trim();
-    if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
-    return [];
   }
 }
 

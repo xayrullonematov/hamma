@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -234,44 +235,39 @@ class _TerminalScreenState extends State<TerminalScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          ValueListenableBuilder<ConnectionStatus>(
-            valueListenable: widget.sshService.statusNotifier,
-            builder: (context, status, _) {
-              return _buildStatusHeader(status);
-            },
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (mounted) _terminalFocusNode.requestFocus();
-              },
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: TerminalView(
-                    _terminal,
-                    focusNode: _terminalFocusNode,
-                    autofocus: true,
+      body: ValueListenableBuilder<ConnectionStatus>(
+        valueListenable: widget.sshService.statusNotifier,
+        builder: (context, status, _) {
+          return Column(
+            children: [
+              _buildStatusHeader(status),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    if (mounted) _terminalFocusNode.requestFocus();
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: TerminalView(
+                        _terminal,
+                        focusNode: _terminalFocusNode,
+                        autofocus: true,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-          ValueListenableBuilder<ConnectionStatus>(
-            valueListenable: widget.sshService.statusNotifier,
-            builder: (context, status, _) {
-              return _buildToolbar(status.isConnected);
-            },
-          ),
-          if (_isDesktop) const SizedBox(height: 16),
-        ],
+              _buildToolbar(status.isConnected),
+              if (_isDesktop) const SizedBox(height: 16),
+            ],
+          );
+        },
       ),
     );
   }

@@ -246,20 +246,36 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             onTap: () => setState(() => _activeTabIndex = 4),
           ),
           const Spacer(),
-          if (!isConnected && !status.isConnecting)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: FilledButton.icon(
-                onPressed: _connect,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Reconnect'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: _primaryColor.withValues(alpha: 0.1),
-                  foregroundColor: _primaryColor,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!isConnected && !status.isConnecting)
+                  FilledButton.icon(
+                    onPressed: _connect,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('Reconnect'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _primaryColor.withValues(alpha: 0.1),
+                      foregroundColor: _primaryColor,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                if (isConnected || status.isConnecting)
+                  OutlinedButton.icon(
+                    onPressed: () => _sshService.disconnect(),
+                    icon: const Icon(Icons.link_off_rounded, size: 18),
+                    label: const Text('Disconnect'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _dangerColor,
+                      side: BorderSide(color: _dangerColor.withValues(alpha: 0.5)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+              ],
             ),
+          ),
           const Divider(height: 1, color: Colors.white10),
           _SidebarItem(
             icon: Icons.settings_outlined,

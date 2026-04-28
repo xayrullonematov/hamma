@@ -4,21 +4,26 @@ import 'package:hamma/core/ai/command_risk_assessor.dart';
 void main() {
   const assessor = CommandRiskAssessor();
 
-  test('classifies read-only commands as safe', () {
+  test('classifies read-only commands as low risk', () {
     final result = assessor.assess('df -h');
 
-    expect(result.level, CommandRiskLevel.safe);
+    expect(result.riskLevel, CommandRiskLevel.low);
   });
 
-  test('classifies service restart as warning', () {
+  test('classifies service restart as moderate risk', () {
     final result = assessor.assess('sudo systemctl restart nginx');
 
-    expect(result.level, CommandRiskLevel.warning);
+    expect(result.riskLevel, CommandRiskLevel.moderate);
   });
 
-  test('classifies destructive database command as dangerous', () {
-    final result = assessor.assess('psql -c "DROP DATABASE app;"');
+  test('classifies dangerous patterns as critical risk', () {
+    final result = assessor.assess('rm -rf /');
 
-    expect(result.level, CommandRiskLevel.dangerous);
+    expect(result.riskLevel, CommandRiskLevel.critical);
+  });
+
+  test('static assessFast works correctly', () {
+    expect(CommandRiskAssessor.assessFast('rm -rf .'), CommandRiskLevel.critical);
+    expect(CommandRiskAssessor.assessFast('ls'), isNull);
   });
 }

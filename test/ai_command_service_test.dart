@@ -25,7 +25,7 @@ void main() {
 
   test('service throws clear error for empty prompt', () async {
     await expectLater(
-      service.generateCommands('   '),
+      service.generateCommand('   '),
       throwsA(
         isA<AiCommandServiceException>().having(
           (error) => error.message,
