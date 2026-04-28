@@ -705,7 +705,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: const Text('Settings'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.of(context).pop(),
+          tooltip: 'Back to servers',
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
@@ -108,9 +109,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (!widget.sshService.isConnected) return;
     
     try {
+      // Use fallback dimensions if the terminal hasn't been laid out yet.
+      // Starting with 0x0 can cause some shells to freeze or ignore input.
       final session = await widget.sshService.startShell(
-        width: _terminal.viewWidth,
-        height: _terminal.viewHeight,
+        width: math.max(80, _terminal.viewWidth),
+        height: math.max(24, _terminal.viewHeight),
       );
 
       _stdoutSubscription?.cancel();
@@ -235,39 +238,35 @@ class _TerminalScreenState extends State<TerminalScreen> {
           ),
         ],
       ),
-      body: ValueListenableBuilder<ConnectionStatus>(
-        valueListenable: widget.sshService.statusNotifier,
-        builder: (context, status, _) {
-          return Column(
-            children: [
-              _buildStatusHeader(status),
-              Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    if (mounted) _terminalFocusNode.requestFocus();
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: TerminalView(
-                        _terminal,
-                        focusNode: _terminalFocusNode,
-                        autofocus: true,
-                      ),
-                    ),
-                  ),
+      body: Column(
+        children: [
+          ValueListenableBuilder<ConnectionStatus>(
+            valueListenable: widget.sshService.statusNotifier,
+            builder: (context, status, _) => _buildStatusHeader(status),
+          ),
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: TerminalView(
+                  _terminal,
+                  focusNode: _terminalFocusNode,
+                  autofocus: true,
                 ),
               ),
-              _buildToolbar(status.isConnected),
-              if (_isDesktop) const SizedBox(height: 16),
-            ],
-          );
-        },
+            ),
+          ),
+          ValueListenableBuilder<ConnectionStatus>(
+            valueListenable: widget.sshService.statusNotifier,
+            builder: (context, status, _) => _buildToolbar(status.isConnected),
+          ),
+          if (_isDesktop) const SizedBox(height: 16),
+        ],
       ),
     );
   }

@@ -171,6 +171,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Back to servers',
+                ),
+                const SizedBox(height: 16),
                 Text(
                   _server.name,
                   style: const TextStyle(

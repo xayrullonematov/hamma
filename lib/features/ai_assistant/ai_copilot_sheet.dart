@@ -1355,6 +1355,12 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                 color: _mutedColor,
                 tooltip: 'Clear chat',
               ),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded),
+                color: _mutedColor,
+                tooltip: 'Close',
+              ),
             ],
           ),
           const SizedBox(height: 14),
