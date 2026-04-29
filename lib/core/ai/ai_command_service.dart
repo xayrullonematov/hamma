@@ -53,6 +53,29 @@ class AiApiConfig {
   bool get isConfigured => apiKey.trim().isNotEmpty;
 }
 
+class CommandIntent {
+  const CommandIntent({
+    required this.action,
+    this.targetServer,
+    required this.command,
+    required this.explanation,
+  });
+
+  final String action;
+  final String? targetServer;
+  final String command;
+  final String explanation;
+
+  factory CommandIntent.fromJson(Map<String, dynamic> json) {
+    return CommandIntent(
+      action: json['action'] as String? ?? 'Execute Command',
+      targetServer: json['target_server'] as String?,
+      command: json['command'] as String? ?? '',
+      explanation: json['explanation'] as String? ?? '',
+    );
+  }
+}
+
 class AiCommandService {
   const AiCommandService({
     required this.config,
@@ -82,6 +105,52 @@ class AiCommandService {
 
   final AiApiConfig config;
   final String? openRouterModel;
+
+  Future<CommandIntent> parseIntent(String prompt, List<String> availableServers) async {
+    final trimmedPrompt = prompt.trim();
+    if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
+
+    if (!config.isConfigured) {
+      throw AiCommandServiceException('${config.provider.label} API key is not set.');
+    }
+
+    final systemInstruction =
+        'You are a Linux sysadmin. Parse the user request into a structured intent. '
+        'The available servers are: ${availableServers.join(", ")}. '
+        'You MUST return strictly valid JSON matching this schema: '
+        '{ "action": "<short description>", "target_server": "<server name from the available list, or null>", "command": "<bash command>", "explanation": "<short explanation>" }';
+
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(seconds: 15);
+
+    try {
+      String response;
+      switch (config.provider) {
+        case AiProvider.openAi:
+          response = await _chatWithOpenAi(client, trimmedPrompt, [], systemInstruction: systemInstruction);
+          break;
+        case AiProvider.gemini:
+          response = await _chatWithGemini(client, trimmedPrompt, [], systemInstruction: systemInstruction);
+          break;
+        case AiProvider.openRouter:
+          response = await _chatWithOpenAi(client, trimmedPrompt, [], systemInstruction: systemInstruction);
+          break;
+      }
+
+      final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(response);
+      final jsonString = jsonMatch?.group(0) ?? response;
+      final decoded = jsonDecode(jsonString) as Map<String, dynamic>;
+
+      return CommandIntent.fromJson(decoded);
+    } on FormatException catch (e) {
+      throw AiCommandServiceException('AI response was not valid JSON: $e');
+    } catch (e) {
+      if (e is AiCommandServiceException) rethrow;
+      throw AiCommandServiceException('Intent parsing failed: $e');
+    } finally {
+      client.close(force: true);
+    }
+  }
 
   Future<String> generateChatResponse(String prompt, {List<Map<String, String>> history = const []}) async {
     final trimmedPrompt = prompt.trim();
