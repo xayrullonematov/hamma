@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/ai/command_risk_assessor.dart';
+import '../../../core/theme/app_colors.dart';
 
 class InteractiveCommandBlock extends StatefulWidget {
   const InteractiveCommandBlock({
@@ -33,22 +34,25 @@ class _InteractiveCommandBlockState extends State<InteractiveCommandBlock> {
     super.dispose();
   }
 
-  Color _getRiskColor() {
-    switch (widget.analysis.riskLevel) {
-      case CommandRiskLevel.low:
-        return Colors.green;
-      case CommandRiskLevel.moderate:
-        return Colors.orange;
-      case CommandRiskLevel.high:
-      case CommandRiskLevel.critical:
-        return Colors.red;
+  bool get _isDangerous =>
+      widget.analysis.riskLevel == CommandRiskLevel.high ||
+      widget.analysis.riskLevel == CommandRiskLevel.critical;
+
+  bool get _isModerate =>
+      widget.analysis.riskLevel == CommandRiskLevel.moderate;
+
+  /// Brutalist risk palette: white for safe, harsh red for any warning.
+  Color _riskAccent() {
+    if (_isDangerous || _isModerate) {
+      return AppColors.danger;
     }
+    return AppColors.textPrimary;
   }
 
   IconData _getRiskIcon() {
     switch (widget.analysis.riskLevel) {
       case CommandRiskLevel.low:
-        return Icons.check_circle_outline;
+        return Icons.check_box_outline_blank;
       case CommandRiskLevel.moderate:
         return Icons.warning_amber_rounded;
       case CommandRiskLevel.high:
@@ -57,48 +61,75 @@ class _InteractiveCommandBlockState extends State<InteractiveCommandBlock> {
     }
   }
 
+  String _riskLabel() {
+    switch (widget.analysis.riskLevel) {
+      case CommandRiskLevel.low:
+        return 'SAFE';
+      case CommandRiskLevel.moderate:
+        return 'CAUTION';
+      case CommandRiskLevel.high:
+        return 'HIGH RISK';
+      case CommandRiskLevel.critical:
+        return 'CRITICAL';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final riskColor = _getRiskColor();
-    final isDangerous = widget.analysis.riskLevel == CommandRiskLevel.high ||
-        widget.analysis.riskLevel == CommandRiskLevel.critical;
+    final accent = _riskAccent();
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8.0),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B), // Slate-800
-        borderRadius: BorderRadius.circular(8.0),
-        border: Border.all(color: riskColor.withValues(alpha: 0.5), width: 1.5),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: accent, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header Row
+          // Risk header strip — solid red bar for dangerous commands.
           Container(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: riskColor.withValues(alpha: 0.1),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(6.5)),
+              color: _isDangerous ? AppColors.danger : AppColors.panel,
+              border: Border(
+                bottom: BorderSide(color: accent, width: 1),
+              ),
             ),
             child: Row(
               children: [
-                Icon(_getRiskIcon(), color: riskColor, size: 20),
-                const SizedBox(width: 8),
+                Icon(
+                  _getRiskIcon(),
+                  color: _isDangerous ? AppColors.onPrimary : accent,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
                 Text(
-                  widget.analysis.riskLevel.name.toUpperCase(),
+                  _riskLabel(),
                   style: TextStyle(
-                    color: riskColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
+                    color: _isDangerous ? AppColors.onPrimary : accent,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    letterSpacing: 2.0,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
+                Container(width: 1, height: 14, color: _isDangerous ? AppColors.onPrimary : AppColors.border),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Text(
                     widget.analysis.explanation,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
+                    style: TextStyle(
+                      color: _isDangerous
+                          ? AppColors.onPrimary
+                          : AppColors.textPrimary,
+                      fontSize: 12,
+                      height: 1.4,
+                      fontFamily: AppColors.sansFamily,
+                      fontFamilyFallback: AppColors.sansFallback,
                     ),
                   ),
                 ),
@@ -106,36 +137,75 @@ class _InteractiveCommandBlockState extends State<InteractiveCommandBlock> {
             ),
           ),
 
-          // Command Editor
+          // Command Editor — strict monospace terminal block.
           Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _controller,
-              maxLines: null,
-              style: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 14,
-                color: Color(0xFFE2E8F0), // Slate-200
-              ),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '\$',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    maxLines: null,
+                    style: const TextStyle(
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
+                      height: 1.5,
+                    ),
+                    decoration: const InputDecoration(
+                      filled: false,
+                      fillColor: Colors.transparent,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 
           // Action Row
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12.0, 0, 12.0, 12.0),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            decoration: const BoxDecoration(
+              border: Border(
+                top: BorderSide(color: AppColors.border, width: 1),
+              ),
+            ),
             child: Row(
               children: [
                 TextButton.icon(
                   onPressed: () => widget.onExplainCommand(_controller.text),
-                  icon: const Icon(Icons.info_outline, size: 18),
-                  label: const Text('Explain'),
+                  icon: const Icon(Icons.info_outline, size: 16),
+                  label: const Text('EXPLAIN'),
                   style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF94A3B8), // Slate-400
+                    foregroundColor: AppColors.textMuted,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    textStyle: const TextStyle(
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.5,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -143,24 +213,45 @@ class _InteractiveCommandBlockState extends State<InteractiveCommandBlock> {
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: _controller.text));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Copied to clipboard')),
+                      const SnackBar(
+                        content: Text('COPIED TO CLIPBOARD'),
+                      ),
                     );
                   },
-                  icon: const Icon(Icons.copy_rounded, size: 18),
-                  color: const Color(0xFF94A3B8), // Slate-400
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  color: AppColors.textMuted,
                   tooltip: 'Copy',
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: () => widget.onRunCommand(_controller.text),
-                  icon: const Icon(Icons.terminal_rounded, size: 18),
-                  label: const Text('Run in Terminal'),
+                  icon: Icon(
+                    _isDangerous
+                        ? Icons.warning_rounded
+                        : Icons.terminal_rounded,
+                    size: 16,
+                  ),
+                  label: Text(_isDangerous ? 'EXECUTE' : 'RUN'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: isDangerous ? Colors.red : const Color(0xFF3B82F6), // Blue-500
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6.0),
+                    backgroundColor:
+                        _isDangerous ? AppColors.danger : AppColors.primary,
+                    foregroundColor: _isDangerous
+                        ? AppColors.textPrimary
+                        : AppColors.onPrimary,
+                    elevation: 0,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    textStyle: const TextStyle(
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.6,
+                      fontSize: 12,
                     ),
                   ),
                 ),

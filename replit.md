@@ -63,3 +63,37 @@ flutter build linux --debug
 - **Security**: flutter_secure_storage, encrypt, pinenacl
 - **Crash reporting**: sentry_flutter (inproc mode on Linux)
 - **AI providers**: OpenAI, Google Gemini, OpenRouter (via HTTP)
+
+## Visual Design — Geometric Brutalism
+
+The UI uses a strict "Terafab" brutalist visual identity defined in
+`lib/core/theme/app_colors.dart` and applied globally via the
+`_buildBrutalistTheme()` helper in `lib/main.dart`.
+
+Five design pillars enforced across all screens:
+
+1. **Monochrome palette** — Pure black scaffold (`0xFF000000`), near-black
+   surfaces (`0xFF0A0A0A`), white primary, harsh red (`0xFFFF0000`) for any
+   risk/warning state. No slates, no soft grays.
+2. **Zero-radius corners** — Every `RoundedRectangleBorder` uses
+   `BorderRadius.zero`. No rounded chips, cards, or buttons.
+3. **Wireframe borders** — All `elevation` and `boxShadow` are zero. Cards,
+   inputs, dialogs, and sheets are separated from the scaffold by 1px
+   borders (`AppColors.border = 0xFF222222` or `Colors.white24`).
+4. **Typography** — Global sans is `Inter` (with `Geist`/`Space Grotesk`
+   fallbacks). Technical data (IPs, metrics, terminal output, command
+   blocks, server names, status pills) uses `JetBrains Mono` (with
+   `Geist Mono` fallback). The fonts are not bundled — Flutter falls
+   back to the platform default sans/mono if missing.
+5. **Seamless AppBar** — `AppBarTheme.elevation = 0` and the AppBar
+   background matches the scaffold so the app reads as one terminal pane.
+
+Brutalist surfaces in custom widgets:
+
+- `lib/features/ai_assistant/widgets/interactive_command_block.dart` —
+  Risk header is a solid red bar for HIGH/CRITICAL commands; the editor
+  uses monospace with a `$` prompt; "EXECUTE" button switches to harsh
+  red for dangerous commands.
+- `lib/features/fleet/fleet_dashboard_screen.dart` — Metric dials,
+  status pills (`ONLINE`/`OFFLINE`), and bulk-result blocks use the
+  monospace font and zero-radius bordered surfaces.

@@ -1,0 +1,29 @@
+Act as an Expert Flutter UI/UX Engineer specializing in "Geometric Brutalism" and high-end developer tools.
+
+I need to completely refactor the theme and UI of my Flutter app, "Hamma", to match the "Terafab" visual identity. The app is a hardcore DevOps tool, and the UI must feel like a stark, military-grade command terminal. Remove all traces of soft "consumer SaaS" design.
+
+Please update `main.dart`, my colors file (e.g., `app_colors.dart`), and any core UI components to strictly adhere to the following 5 design pillars:
+
+1. ABSOLUTE MONOCHROME PALETTE
+- Kill all soft blues, slates, and grays. 
+- Scaffold Background: Pure Black (`Color(0xFF000000)`).
+- Surface/Card Backgrounds: Very dark gray (`Color(0xFF0A0A0A)`).
+- Primary Buttons/Accents: Pure White (`Color(0xFFFFFFFF)`) with black text.
+- Warning/Critical Accents (for the Command Risk Assessor): Harsh Neon Red (`Color(0xFFFF0000)`).
+
+2. ZERO-RADIUS CORNERS (HARD EDGES)
+- Find every instance of `BorderRadius` in the app (CardTheme, InputDecorationTheme, DialogTheme, Buttons) and set it to exactly `0.0`. 
+- There should be zero rounded corners in the entire application.
+
+3. WIREFRAME BORDERS OVER SHADOWS
+- Remove all `elevation` and `boxShadow` from every component (set elevation to 0).
+- Replace shadows with stark, 1px solid borders using `Colors.white24` or `Color(0xFF222222)` to separate cards and inputs from the background.
+
+4. TYPOGRAPHY: GEIST & TERMINAL MONOSPACE
+- Set the global `fontFamily` in `ThemeData` to a clean geometric sans-serif (like 'Geist', 'Inter', or 'Space Grotesk').
+- For all technical data (IP addresses, server metrics like CPU/RAM %, AI terminal outputs, and command blocks), strictly enforce a monospace font (like 'Geist Mono' or 'JetBrains Mono').
+
+5. APP BAR & SCAFFOLDING
+- The `AppBar` must have `elevation: 0` and a `backgroundColor` of Pure Black (`Color(0xFF000000)`) so it completely blends into the scaffold background, making the app look like one seamless terminal window.
+
+Execute these changes across the global `ThemeData`. Then, review the `InteractiveCommandBlock` and `FleetDashboardScreen` to ensure the risk warnings use the harsh red accent and all metrics are monospaced.

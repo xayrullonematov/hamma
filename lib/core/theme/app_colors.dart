@@ -1,17 +1,54 @@
 import 'package:flutter/material.dart';
 
+/// Brutalist monochrome palette — Terafab visual identity.
+///
+/// Pure black scaffold, near-black surfaces, white primary, harsh red for
+/// risk/danger. No soft slate/blue/gray accents anywhere in the app.
 class AppColors {
   AppColors._();
 
-  static const scaffoldBackground = Color(0xFF0F172A);
-  static const surface = Color(0xFF1E293B);
-  static const panel = Color(0xFF162033);
-  static const primary = Color(0xFF3B82F6);
-  static const secondary = Color(0xFF10B981);
-  static const danger = Color(0xFFEF4444);
-  static const textMuted = Color(0xFF94A3B8);
-  static const shadow = Color(0x22000000);
-  
+  // Core surfaces
+  static const scaffoldBackground = Color(0xFF000000);
+  static const surface = Color(0xFF0A0A0A);
+  static const panel = Color(0xFF050505);
+
+  // Borders (wireframe — replace shadows)
+  static const border = Color(0xFF222222);
+  static const borderStrong = Colors.white24;
+
+  // Foreground
+  static const textPrimary = Color(0xFFFFFFFF);
+  static const textMuted = Color(0xFF888888);
+  static const textFaint = Color(0xFF555555);
+
+  // Accents
+  static const primary = Color(0xFFFFFFFF);
+  static const onPrimary = Color(0xFF000000);
+  static const danger = Color(0xFFFF0000);
+  static const success = Color(0xFFFFFFFF);
+  static const warning = Color(0xFFFF0000);
+
+  // Terminal
   static const terminalBlack = Color(0xFF000000);
-  static const terminalGreen = Color(0xFF22C55E);
+  static const terminalGreen = Color(0xFFFFFFFF);
+
+  // Typography
+  static const sansFamily = 'Inter';
+  static const monoFamily = 'JetBrains Mono';
+  static const List<String> sansFallback = <String>[
+    'Geist',
+    'Space Grotesk',
+    'SF Pro Display',
+    'Segoe UI',
+    'Roboto',
+    'sans-serif',
+  ];
+  static const List<String> monoFallback = <String>[
+    'Geist Mono',
+    'IBM Plex Mono',
+    'Fira Code',
+    'Menlo',
+    'Consolas',
+    'monospace',
+  ];
 }

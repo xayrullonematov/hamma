@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/ssh/fleet_service.dart';
 import '../../core/storage/server_storage.dart';
+import '../../core/theme/app_colors.dart';
 
 class FleetDashboardScreen extends StatefulWidget {
   const FleetDashboardScreen({super.key});
@@ -13,14 +14,13 @@ class FleetDashboardScreen extends StatefulWidget {
 }
 
 class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _primaryColor = Color(0xFF3B82F6);
-  static const _successColor = Color(0xFF22C55E);
-  static const _warningColor = Color(0xFFF59E0B);
-  static const _dangerColor = Color(0xFFEF4444);
-  static const _shadowColor = Color(0x22000000);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _mutedColor = AppColors.textMuted;
+  static const _primaryColor = AppColors.primary;
+  static const _successColor = AppColors.textPrimary;
+  static const _warningColor = AppColors.danger;
+  static const _dangerColor = AppColors.danger;
 
   final ServerStorage _serverStorage = const ServerStorage();
   final FleetService _fleetService = const FleetService();
@@ -69,20 +69,43 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: _surfaceColor,
-        title: const Text('Bulk Command', style: TextStyle(color: Colors.white)),
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+          side: BorderSide(color: AppColors.borderStrong, width: 1),
+        ),
+        title: const Text(
+          'BULK COMMAND',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontFamily: AppColors.monoFamily,
+            fontFamilyFallback: AppColors.monoFallback,
+            letterSpacing: 1.5,
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+          ),
+        ),
         content: TextField(
           controller: controller,
-          style: const TextStyle(color: Colors.white),
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontFamily: AppColors.monoFamily,
+            fontFamilyFallback: AppColors.monoFallback,
+          ),
           decoration: const InputDecoration(
-            hintText: 'Enter command (e.g. uptime)',
-            hintStyle: TextStyle(color: _mutedColor),
+            hintText: '\$ enter command (e.g. uptime)',
+            hintStyle: TextStyle(
+              color: AppColors.textFaint,
+              fontFamily: AppColors.monoFamily,
+              fontFamilyFallback: AppColors.monoFallback,
+            ),
           ),
           autofocus: true,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: _mutedColor)),
+            child: const Text('CANCEL', style: TextStyle(color: _mutedColor)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -92,7 +115,7 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
                 _executeBulkAction(cmd);
               }
             },
-            child: const Text('Execute'),
+            child: const Text('EXECUTE'),
           ),
         ],
       ),
@@ -261,10 +284,8 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: _surfaceColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
-          BoxShadow(color: _shadowColor, blurRadius: 20, offset: Offset(0, 10)),
-        ],
+        borderRadius: BorderRadius.zero,
+        border: Border.all(color: AppColors.border, width: 1),
       ),
       child: Row(
         children: [
@@ -272,12 +293,14 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: _primaryColor.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(16),
+              color: AppColors.scaffoldBackground,
+              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.borderStrong, width: 1),
             ),
             child: const Icon(
               Icons.dashboard_customize_outlined,
               color: _primaryColor,
+              size: 22,
             ),
           ),
           const SizedBox(width: 14),
@@ -286,18 +309,25 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Fleet Command Center',
+                  'FLEET COMMAND CENTER',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.6,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
-                  '$_onlineServerCount of ${_servers.length} servers responded • Last refresh ${_formatTimestamp(_lastUpdatedAt)}',
+                  '[$_onlineServerCount/${_servers.length}] ONLINE  ::  LAST_REFRESH ${_formatTimestamp(_lastUpdatedAt)}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: _mutedColor,
                     height: 1.4,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
+                    fontSize: 11,
+                    letterSpacing: 0.4,
                   ),
                 ),
               ],
@@ -470,7 +500,12 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
               : FloatingActionButton(
                 onPressed: _showBulkActionDialog,
                 backgroundColor: _primaryColor,
-                child: const Icon(Icons.bolt, color: Colors.white),
+                foregroundColor: AppColors.onPrimary,
+                elevation: 0,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+                child: const Icon(Icons.bolt),
               ),
     );
   }
@@ -530,42 +565,49 @@ class _BulkResultsOverlayState extends State<_BulkResultsOverlay> {
           maxChildSize: 0.95,
           builder: (context, scrollController) => Container(
             decoration: const BoxDecoration(
-              color: Color(0xFF1E293B),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              color: AppColors.surface,
+              borderRadius: BorderRadius.zero,
+              border: Border(
+                top: BorderSide(color: AppColors.borderStrong, width: 1),
+                left: BorderSide(color: AppColors.borderStrong, width: 1),
+                right: BorderSide(color: AppColors.borderStrong, width: 1),
+              ),
             ),
             child: Column(
               children: [
                 const SizedBox(height: 12),
                 Container(
                   width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+                  height: 2,
+                  color: AppColors.borderStrong,
                 ),
                 Padding(
                   padding: const EdgeInsets.all(24),
                   child: Row(
                     children: [
-                      const Icon(Icons.bolt, color: Color(0xFF3B82F6)),
+                      const Icon(Icons.bolt, color: AppColors.textPrimary),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Bulk Command Results',
+                              'BULK_RESULTS',
                               style: theme.textTheme.titleMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.6,
+                                fontFamily: AppColors.monoFamily,
+                                fontFamilyFallback: AppColors.monoFallback,
                               ),
                             ),
+                            const SizedBox(height: 4),
                             Text(
-                              widget.command,
+                              '\$ ${widget.command}',
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFF94A3B8),
-                                fontFamily: 'monospace',
+                                color: AppColors.textMuted,
+                                fontFamily: AppColors.monoFamily,
+                                fontFamilyFallback: AppColors.monoFallback,
                               ),
                             ),
                           ],
@@ -585,7 +627,7 @@ class _BulkResultsOverlayState extends State<_BulkResultsOverlay> {
                     controller: scrollController,
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                     itemCount: widget.servers.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 16),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final server = widget.servers[index];
                       final result = results[server.id] ?? 'Pending...';
@@ -596,15 +638,15 @@ class _BulkResultsOverlayState extends State<_BulkResultsOverlay> {
                       return Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(16),
+                          color: AppColors.scaffoldBackground,
+                          borderRadius: BorderRadius.zero,
                           border: Border.all(
-                            color:
-                                isError
-                                    ? const Color(0xFFEF4444).withValues(alpha: 0.3)
-                                    : isPending
-                                    ? Colors.transparent
-                                    : const Color(0xFF22C55E).withValues(alpha: 0.3),
+                            color: isError
+                                ? AppColors.danger
+                                : isPending
+                                    ? AppColors.border
+                                    : AppColors.borderStrong,
+                            width: 1,
                           ),
                         ),
                         child: Column(
@@ -613,10 +655,13 @@ class _BulkResultsOverlayState extends State<_BulkResultsOverlay> {
                             Row(
                               children: [
                                 Text(
-                                  server.name,
+                                  server.name.toUpperCase(),
                                   style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.2,
+                                    fontFamily: AppColors.monoFamily,
+                                    fontFamilyFallback: AppColors.monoFallback,
                                   ),
                                 ),
                                 const Spacer(),
@@ -624,12 +669,11 @@ class _BulkResultsOverlayState extends State<_BulkResultsOverlay> {
                                   Icon(
                                     isError
                                         ? Icons.error_outline
-                                        : Icons.check_circle_outline,
+                                        : Icons.check_box_outline_blank,
                                     size: 16,
-                                    color:
-                                        isError
-                                            ? const Color(0xFFEF4444)
-                                            : const Color(0xFF22C55E),
+                                    color: isError
+                                        ? AppColors.danger
+                                        : AppColors.textPrimary,
                                   ),
                               ],
                             ),
@@ -637,10 +681,14 @@ class _BulkResultsOverlayState extends State<_BulkResultsOverlay> {
                             Text(
                               result,
                               style: TextStyle(
-                                color:
-                                    isPending ? const Color(0xFF94A3B8) : Colors.white,
+                                color: isError
+                                    ? AppColors.danger
+                                    : isPending
+                                        ? AppColors.textMuted
+                                        : AppColors.textPrimary,
                                 fontSize: 13,
-                                fontFamily: 'monospace',
+                                fontFamily: AppColors.monoFamily,
+                                fontFamilyFallback: AppColors.monoFallback,
                               ),
                             ),
                           ],
@@ -669,12 +717,11 @@ class _FleetMetricsCard extends StatelessWidget {
   final ServerMetrics? metrics;
   final Color Function(double? percentage) metricColorBuilder;
 
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _panelColor = Color(0xFF162033);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _shadowColor = Color(0x22000000);
-  static const _successColor = Color(0xFF22C55E);
-  static const _dangerColor = Color(0xFFEF4444);
+  static const _surfaceColor = AppColors.surface;
+  static const _panelColor = AppColors.panel;
+  static const _mutedColor = AppColors.textMuted;
+  static const _successColor = AppColors.textPrimary;
+  static const _dangerColor = AppColors.danger;
 
   @override
   Widget build(BuildContext context) {
@@ -684,10 +731,11 @@ class _FleetMetricsCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: _surfaceColor,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: const [
-          BoxShadow(color: _shadowColor, blurRadius: 20, offset: Offset(0, 10)),
-        ],
+        borderRadius: BorderRadius.zero,
+        border: Border.all(
+          color: isAvailable ? AppColors.border : AppColors.danger,
+          width: 1,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -702,12 +750,15 @@ class _FleetMetricsCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        server.name,
+                        server.name.toUpperCase(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.4,
+                          fontFamily: AppColors.monoFamily,
+                          fontFamilyFallback: AppColors.monoFallback,
                         ),
                       ),
                       const SizedBox(height: 6),
@@ -717,6 +768,9 @@ class _FleetMetricsCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: _mutedColor,
+                          fontFamily: AppColors.monoFamily,
+                          fontFamilyFallback: AppColors.monoFallback,
+                          fontSize: 11,
                         ),
                       ),
                     ],
@@ -725,19 +779,30 @@ class _FleetMetricsCard extends StatelessWidget {
                 const SizedBox(width: 12),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
+                    horizontal: 8,
+                    vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: (isAvailable ? _successColor : _dangerColor)
-                        .withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
+                    color: isAvailable
+                        ? Colors.transparent
+                        : AppColors.danger,
+                    borderRadius: BorderRadius.zero,
+                    border: Border.all(
+                      color: isAvailable ? _successColor : AppColors.danger,
+                      width: 1,
+                    ),
                   ),
                   child: Text(
-                    isAvailable ? 'Online' : 'Unavailable',
+                    isAvailable ? 'ONLINE' : 'OFFLINE',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: isAvailable ? _successColor : _dangerColor,
-                      fontWeight: FontWeight.w700,
+                      color: isAvailable
+                          ? _successColor
+                          : AppColors.textPrimary,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.6,
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                      fontSize: 10,
                     ),
                   ),
                 ),
@@ -749,7 +814,8 @@ class _FleetMetricsCard extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: _panelColor,
-                borderRadius: BorderRadius.circular(22),
+                borderRadius: BorderRadius.zero,
+                border: Border.all(color: AppColors.border, width: 1),
               ),
               child: Center(
                 child: Wrap(
@@ -779,12 +845,15 @@ class _FleetMetricsCard extends StatelessWidget {
             ),
             const Spacer(),
             Text(
-              metrics?.errorMessage ?? 'Metrics refreshed successfully.',
+              metrics?.errorMessage ?? '> metrics ok.',
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: isAvailable ? _mutedColor : _dangerColor,
                 height: 1.45,
+                fontFamily: AppColors.monoFamily,
+                fontFamilyFallback: AppColors.monoFallback,
+                fontSize: 11,
               ),
             ),
           ],
@@ -805,8 +874,8 @@ class _MetricDial extends StatelessWidget {
   final double? percentage;
   final Color color;
 
-  static const _trackColor = Color(0xFF0F172A);
-  static const _mutedColor = Color(0xFF94A3B8);
+  static const _trackColor = AppColors.border;
+  static const _mutedColor = AppColors.textMuted;
 
   @override
   Widget build(BuildContext context) {
@@ -824,12 +893,12 @@ class _MetricDial extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 64,
                   height: 64,
                   child: CircularProgressIndicator(
                     value: 1,
-                    strokeWidth: 6,
+                    strokeWidth: 4,
                     color: _trackColor,
                   ),
                 ),
@@ -842,7 +911,7 @@ class _MetricDial extends StatelessWidget {
                       height: 64,
                       child: CircularProgressIndicator(
                         value: animatedValue,
-                        strokeWidth: 6,
+                        strokeWidth: 4,
                         backgroundColor: Colors.transparent,
                         valueColor: AlwaysStoppedAnimation<Color>(color),
                       ),
@@ -850,10 +919,13 @@ class _MetricDial extends StatelessWidget {
                   },
                 ),
                 Text(
-                  percentage == null ? '--' : '${percentage!.round()}%',
+                  percentage == null ? '--' : '${percentage!.round()}',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
                   ),
                 ),
               ],
@@ -864,9 +936,11 @@ class _MetricDial extends StatelessWidget {
             label,
             style: theme.textTheme.bodySmall?.copyWith(
               color: _mutedColor,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               fontSize: 10,
-              letterSpacing: 0.3,
+              letterSpacing: 1.6,
+              fontFamily: AppColors.monoFamily,
+              fontFamilyFallback: AppColors.monoFallback,
             ),
           ),
         ],
