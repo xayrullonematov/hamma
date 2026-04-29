@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -46,6 +47,9 @@ class _AppLockScreenState extends State<AppLockScreen> {
   bool _isAuthenticating = false;
   bool _biometricsAvailable = false;
   bool _didPromptForBiometrics = false;
+  int _failedAttempts = 0;
+  bool _isLockedOut = false;
+  Timer? _lockoutTimer;
 
   @override
   void initState() {
@@ -56,6 +60,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
   @override
   void dispose() {
     _focusNode.dispose();
+    _lockoutTimer?.cancel();
     super.dispose();
   }
 
@@ -157,7 +162,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
   }
 
   Future<void> _handleDigitTap(String digit) async {
-    if (_isLoading || _isAuthenticating || _input.length >= 4) {
+    if (_isLoading || _isAuthenticating || _isLockedOut || _input.length >= 4) {
       return;
     }
 
@@ -224,10 +229,28 @@ class _AppLockScreenState extends State<AppLockScreen> {
       return;
     }
 
-    setState(() {
-      _input = '';
-      _status = 'Incorrect PIN. Try again.';
-    });
+    _failedAttempts++;
+    if (_failedAttempts >= 5) {
+      setState(() {
+        _input = '';
+        _isLockedOut = true;
+        _status = 'Too many attempts. Try again in 30 seconds.';
+      });
+      _lockoutTimer = Timer(const Duration(seconds: 30), () {
+        if (mounted) {
+          setState(() {
+            _isLockedOut = false;
+            _failedAttempts = 0;
+            _status = 'Enter your PIN.';
+          });
+        }
+      });
+    } else {
+      setState(() {
+        _input = '';
+        _status = 'Incorrect PIN. ${5 - _failedAttempts} attempts remaining.';
+      });
+    }
   }
 
   Future<void> _handleRemovePin() async {
@@ -241,10 +264,28 @@ class _AppLockScreenState extends State<AppLockScreen> {
       return;
     }
 
-    setState(() {
-      _input = '';
-      _status = 'Incorrect PIN. Enter the current PIN to remove it.';
-    });
+    _failedAttempts++;
+    if (_failedAttempts >= 5) {
+      setState(() {
+        _input = '';
+        _isLockedOut = true;
+        _status = 'Too many attempts. Try again in 30 seconds.';
+      });
+      _lockoutTimer = Timer(const Duration(seconds: 30), () {
+        if (mounted) {
+          setState(() {
+            _isLockedOut = false;
+            _failedAttempts = 0;
+            _status = 'Enter your PIN.';
+          });
+        }
+      });
+    } else {
+      setState(() {
+        _input = '';
+        _status = 'Incorrect PIN. ${5 - _failedAttempts} attempts remaining.';
+      });
+    }
   }
 
   Future<void> _authenticateWithBiometrics({

@@ -15,7 +15,7 @@ import 'features/security/app_lock_screen.dart';
 import 'features/servers/server_list_screen.dart';
 
 /// Production flag to disable debug-only features and logs.
-const bool kProduction = true;
+const bool kProduction = bool.fromEnvironment('dart.vm.product');
 
 void main() {
   runZonedGuarded(() async {
@@ -87,12 +87,26 @@ void main() {
     } catch (_) {}
 
     // Sentry DSN can be hardcoded for production or overridden by dev config
-    const productionDsn =
-        'https://61903110a3e1bd10a89811e3c87f2f24@o4511222528802816.ingest.de.sentry.io/4511222565568592';
+    const productionDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+
+    final app = AiServerApp(
+      apiKeyStorage: apiKeyStorage,
+      appLockStorage: appLockStorage,
+      appPrefsStorage: appPrefsStorage,
+      initialSettings: savedSettings,
+      initialHasAppPin: hasAppPin,
+      initialIsOnboardingComplete: isOnboardingComplete,
+      initialAiSettingsLoadError: aiSettingsStartupWarning,
+    );
+
+    if (productionDsn.isEmpty) {
+      runApp(app);
+      return;
+    }
 
     await SentryFlutter.init(
       (options) {
-        options.dsn = productionDsn;
+        options.dsn = kProduction ? productionDsn : '';
         options.tracesSampleRate = 1.0;
         options.attachStacktrace = true;
         options.enableAutoSessionTracking = true;
@@ -123,19 +137,7 @@ void main() {
           return event;
         };
       },
-      appRunner: () {
-        runApp(
-          AiServerApp(
-            apiKeyStorage: apiKeyStorage,
-            appLockStorage: appLockStorage,
-            appPrefsStorage: appPrefsStorage,
-            initialSettings: savedSettings,
-            initialHasAppPin: hasAppPin,
-            initialIsOnboardingComplete: isOnboardingComplete,
-            initialAiSettingsLoadError: aiSettingsStartupWarning,
-          ),
-        );
-      },
+      appRunner: () => runApp(app),
     );
   }, (exception, stackTrace) async {
     await Sentry.captureException(exception, stackTrace: stackTrace);

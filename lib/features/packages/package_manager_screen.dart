@@ -371,10 +371,7 @@ class _StreamConsoleState extends State<_StreamConsole> {
     try {
       final session = await widget.sshService.streamCommand(widget.command);
       
-      // Handle sudo authentication
-      if (widget.sshService.password != null) {
-        session.stdin.add(utf8.encode('${widget.sshService.password}\n'));
-      }
+      // sudo requires passwordless sudo or SSH key auth on the server
 
       _stdoutSub = session.stdout
           .cast<List<int>>()

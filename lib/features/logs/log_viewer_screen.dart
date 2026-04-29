@@ -98,10 +98,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       final session = await widget.sshService.streamCommand(command);
       _session = session;
       
-      // Handle sudo authentication
-      if (widget.sshService.password != null) {
-        session.stdin.add(utf8.encode('${widget.sshService.password}\n'));
-      }
+      // sudo requires passwordless sudo or SSH key auth on the server
       
       _stdoutSubscription = session.stdout
           .cast<List<int>>()

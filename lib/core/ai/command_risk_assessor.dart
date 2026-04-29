@@ -45,6 +45,20 @@ class CommandRiskAssessor {
       'dd if=',
       'chmod -r 777',
       '> /dev/sda',
+      'wget -o- | bash',
+      'wget -o- | sh',
+      'curl | bash',
+      'curl | sh',
+      ':(){ :|:& };:',
+      'shred',
+      'truncate',
+      'passwd',
+      'userdel',
+      'crontab -r',
+      'iptables -f',
+      'ufw disable',
+      'systemctl disable',
+      'chmod -r 000',
     ];
 
     for (final pattern in dangerousPatterns) {

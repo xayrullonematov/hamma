@@ -65,7 +65,6 @@ class SshService {
   })? _lastOnTrustHostKey;
 
   bool get isConnected => _currentStatus.isConnected;
-  String? get password => _lastPassword;
   Stream<ConnectionStatus> get status => _statusController.stream;
   ConnectionStatus get currentStatus => _currentStatus;
   ValueListenable<ConnectionStatus> get statusNotifier => _statusNotifier;

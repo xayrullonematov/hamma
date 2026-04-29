@@ -56,6 +56,9 @@ class BackupService {
             [XFile(backupFile.path)],
             subject: 'Hamma Backup',
           );
+          try {
+            await backupFile.delete();
+          } catch (_) {}
           break;
 
         case BackupDestination.sftp:
