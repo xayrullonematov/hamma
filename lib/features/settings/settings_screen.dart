@@ -731,7 +731,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       Theme(
                         data: theme.copyWith(canvasColor: _panelColor),
                         child: DropdownButtonFormField<AiProvider>(
-                          value: _selectedProvider,
+                          initialValue: _selectedProvider,
                           decoration: const InputDecoration(
                             labelText: 'Default Provider',
                           ),
@@ -950,7 +950,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       DropdownButtonFormField<BackupDestination>(
-                        value: _backupConfig.destination,
+                        initialValue: _backupConfig.destination,
                         decoration: const InputDecoration(
                           labelText: 'Backup Destination',
                         ),

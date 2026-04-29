@@ -87,9 +87,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (!mounted) return;
     final status = widget.sshService.currentStatus;
     
-    // Auto-reopen shell if we just got connected and don't have a session
     if (status.isConnected && _session == null) {
       _openShell();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _terminalFocusNode.requestFocus();
+      });
     } else if (!status.isConnected && _session != null) {
       _session = null;
       setState(() {});
@@ -245,18 +247,24 @@ class _TerminalScreenState extends State<TerminalScreen> {
             builder: (context, status, _) => _buildStatusHeader(status),
           ),
           Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: TerminalView(
-                  _terminal,
-                  focusNode: _terminalFocusNode,
-                  autofocus: true,
+            child: GestureDetector(
+              onTap: () => _terminalFocusNode.requestFocus(),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: TerminalView(
+                    _terminal,
+                    focusNode: _terminalFocusNode,
+                    autofocus: true,
+                    onTapUp: (details, position) {
+                      _terminalFocusNode.requestFocus();
+                    },
+                  ),
                 ),
               ),
             ),

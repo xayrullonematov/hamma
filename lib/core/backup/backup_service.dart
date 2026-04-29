@@ -345,7 +345,7 @@ class BackupService {
       _backupTaskName,
       _backupTaskName,
       frequency: const Duration(hours: 24),
-      existingWorkPolicy: ExistingWorkPolicy.replace,
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
       constraints: Constraints(networkType: NetworkType.connected),
     );
   }

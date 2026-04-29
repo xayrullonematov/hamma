@@ -137,7 +137,7 @@ class BackgroundKeepalive {
   static Future<void> initialize() async {
     if (!Platform.isAndroid && !Platform.isIOS) return;
 
-    await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+    await Workmanager().initialize(callbackDispatcher);
   }
 
   static Future<void> enable({int intervalMinutes = 30}) async {
@@ -147,7 +147,7 @@ class BackgroundKeepalive {
       healthTaskName,
       healthTaskName,
       frequency: Duration(minutes: intervalMinutes),
-      existingWorkPolicy: ExistingWorkPolicy.replace,
+      existingWorkPolicy: ExistingPeriodicWorkPolicy.replace,
       constraints: Constraints(networkType: NetworkType.connected),
     );
   }
