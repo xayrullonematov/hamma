@@ -262,6 +262,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
                     _terminal,
                     focusNode: _terminalFocusNode,
                     autofocus: true,
+                    // On desktop, use hardware keyboard events directly.
+                    // The default IME/CustomTextEdit path is unreliable on
+                    // Linux (and Windows) and causes keyboard input to be
+                    // silently dropped.
+                    hardwareKeyboardOnly: _isDesktop,
                     onTapUp: (details, position) {
                       _terminalFocusNode.requestFocus();
                     },
