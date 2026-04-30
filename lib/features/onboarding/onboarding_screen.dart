@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/storage/app_prefs_storage.dart';
+import '../../core/theme/app_colors.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({
@@ -16,10 +17,10 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  static const _scaffoldBackground = Color(0xFF0F172A);
-  static const _surface = Color(0xFF1E293B);
-  static const _primary = Color(0xFF3B82F6);
-  static const _textMuted = Color(0xFF94A3B8);
+  static const _scaffoldBackground = AppColors.scaffoldBackground;
+  static const _surface = AppColors.surface;
+  static const _primary = AppColors.textPrimary;
+  static const _textMuted = AppColors.textMuted;
 
   final PageController _pageController = PageController();
   int _currentPage = 0;
@@ -145,7 +146,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onPressed: _complete,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _primary,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.scaffoldBackground,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 32,
                           vertical: 16,

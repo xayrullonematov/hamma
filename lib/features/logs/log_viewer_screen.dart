@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:dartssh2/dartssh2.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/theme/app_colors.dart';
 
 class LogViewerScreen extends StatefulWidget {
   const LogViewerScreen({
@@ -19,11 +20,10 @@ class LogViewerScreen extends StatefulWidget {
 }
 
 class _LogViewerScreenState extends State<LogViewerScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _primaryColor = Color(0xFF3B82F6);
-  static const _dangerColor = Color(0xFFEF4444);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _mutedColor = AppColors.textMuted;
+  static const _dangerColor = AppColors.danger;
 
   final List<_LogEntry> _logEntries = [];
   final ScrollController _scrollController = ScrollController();
@@ -220,13 +220,13 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
               child: ActionChip(
-                label: const Text('Back to bottom'),
+                label: Text('Back to bottom', style: TextStyle(color: AppColors.scaffoldBackground)),
                 onPressed: () {
                   setState(() => _autoScroll = true);
                   _scrollToBottom();
                 },
-                backgroundColor: _primaryColor,
-                labelStyle: const TextStyle(color: Colors.white),
+                backgroundColor: AppColors.textPrimary,
+                labelStyle: TextStyle(color: AppColors.scaffoldBackground),
               ),
             ),
         ],
@@ -322,12 +322,12 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       return _dangerColor;
     }
     if (l.contains('warn')) {
-      return Colors.orange;
+      return AppColors.textMuted;
     }
     if (l.contains('success') || l.contains('connected')) {
-      return Colors.green;
+      return AppColors.textPrimary;
     }
-    return const Color(0xFFE2E8F0);
+    return AppColors.textPrimary;
   }
 }
 

@@ -7,6 +7,7 @@ import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/chat_history_storage.dart';
+import '../../core/theme/app_colors.dart';
 
 class AiAssistantScreen extends StatefulWidget {
   const AiAssistantScreen({
@@ -27,11 +28,11 @@ class AiAssistantScreen extends StatefulWidget {
 }
 
 class _AiAssistantScreenState extends State<AiAssistantScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _primaryColor = Color(0xFF3B82F6);
-  static const _dangerColor = Color(0xFFEF4444);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _mutedColor = AppColors.textMuted;
+  static const _primaryColor = AppColors.textPrimary;
+  static const _dangerColor = AppColors.danger;
 
   late AiCommandService _aiCommandService;
   final ChatHistoryStorage _storage = const ChatHistoryStorage();
@@ -410,13 +411,12 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   Color _riskColor(CommandRiskLevel level) {
     switch (level) {
       case CommandRiskLevel.low:
-        return const Color(0xFF22C55E);
+        return AppColors.textPrimary;
       case CommandRiskLevel.moderate:
-        return const Color(0xFFF59E0B);
+        return AppColors.textMuted;
       case CommandRiskLevel.high:
-        return const Color(0xFFEF4444);
       case CommandRiskLevel.critical:
-        return const Color(0xFFFF0000);
+        return AppColors.danger;
     }
   }
 
@@ -476,6 +476,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(double.infinity, 48),
                   backgroundColor: _primaryColor,
+                  foregroundColor: AppColors.scaffoldBackground,
                 ),
               ),
             ),
@@ -763,7 +764,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                   Text(
                     output,
                     style: const TextStyle(
-                      color: Color(0xFFE2E8F0),
+                      color: AppColors.textPrimary,
                       fontFamily: 'monospace',
                       fontSize: 11,
                     ),
@@ -817,11 +818,16 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation(Colors.white),
+                          valueColor: AlwaysStoppedAnimation(
+                            AppColors.scaffoldBackground,
+                          ),
                         ),
                       )
                       : const Icon(Icons.arrow_upward),
-              style: IconButton.styleFrom(backgroundColor: _primaryColor),
+              style: IconButton.styleFrom(
+                backgroundColor: _primaryColor,
+                foregroundColor: AppColors.scaffoldBackground,
+              ),
             ),
           ],
         ),

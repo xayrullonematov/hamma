@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/storage/custom_actions_storage.dart';
 import 'quick_actions.dart';
+import '../../core/theme/app_colors.dart';
 
 class CustomActionsScreen extends StatefulWidget {
   const CustomActionsScreen({
@@ -15,10 +16,10 @@ class CustomActionsScreen extends StatefulWidget {
 }
 
 class _CustomActionsScreenState extends State<CustomActionsScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _panelColor = Color(0xFF162033);
-  static const _mutedColor = Color(0xFF94A3B8);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _panelColor = AppColors.panel;
+  static const _mutedColor = AppColors.textMuted;
   static const _shadowColor = Color(0x22000000);
 
   final CustomActionsStorage _customActionsStorage = const CustomActionsStorage();
@@ -376,7 +377,7 @@ class _CustomActionsScreenState extends State<CustomActionsScreen> {
                                             style: IconButton.styleFrom(
                                               backgroundColor: _panelColor,
                                               foregroundColor:
-                                                  const Color(0xFFFCA5A5),
+                                                  AppColors.danger,
                                             ),
                                           ),
                                         ],
@@ -424,8 +425,8 @@ class _CustomActionFormScreen extends StatefulWidget {
 }
 
 class _CustomActionFormScreenState extends State<_CustomActionFormScreen> {
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _mutedColor = Color(0xFF94A3B8);
+  static const _surfaceColor = AppColors.surface;
+  static const _mutedColor = AppColors.textMuted;
   static const _shadowColor = Color(0x22000000);
 
   final _formKey = GlobalKey<FormState>();

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/theme/app_colors.dart';
 
 class PackageManagerScreen extends StatefulWidget {
   const PackageManagerScreen({
@@ -18,11 +19,11 @@ class PackageManagerScreen extends StatefulWidget {
 }
 
 class _PackageManagerScreenState extends State<PackageManagerScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _primaryColor = Color(0xFF3B82F6);
-  static const _dangerColor = Color(0xFFEF4444);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _mutedColor = AppColors.textMuted;
+  static const _primaryColor = AppColors.textPrimary;
+  static const _dangerColor = AppColors.danger;
 
   List<UpgradablePackage> _upgradablePackages = [];
   List<SearchResultPackage> _searchResults = [];
@@ -246,7 +247,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
       return Center(child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.check_circle_outline, size: 48, color: Colors.green),
+          const Icon(Icons.check_circle_outline, size: 48, color: AppColors.textPrimary),
           const SizedBox(height: 12),
           const Text('System is up to date', style: TextStyle(color: Colors.white70)),
         ],
@@ -269,7 +270,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
             child: ListTile(
               title: Text(pkg.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               subtitle: Text('${pkg.currentVersion} → ${pkg.newVersion}', style: const TextStyle(color: _mutedColor)),
-              trailing: const Icon(Icons.arrow_upward, color: Colors.green, size: 16),
+              trailing: const Icon(Icons.arrow_upward, color: AppColors.textPrimary, size: 16),
             ),
           ),
         );
@@ -439,7 +440,7 @@ class _StreamConsoleState extends State<_StreamConsole> {
                       return Text(
                         line.text, 
                         style: TextStyle(
-                          color: line.isError ? const Color(0xFFEF4444) : const Color(0xFFE2E8F0), 
+                          color: line.isError ? AppColors.danger : AppColors.textPrimary, 
                           fontFamily: 'monospace', 
                           fontSize: 12,
                         ),

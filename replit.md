@@ -119,3 +119,51 @@ Brutalist surfaces in custom widgets:
 - `lib/features/fleet/fleet_dashboard_screen.dart` — Metric dials,
   status pills (`ONLINE`/`OFFLINE`), and bulk-result blocks use the
   monospace font and zero-radius bordered surfaces.
+
+All 18 feature screens (terminal, sftp, docker, services, processes,
+packages, settings, server list/form, AI assistant + copilot, command
+palette, port forwarding, logs, custom actions, onboarding, app lock)
+were swept from the legacy slate/blue/green palette to `AppColors.*`
+references in one pass. The mapping retired the slate (`0xFF94A3B8`,
+`0xFF1E293B`, `0xFF162033`, `0xFF0F172A`, `0xFF334155`, `0xFF64748B`),
+blue (`0xFF3B82F6`, `0xFF60A5FA`), green (`0xFF22C55E`, `0xFF15803D`),
+amber (`0xFFD97706`, `0xFFF59E0B`), and teal (`0xFF0F766E`) tailwind
+tones, plus stray Material constants (`Colors.red/orange/green/blue/
+amber/redAccent`) in favor of `AppColors.surface` / `panel` /
+`scaffoldBackground` / `border` / `textMuted` / `textPrimary` /
+`danger`. The only legitimate stale hit left in
+`lib/core/background/background_keepalive.dart` is an Android
+notification accent, not visible UI.
+
+### 3-tier monochrome state system
+
+To preserve at-a-glance state communication without breaking the
+brutalist palette, all stateful UI uses three tiers:
+
+- **WHITE** (`AppColors.textPrimary`) — healthy / running / online /
+  success / low-risk
+- **GRAY** (`AppColors.textMuted`) — transitional / warning /
+  connecting / reconnecting / restarting / paused / created /
+  moderate-risk
+- **RED** (`AppColors.danger`) — failure / dead / exited / failed /
+  high-risk / critical-risk
+
+Applied in: `server_list_screen` connection state, `docker_manager`
+container state, `ai_assistant._riskColor`, `ai_copilot_sheet._riskColor`.
+The `process_manager` CPU vs RAM bars are also tone-differentiated
+(white vs gray) to preserve readability when both sit side-by-side.
+
+### Inverted controls (white surfaces on dark scaffold)
+
+When a control sits on the dark scaffold and uses the white primary as
+its background (FAB, primary FilledButton, ActionChip), the foreground
+**must** be `AppColors.scaffoldBackground` (black) — not `Colors.white`.
+This was a regression introduced by the initial sweep that produced
+white-on-white invisibility in: AI Copilot Run button, SFTP add FAB,
+Log Viewer "Back to bottom" chip — all fixed.
+
+### WCAG AA accessibility
+
+`AppColors.textFaint` was bumped from `#555555` (~2.8:1 on black,
+**fails** WCAG AA) to `#767676` (~4.6:1, **passes** AA for normal
+text). `AppColors.textMuted` (`#888888`) is 5.7:1 (passes AA).

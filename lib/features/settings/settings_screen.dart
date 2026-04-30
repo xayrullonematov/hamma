@@ -14,6 +14,7 @@ import '../../core/storage/app_lock_storage.dart';
 import '../../core/storage/app_prefs_storage.dart';
 import '../../core/storage/backup_storage.dart';
 import '../security/app_lock_screen.dart';
+import '../../core/theme/app_colors.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -41,8 +42,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  static const _panelColor = Color(0xFF162033);
-  static const _mutedColor = Color(0xFF94A3B8);
+  static const _panelColor = AppColors.panel;
+  static const _mutedColor = AppColors.textMuted;
   static const _openRouterModelsUrl = 'https://openrouter.ai/api/v1/models';
 
   late final TextEditingController _openAiApiKeyController;
@@ -1079,7 +1080,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                         contentPadding: EdgeInsets.zero,
                       ),
-                      const Divider(height: 32, color: Color(0xFF334155)),
+                      const Divider(height: 32, color: AppColors.border),
                       if (_backupConfig.lastBackupTime != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 16),
@@ -1259,8 +1260,8 @@ Monitor your entire infrastructure at once:
                                   selectable: true,
                                   styleSheet: MarkdownStyleSheet(
                                     h1: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
-                                    p: const TextStyle(color: Color(0xFFE2E8F0), height: 1.6, fontSize: 15),
-                                    listBullet: const TextStyle(color: Color(0xFF3B82F6)),
+                                    p: const TextStyle(color: AppColors.textPrimary, height: 1.6, fontSize: 15),
+                                    listBullet: const TextStyle(color: AppColors.textPrimary),
                                   ),
                                 ),
                               ),
@@ -1293,8 +1294,8 @@ class _SettingsSectionCard extends StatelessWidget {
   final IconData icon;
   final Widget child;
 
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _mutedColor = Color(0xFF94A3B8);
+  static const _surfaceColor = AppColors.surface;
+  static const _mutedColor = AppColors.textMuted;
   static const _shadowColor = Color(0x22000000);
 
   @override

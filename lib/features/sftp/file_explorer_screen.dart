@@ -11,6 +11,7 @@ import '../../core/models/server_profile.dart';
 import '../../core/ssh/sftp_service.dart';
 import '../../core/storage/app_prefs_storage.dart';
 import 'file_editor_screen.dart';
+import '../../core/theme/app_colors.dart';
 
 enum FileSortMode { name, size, date }
 
@@ -24,12 +25,12 @@ class FileExplorerScreen extends StatefulWidget {
 }
 
 class _FileExplorerScreenState extends State<FileExplorerScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _panelColor = Color(0xFF162033);
-  static const _primaryColor = Color(0xFF3B82F6);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _fileColor = Color(0xFF64748B);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _panelColor = AppColors.panel;
+  static const _primaryColor = AppColors.textPrimary;
+  static const _mutedColor = AppColors.textMuted;
+  static const _fileColor = AppColors.textMuted;
   static const _shadowColor = Color(0x22000000);
   static const _overlayColor = Color(0xB3000000);
 
@@ -361,7 +362,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
             child: const Text('Delete'),
           ),
         ],
@@ -713,9 +714,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                       value: 'delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete_outline_rounded, color: Colors.red),
+                          Icon(Icons.delete_outline_rounded, color: AppColors.danger),
                           SizedBox(width: 12),
-                          Text('Delete', style: TextStyle(color: Colors.red)),
+                          Text('Delete', style: TextStyle(color: AppColors.danger)),
                         ],
                       ),
                     ),
@@ -1016,9 +1017,10 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: null, // We use child as a popup anchor
-        backgroundColor: _primaryColor,
+        backgroundColor: AppColors.textPrimary,
+        foregroundColor: AppColors.scaffoldBackground,
         child: PopupMenuButton<String>(
-          icon: const Icon(Icons.add, color: Colors.white, size: 28),
+          icon: Icon(Icons.add, color: AppColors.scaffoldBackground, size: 28),
           offset: const Offset(0, -140),
           onSelected: (value) {
             if (value == 'folder') {

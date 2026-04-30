@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../../core/storage/app_lock_storage.dart';
+import '../../core/theme/app_colors.dart';
 
 enum AppLockMode {
   setup,
@@ -28,12 +29,12 @@ class AppLockScreen extends StatefulWidget {
 }
 
 class _AppLockScreenState extends State<AppLockScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _panelColor = Color(0xFF162033);
-  static const _primaryColor = Color(0xFF3B82F6);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _dangerColor = Color(0xFFEF4444);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _panelColor = AppColors.panel;
+  static const _primaryColor = AppColors.textPrimary;
+  static const _mutedColor = AppColors.textMuted;
+  static const _dangerColor = AppColors.danger;
   static const _shadowColor = Color(0x22000000);
 
   final LocalAuthentication _localAuthentication = LocalAuthentication();

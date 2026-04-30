@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../core/ai/ai_command_service.dart';
+import '../../core/theme/app_colors.dart';
 
 class CommandPaletteManager extends StatefulWidget {
   const CommandPaletteManager({
@@ -144,7 +145,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
         child: Container(
           width: 600,
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
@@ -165,13 +166,13 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
                   style: const TextStyle(color: Colors.white, fontSize: 18),
                   decoration: const InputDecoration(
                     hintText: "What do you want to do? (e.g. Restart nginx on production-db)",
-                    hintStyle: TextStyle(color: Color(0xFF94A3B8)),
+                    hintStyle: TextStyle(color: AppColors.textMuted),
                     border: InputBorder.none,
                   ),
                   onSubmitted: _handleSubmitted,
                 ),
               ),
-              const Divider(color: Color(0xFF334155), height: 1),
+              const Divider(color: AppColors.border, height: 1),
               ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 120, maxHeight: 400),
                 child: SingleChildScrollView(
@@ -180,7 +181,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
                 ),
               ),
               if (_intent != null) ...[
-                const Divider(color: Color(0xFF334155), height: 1),
+                const Divider(color: AppColors.border, height: 1),
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: Row(
@@ -188,7 +189,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
                     children: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        child: const Text("Cancel", style: TextStyle(color: Color(0xFF94A3B8))),
+                        child: const Text("Cancel", style: TextStyle(color: AppColors.textMuted)),
                       ),
                       const SizedBox(width: 12),
                       FilledButton(
@@ -197,7 +198,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
                           Navigator.of(context).pop();
                         },
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF3B82F6),
+                          backgroundColor: AppColors.textPrimary,
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
@@ -220,7 +221,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            CircularProgressIndicator(color: Color(0xFF3B82F6), strokeWidth: 3),
+            CircularProgressIndicator(color: AppColors.textPrimary, strokeWidth: 3),
             SizedBox(height: 20),
             Text(
               "Parsing intent...",
@@ -234,12 +235,12 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
     if (_error != null) {
       return Row(
         children: [
-          const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 20),
+          const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               _error!,
-              style: const TextStyle(color: Colors.redAccent, fontSize: 14),
+              style: const TextStyle(color: AppColors.danger, fontSize: 14),
             ),
           ),
         ],
@@ -256,10 +257,10 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.15),
+                  color: AppColors.danger.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
-                child: const Icon(Icons.bolt_rounded, color: Colors.amber, size: 20),
+                child: const Icon(Icons.bolt_rounded, color: AppColors.danger, size: 20),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -279,18 +280,18 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                color: AppColors.textPrimary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.dns_rounded, color: Color(0xFF60A5FA), size: 16),
+                  const Icon(Icons.dns_rounded, color: AppColors.textPrimary, size: 16),
                   const SizedBox(width: 8),
                   Text(
                     "Target: ${_intent!.targetServer}",
                     style: const TextStyle(
-                      color: Color(0xFF60A5FA),
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
@@ -305,14 +306,14 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFF334155)),
+              border: Border.all(color: AppColors.border),
             ),
             width: double.infinity,
             child: SelectableText(
               _intent!.command,
               style: const TextStyle(
                 fontFamily: 'monospace',
-                color: Color(0xFFE2E8F0),
+                color: AppColors.textPrimary,
                 fontSize: 14,
                 height: 1.4,
               ),
@@ -322,7 +323,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
           Text(
             _intent!.explanation,
             style: const TextStyle(
-              color: Color(0xFF94A3B8),
+              color: AppColors.textMuted,
               fontSize: 14,
               height: 1.5,
             ),
@@ -339,7 +340,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
           SizedBox(height: 12),
           Text(
             "Type your request and press Enter",
-            style: TextStyle(color: Color(0xFF64748B), fontSize: 14),
+            style: TextStyle(color: AppColors.textMuted, fontSize: 14),
           ),
         ],
       ),

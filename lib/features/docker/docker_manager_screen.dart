@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/theme/app_colors.dart';
 
 class DockerManagerScreen extends StatefulWidget {
   const DockerManagerScreen({
@@ -17,9 +18,9 @@ class DockerManagerScreen extends StatefulWidget {
 }
 
 class _DockerManagerScreenState extends State<DockerManagerScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _dangerColor = Color(0xFFEF4444);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _mutedColor = AppColors.textMuted;
+  static const _dangerColor = AppColors.danger;
 
   List<DockerContainer> _containers = [];
   bool _isLoading = true;
@@ -239,16 +240,16 @@ class _ContainerCard extends StatelessWidget {
   Color _getStateColor() {
     switch (container.state.toLowerCase()) {
       case 'running':
-        return const Color(0xFF22C55E);
+        return AppColors.textPrimary;
       case 'exited':
       case 'dead':
-        return const Color(0xFFEF4444);
+        return AppColors.danger;
       case 'restarting':
       case 'paused':
       case 'created':
-        return const Color(0xFFF59E0B);
+        return AppColors.textMuted;
       default:
-        return const Color(0xFF94A3B8);
+        return AppColors.textMuted;
     }
   }
 
@@ -258,7 +259,7 @@ class _ContainerCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(color: Color(0x22000000), blurRadius: 10, offset: Offset(0, 4)),
@@ -294,7 +295,7 @@ class _ContainerCard extends StatelessWidget {
                   container.image,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -306,13 +307,13 @@ class _ContainerCard extends StatelessWidget {
               ],
             ),
             trailing: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Color(0xFF94A3B8)),
+              icon: const Icon(Icons.more_vert, color: AppColors.textMuted),
               onSelected: onAction,
               itemBuilder: (context) => [
                 const PopupMenuItem(value: 'start', child: Text('Start')),
                 const PopupMenuItem(value: 'stop', child: Text('Stop')),
                 const PopupMenuItem(value: 'restart', child: Text('Restart')),
-                const PopupMenuItem(value: 'rm -f', child: Text('Remove', style: TextStyle(color: Colors.red))),
+                const PopupMenuItem(value: 'rm -f', child: Text('Remove', style: TextStyle(color: AppColors.danger))),
               ],
             ),
           ),
@@ -327,7 +328,7 @@ class _ContainerCard extends StatelessWidget {
                   onPressed: onShowLogs,
                   icon: const Icon(Icons.article_outlined, size: 18),
                   label: const Text('Logs'),
-                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF3B82F6)),
+                  style: TextButton.styleFrom(foregroundColor: AppColors.textPrimary),
                 ),
               ],
             ),
@@ -408,7 +409,7 @@ class _DockerLogsViewState extends State<_DockerLogsView> {
               child: SingleChildScrollView(
                 child: SelectableText(
                   _logs,
-                  style: const TextStyle(color: Color(0xFFE2E8F0), fontFamily: 'monospace', fontSize: 12),
+                  style: const TextStyle(color: AppColors.textPrimary, fontFamily: 'monospace', fontSize: 12),
                 ),
               ),
             ),

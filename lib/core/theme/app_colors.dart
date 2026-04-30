@@ -18,8 +18,11 @@ class AppColors {
 
   // Foreground
   static const textPrimary = Color(0xFFFFFFFF);
+  // 5.7:1 contrast on black — passes WCAG AA for normal text.
   static const textMuted = Color(0xFF888888);
-  static const textFaint = Color(0xFF555555);
+  // 4.6:1 contrast on black — passes WCAG AA for normal text.
+  // (Was 0xFF555555 / 2.8:1 — failed AA, replaced for accessibility.)
+  static const textFaint = Color(0xFF767676);
 
   // Accents
   static const primary = Color(0xFFFFFFFF);

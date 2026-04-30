@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/ssh/ssh_service.dart';
+import '../../core/theme/app_colors.dart';
 
 class PortForwardingSheet extends StatefulWidget {
   const PortForwardingSheet({super.key, required this.sshService});
@@ -12,11 +13,11 @@ class PortForwardingSheet extends StatefulWidget {
 }
 
 class _PortForwardingSheetState extends State<PortForwardingSheet> {
-  static const _sheetBackground = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _panelColor = Color(0xFF162033);
-  static const _primaryColor = Color(0xFF3B82F6);
-  static const _mutedColor = Color(0xFF94A3B8);
+  static const _sheetBackground = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _panelColor = AppColors.panel;
+  static const _primaryColor = AppColors.textPrimary;
+  static const _mutedColor = AppColors.textMuted;
   static const _shadowColor = Color(0x22000000);
 
   late final TextEditingController _localPortController;
@@ -186,7 +187,7 @@ class _PortForwardingSheetState extends State<PortForwardingSheet> {
                   style: TextStyle(
                     color:
                         widget.sshService.isConnected
-                            ? const Color(0xFF22C55E)
+                            ? AppColors.textPrimary
                             : _mutedColor,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,

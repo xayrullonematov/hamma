@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/models/server_profile.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/theme/app_colors.dart';
 
 enum AuthMethod { password, sshKey }
 
@@ -21,8 +22,8 @@ class ServerFormScreen extends StatefulWidget {
 }
 
 class _ServerFormScreenState extends State<ServerFormScreen> {
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _mutedColor = Color(0xFF94A3B8);
+  static const _surfaceColor = AppColors.surface;
+  static const _mutedColor = AppColors.textMuted;
   static const _shadowColor = Color(0x22000000);
 
   final _formKey = GlobalKey<FormState>();

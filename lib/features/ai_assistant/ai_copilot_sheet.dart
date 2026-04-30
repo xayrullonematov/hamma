@@ -10,6 +10,7 @@ import '../../core/ai/command_risk_assessor.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/chat_history_storage.dart';
 import 'widgets/interactive_command_block.dart';
+import '../../core/theme/app_colors.dart';
 
 class AiCopilotSheet extends StatefulWidget {
   const AiCopilotSheet({
@@ -44,12 +45,12 @@ class AiCopilotSheet extends StatefulWidget {
 class _AiCopilotSheetState extends State<AiCopilotSheet> {
   static const _maxPromptContextChars = 2200;
   static const _maxPromptContextLines = 24;
-  static const _sheetBackground = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _panelColor = Color(0xFF162033);
-  static const _primaryColor = Color(0xFF3B82F6);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _warningColor = Color(0xFFD97706);
+  static const _sheetBackground = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _panelColor = AppColors.panel;
+  static const _primaryColor = AppColors.textPrimary;
+  static const _mutedColor = AppColors.textMuted;
+  static const _warningColor = AppColors.danger;
   static const _shadowColor = Color(0x22000000);
   static const _openRouterModelsUrl = 'https://openrouter.ai/api/v1/models';
 
@@ -813,7 +814,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
             child: const Text('Run Anyway'),
           ),
         ],
@@ -988,7 +989,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     const Text(
                       'Step order warning',
                       style: TextStyle(
-                        color: Color(0xFFD97706),
+                        color: AppColors.danger,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -996,7 +997,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     Text(
                       warningText,
                       style: const TextStyle(
-                        color: Color(0xFFD97706),
+                        color: AppColors.danger,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -1055,13 +1056,12 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   Color _riskColor(CommandRiskLevel level) {
     switch (level) {
       case CommandRiskLevel.low:
-        return const Color(0xFF15803D);
+        return AppColors.textPrimary;
       case CommandRiskLevel.moderate:
-        return const Color(0xFFD97706);
+        return AppColors.textMuted;
       case CommandRiskLevel.high:
-        return const Color(0xFFDC2626);
       case CommandRiskLevel.critical:
-        return const Color(0xFFFF0000);
+        return AppColors.danger;
     }
   }
 
@@ -1081,13 +1081,13 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   Color _stepStateColor(CopilotPlanStepState state) {
     switch (state) {
       case CopilotPlanStepState.pending:
-        return const Color(0xFF64748B);
+        return AppColors.textMuted;
       case CopilotPlanStepState.sentToShell:
-        return const Color(0xFF0F766E);
+        return AppColors.textMuted;
       case CopilotPlanStepState.executed:
-        return const Color(0xFF15803D);
+        return AppColors.textPrimary;
       case CopilotPlanStepState.failed:
-        return const Color(0xFFDC2626);
+        return AppColors.danger;
     }
   }
 
@@ -1819,44 +1819,44 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                decoration: BoxDecoration(
-                  color:
-                      _isGenerating ||
-                              _isRunningStep ||
-                              _isLoadingActiveApiKey ||
-                              !_hasActiveApiKey
-                          ? _panelColor
-                          : _primaryColor,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: IconButton(
-                  onPressed:
-                      _isGenerating ||
-                              _isRunningStep ||
-                              _isHistoryLoading ||
-                              _isLoadingActiveApiKey ||
-                              !_hasActiveApiKey
-                          ? null
-                          : _submitPrompt,
-                  icon:
-                      _isGenerating
-                          ? const SizedBox(
+              Builder(builder: (context) {
+                final bool isDisabled = _isGenerating ||
+                    _isRunningStep ||
+                    _isLoadingActiveApiKey ||
+                    !_hasActiveApiKey;
+                // When the button is enabled, its background is white
+                // (_primaryColor) so the icon must be black to remain visible.
+                // When disabled, the background is _panelColor (dark) so the
+                // icon stays white.
+                final Color iconColor = isDisabled
+                    ? AppColors.textPrimary
+                    : AppColors.scaffoldBackground;
+                return Container(
+                  decoration: BoxDecoration(
+                    color: isDisabled ? _panelColor : _primaryColor,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: IconButton(
+                    onPressed: isDisabled || _isHistoryLoading
+                        ? null
+                        : _submitPrompt,
+                    icon: _isGenerating
+                        ? SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: iconColor,
                             ),
                           )
-                          : const Icon(Icons.send_rounded),
-                  color: Colors.white,
-                  tooltip:
-                      _mode == CopilotMode.commandHelper
-                          ? 'Generate plan'
-                          : 'Send prompt',
-                ),
-              ),
+                        : const Icon(Icons.send_rounded),
+                    color: iconColor,
+                    tooltip: _mode == CopilotMode.commandHelper
+                        ? 'Generate plan'
+                        : 'Send prompt',
+                  ),
+                );
+              }),
             ],
           ),
         ),
@@ -1918,7 +1918,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     }),
                     foregroundColor: WidgetStateProperty.resolveWith((states) {
                       if (states.contains(WidgetState.selected)) {
-                        return Colors.white;
+                        return AppColors.scaffoldBackground;
                       }
                       return _mutedColor;
                     }),
@@ -1992,14 +1992,14 @@ class _StepNode extends StatelessWidget {
       width: 34,
       height: 34,
       decoration: BoxDecoration(
-        color: const Color(0xFF3B82F6).withValues(alpha: 0.18),
+        color: AppColors.textPrimary.withValues(alpha: 0.18),
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
       child: Text(
         '$number',
         style: const TextStyle(
-          color: Color(0xFF3B82F6),
+          color: AppColors.textPrimary,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -2094,7 +2094,7 @@ class _StepTimelineCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFD97706).withValues(alpha: 0.12),
+                color: AppColors.danger.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
@@ -2161,8 +2161,8 @@ class _StepTimelineCard extends StatelessWidget {
             child: FilledButton.icon(
               onPressed: isBusy ? null : onRun,
               style: FilledButton.styleFrom(
-                backgroundColor: _AiCopilotSheetState._primaryColor,
-                foregroundColor: Colors.white,
+                backgroundColor: AppColors.textPrimary,
+                foregroundColor: AppColors.scaffoldBackground,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                 ),
@@ -2174,7 +2174,7 @@ class _StepTimelineCard extends StatelessWidget {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: AppColors.scaffoldBackground,
                         ),
                       )
                       : const Icon(Icons.play_arrow_rounded),
@@ -2381,13 +2381,13 @@ class _ExecutionOutputCard extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF0B1120),
+              color: AppColors.scaffoldBackground,
               borderRadius: BorderRadius.circular(18),
             ),
             child: SelectableText(
               output,
               style: const TextStyle(
-                color: Color(0xFFE2E8F0),
+                color: AppColors.textPrimary,
                 fontFamily: 'monospace',
                 height: 1.45,
               ),

@@ -14,6 +14,7 @@ import 'package:re_highlight/languages/css.dart';
 import 'package:re_highlight/languages/plaintext.dart';
 
 import '../../core/ssh/sftp_service.dart';
+import '../../core/theme/app_colors.dart';
 
 class FileEditorScreen extends StatefulWidget {
   const FileEditorScreen({
@@ -32,7 +33,7 @@ class FileEditorScreen extends StatefulWidget {
 }
 
 class _FileEditorScreenState extends State<FileEditorScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
+  static const _backgroundColor = AppColors.scaffoldBackground;
   static const _overlayColor = Color(0xB3000000);
 
   late final CodeLineEditingController _controller;
@@ -185,7 +186,7 @@ class _FileEditorScreenState extends State<FileEditorScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
             child: const Text('Discard'),
           ),
         ],

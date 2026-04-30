@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/theme/app_colors.dart';
 
 class ServiceManagementScreen extends StatefulWidget {
   const ServiceManagementScreen({
@@ -16,10 +17,10 @@ class ServiceManagementScreen extends StatefulWidget {
 }
 
 class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _dangerColor = Color(0xFFEF4444);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _mutedColor = AppColors.textMuted;
+  static const _dangerColor = AppColors.danger;
 
   final TextEditingController _searchController = TextEditingController();
   List<LinuxService> _allServices = [];
@@ -284,11 +285,11 @@ class _ServiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = service.isActive;
-    final color = isActive ? const Color(0xFF22C55E) : const Color(0xFF94A3B8);
+    final color = isActive ? AppColors.textPrimary : AppColors.textMuted;
 
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(color: Color(0x22000000), blurRadius: 10, offset: Offset(0, 4)),
@@ -323,14 +324,14 @@ class _ServiceCard extends StatelessWidget {
             service.description,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
           trailing: IgnorePointer(
             ignoring: isTransitioning,
             child: Opacity(
               opacity: isTransitioning ? 0.5 : 1.0,
               child: PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: Color(0xFF94A3B8)),
+                icon: const Icon(Icons.more_vert, color: AppColors.textMuted),
                 onSelected: onAction,
                 itemBuilder: (context) => [
                   const PopupMenuItem(value: 'start', child: Text('Start')),

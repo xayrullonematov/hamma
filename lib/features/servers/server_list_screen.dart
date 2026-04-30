@@ -9,6 +9,7 @@ import '../fleet/fleet_dashboard_screen.dart';
 import '../settings/settings_screen.dart';
 import 'server_dashboard_screen.dart';
 import 'server_form_screen.dart';
+import '../../core/theme/app_colors.dart';
 
 class ServerListScreen extends StatefulWidget {
   const ServerListScreen({
@@ -36,9 +37,9 @@ class ServerListScreen extends StatefulWidget {
 }
 
 class _ServerListScreenState extends State<ServerListScreen> {
-  static const _cardColor = Color(0xFF1E293B);
-  static const _cardAccent = Color(0xFF3B82F6);
-  static const _subtitleColor = Color(0xFF94A3B8);
+  static const _cardColor = AppColors.surface;
+  static const _cardAccent = AppColors.textPrimary;
+  static const _subtitleColor = AppColors.textMuted;
   static const _shadowColor = Color(0x33000000);
 
   final SavedServersStorage _savedServersStorage = const SavedServersStorage();
@@ -442,7 +443,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
                                   vertical: 8,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF162033),
+                                  color: AppColors.panel,
                                   borderRadius: BorderRadius.circular(16),
                                 ),
                                 child: Text(
@@ -530,14 +531,14 @@ class _ServerDashboardCard extends StatelessWidget {
   Color _getStatusColor() {
     switch (status.state) {
       case SshConnectionState.connected:
-        return const Color(0xFF22C55E);
+        return AppColors.textPrimary;
       case SshConnectionState.connecting:
       case SshConnectionState.reconnecting:
-        return const Color(0xFFF59E0B);
+        return AppColors.textMuted;
       case SshConnectionState.failed:
-        return const Color(0xFFEF4444);
+        return AppColors.danger;
       case SshConnectionState.disconnected:
-        return const Color(0xFF94A3B8);
+        return AppColors.textMuted;
     }
   }
 
@@ -595,7 +596,7 @@ class _ServerDashboardCard extends StatelessWidget {
                   child: Icon(
                     status.isConnected ? Icons.dns : Icons.dns_outlined,
                     color: status.isConnected 
-                        ? const Color(0xFF22C55E) 
+                        ? AppColors.textPrimary 
                         : _ServerListScreenState._cardAccent,
                   ),
                 ),
@@ -656,7 +657,7 @@ class _ServerDashboardCard extends StatelessWidget {
                       icon: const Icon(Icons.edit_outlined, size: 20),
                       visualDensity: VisualDensity.compact,
                       style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xFF162033),
+                        backgroundColor: AppColors.panel,
                         foregroundColor: Colors.white,
                       ),
                     ),
@@ -666,8 +667,8 @@ class _ServerDashboardCard extends StatelessWidget {
                       icon: const Icon(Icons.delete_outline, size: 20),
                       visualDensity: VisualDensity.compact,
                       style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xFF162033),
-                        foregroundColor: const Color(0xFFFCA5A5),
+                        backgroundColor: AppColors.panel,
+                        foregroundColor: AppColors.danger,
                       ),
                     ),
                   ],

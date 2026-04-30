@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/theme/app_colors.dart';
 
 class ProcessManagerScreen extends StatefulWidget {
   const ProcessManagerScreen({
@@ -17,11 +18,11 @@ class ProcessManagerScreen extends StatefulWidget {
 }
 
 class _ProcessManagerScreenState extends State<ProcessManagerScreen> {
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _panelColor = Color(0xFF162033);
-  static const _mutedColor = Color(0xFF94A3B8);
-  static const _dangerColor = Color(0xFFEF4444);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _panelColor = AppColors.panel;
+  static const _mutedColor = AppColors.textMuted;
+  static const _dangerColor = AppColors.danger;
 
   final TextEditingController _searchController = TextEditingController();
   List<ProcessInfo> _allProcesses = [];
@@ -290,7 +291,7 @@ class _ProcessTile extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: ListTile(
@@ -319,16 +320,16 @@ class _ProcessTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('User: ${process.user}', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+              Text('User: ${process.user}', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               const SizedBox(height: 8),
-              _UsageBar(label: 'CPU', value: process.cpu, color: const Color(0xFF3B82F6)),
+              _UsageBar(label: 'CPU', value: process.cpu, color: AppColors.textPrimary),
               const SizedBox(height: 4),
-              _UsageBar(label: 'RAM', value: process.ram, color: const Color(0xFF22C55E)),
+              _UsageBar(label: 'RAM', value: process.ram, color: AppColors.textMuted),
             ],
           ),
         ),
         trailing: IconButton(
-          icon: const Icon(Icons.close, color: Color(0xFFEF4444), size: 20),
+          icon: const Icon(Icons.close, color: AppColors.danger, size: 20),
           onPressed: onKill,
           tooltip: 'Kill Process',
         ),
@@ -352,13 +353,13 @@ class _UsageBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        SizedBox(width: 35, child: Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10))),
+        SizedBox(width: 35, child: Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 10))),
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
               value: (value / 100).clamp(0.0, 1.0),
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: AppColors.scaffoldBackground,
               valueColor: AlwaysStoppedAnimation<Color>(color),
               minHeight: 4,
             ),

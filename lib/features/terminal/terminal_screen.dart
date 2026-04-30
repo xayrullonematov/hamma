@@ -14,6 +14,7 @@ import '../../core/ssh/ssh_service.dart';
 import '../../core/ssh/connection_status.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../ai_assistant/ai_copilot_sheet.dart';
+import '../../core/theme/app_colors.dart';
 
 class TerminalScreen extends StatefulWidget {
   const TerminalScreen({
@@ -37,10 +38,10 @@ class TerminalScreen extends StatefulWidget {
 
 class _TerminalScreenState extends State<TerminalScreen> {
   static const _maxContextChars = 3500;
-  static const _backgroundColor = Color(0xFF0F172A);
-  static const _surfaceColor = Color(0xFF1E293B);
-  static const _panelColor = Color(0xFF162033);
-  static const _mutedColor = Color(0xFF94A3B8);
+  static const _backgroundColor = AppColors.scaffoldBackground;
+  static const _surfaceColor = AppColors.surface;
+  static const _panelColor = AppColors.panel;
+  static const _mutedColor = AppColors.textMuted;
 
   late final Terminal _terminal;
   final FocusNode _terminalFocusNode = FocusNode();
@@ -287,22 +288,22 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
     switch (status.state) {
       case SshConnectionState.connected:
-        indicatorColor = Colors.green;
+        indicatorColor = AppColors.textPrimary;
         label = 'Connected';
         subLabel = 'Last sync: ${_formatTime(status.lastSuccessfulConnection)}';
         break;
       case SshConnectionState.connecting:
-        indicatorColor = Colors.orange;
+        indicatorColor = AppColors.textMuted;
         label = 'Connecting...';
         showLoading = true;
         break;
       case SshConnectionState.reconnecting:
-        indicatorColor = Colors.orange;
+        indicatorColor = AppColors.textMuted;
         label = 'Reconnecting (Attempt ${status.reconnectAttempts}/${status.maxReconnectAttempts})...';
         showLoading = true;
         break;
       case SshConnectionState.failed:
-        indicatorColor = Colors.red;
+        indicatorColor = AppColors.danger;
         label = status.exception?.userMessage ?? 'Connection Failed';
         subLabel = status.exception?.suggestedAction;
         break;
@@ -325,7 +326,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
             const SizedBox(
               width: 12,
               height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.orange),
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textMuted),
             )
           else
             CircleAvatar(
@@ -360,7 +361,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
               onPressed: _handleReconnect,
               style: TextButton.styleFrom(
                 visualDensity: VisualDensity.compact,
-                foregroundColor: Colors.blue,
+                foregroundColor: AppColors.textPrimary,
               ),
               child: const Text('Reconnect'),
             ),
@@ -419,9 +420,9 @@ class _ToolbarButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E293B),
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFF334155)),
+            border: Border.all(color: AppColors.border),
           ),
           child: Text(
             label,
