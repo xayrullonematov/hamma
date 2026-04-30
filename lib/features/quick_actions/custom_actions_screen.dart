@@ -164,7 +164,7 @@ class _CustomActionsScreenState extends State<CustomActionsScreen> {
   BoxDecoration _sectionDecoration() {
     return BoxDecoration(
       color: _surfaceColor,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.zero,
       boxShadow: const [
         BoxShadow(
           color: _shadowColor,
@@ -230,7 +230,7 @@ class _CustomActionsScreenState extends State<CustomActionsScreen> {
                                 color: theme.colorScheme.primary.withValues(
                                   alpha: 0.14,
                                 ),
-                                borderRadius: BorderRadius.circular(14),
+                                borderRadius: BorderRadius.zero,
                               ),
                               child: Icon(
                                 Icons.terminal_rounded,
@@ -340,7 +340,7 @@ class _CustomActionsScreenState extends State<CustomActionsScreen> {
                                               decoration: BoxDecoration(
                                                 color: _panelColor,
                                                 borderRadius:
-                                                    BorderRadius.circular(999),
+                                                    BorderRadius.zero,
                                               ),
                                               child: const Text(
                                                 'Custom',
@@ -390,7 +390,7 @@ class _CustomActionsScreenState extends State<CustomActionsScreen> {
                                     padding: const EdgeInsets.all(14),
                                     decoration: BoxDecoration(
                                       color: _panelColor,
-                                      borderRadius: BorderRadius.circular(18),
+                                      borderRadius: BorderRadius.zero,
                                     ),
                                     child: SelectableText(
                                       action.command,
@@ -540,7 +540,7 @@ class _CustomActionFormScreenState extends State<_CustomActionFormScreen> {
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 18),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
                 child: Text(_isEditing ? 'Save Changes' : 'Save Action'),
@@ -581,7 +581,7 @@ class _ActionFormSectionCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: _CustomActionFormScreenState._surfaceColor,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.zero,
         boxShadow: const [
           BoxShadow(
             color: _CustomActionFormScreenState._shadowColor,
@@ -602,7 +602,7 @@ class _ActionFormSectionCard extends StatelessWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.zero,
                 ),
                 child: Icon(
                   icon,

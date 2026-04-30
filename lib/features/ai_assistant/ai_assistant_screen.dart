@@ -336,7 +336,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: Colors.black,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.zero,
                   ),
                   child: Text(
                     command,
@@ -596,7 +596,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                           ),
                           codeblockDecoration: BoxDecoration(
                             color: Colors.black38,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.zero,
                           ),
                         ),
                       ),
@@ -652,7 +652,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       width: double.infinity,
       decoration: BoxDecoration(
         color: Colors.black26,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.zero,
         border: Border.all(color: Colors.white10),
       ),
       child: Column(
@@ -802,8 +802,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                     vertical: 10,
                   ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(25),
-                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.zero,
+                    borderSide: const BorderSide(color: AppColors.border, width: 1),
                   ),
                 ),
               ),
@@ -843,7 +843,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
           color: _surfaceColor,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.zero,
         ),
         child: const Text(
           '...',

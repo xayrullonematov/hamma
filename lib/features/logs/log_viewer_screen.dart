@@ -197,7 +197,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.black,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.zero,
               ),
               child: ListView.builder(
                 controller: _scrollController,
@@ -279,7 +279,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
                         hintStyle: const TextStyle(color: _mutedColor),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.zero),
                       ),
                     ),
                   ),
@@ -310,7 +310,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
           filled: true,
           fillColor: _surfaceColor,
           isDense: true,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          border: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: const BorderSide(color: AppColors.border, width: 1)),
         ),
       ),
     );

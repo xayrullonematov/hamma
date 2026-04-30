@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.tree
     pkgs.seagoat
     pkgs.mesa-demos
     pkgs.mesa

@@ -619,7 +619,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     return Container(
       decoration: BoxDecoration(
         color: _surfaceColor,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.zero,
         boxShadow: const [
           BoxShadow(color: _shadowColor, blurRadius: 18, offset: Offset(0, 10)),
         ],
@@ -750,7 +750,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
             decoration: BoxDecoration(
               color: _panelColor,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.zero,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -793,7 +793,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: _surfaceColor,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.zero,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -950,7 +950,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     color: _surfaceColor,
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.zero,
                     boxShadow: const [
                       BoxShadow(
                         color: _shadowColor,

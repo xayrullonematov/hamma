@@ -444,7 +444,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: AppColors.panel,
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.zero,
                                 ),
                                 child: Text(
                                   '${filteredServers.length} ${_isSearching ? 'found' : 'saved'}',
@@ -566,11 +566,11 @@ class _ServerDashboardCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onOpen,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.zero,
         child: Ink(
           decoration: BoxDecoration(
             color: _ServerListScreenState._cardColor,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.zero,
             boxShadow: const [
               BoxShadow(
                 color: _ServerListScreenState._shadowColor,
@@ -591,7 +591,7 @@ class _ServerDashboardCard extends StatelessWidget {
                     color: _ServerListScreenState._cardAccent.withValues(
                       alpha: 0.16,
                     ),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.zero,
                   ),
                   child: Icon(
                     status.isConnected ? Icons.dns : Icons.dns_outlined,

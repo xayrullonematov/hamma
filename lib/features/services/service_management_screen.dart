@@ -214,8 +214,8 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
                     filled: true,
                     fillColor: _surfaceColor,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.zero,
+                      borderSide: const BorderSide(color: AppColors.border, width: 1),
                     ),
                   ),
                 ),
@@ -290,7 +290,7 @@ class _ServiceCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.zero,
         boxShadow: const [
           BoxShadow(color: Color(0x22000000), blurRadius: 10, offset: Offset(0, 4)),
         ],

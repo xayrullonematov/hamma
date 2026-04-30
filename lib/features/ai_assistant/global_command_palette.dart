@@ -146,7 +146,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
           width: 600,
           decoration: BoxDecoration(
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.zero,
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.5),
@@ -201,7 +201,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
                           backgroundColor: AppColors.textPrimary,
                           foregroundColor: AppColors.scaffoldBackground,
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
                         ),
                         child: const Text("Execute"),
                       ),
@@ -259,7 +259,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: AppColors.danger.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.zero,
                 ),
                 child: const Icon(Icons.bolt_rounded, color: AppColors.danger, size: 20),
               ),
@@ -282,7 +282,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: AppColors.textPrimary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.zero,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -306,7 +306,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.25),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.zero,
               border: Border.all(color: AppColors.border),
             ),
             width: double.infinity,

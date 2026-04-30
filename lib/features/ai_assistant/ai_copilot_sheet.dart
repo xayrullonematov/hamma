@@ -424,7 +424,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     children: [
                       ListTile(
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
+                          borderRadius: BorderRadius.zero,
                         ),
                         title: const Text('Use Default Model'),
                         subtitle: const Text('meta-llama/llama-3-8b-instruct'),
@@ -444,7 +444,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                           padding: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(18),
+                              borderRadius: BorderRadius.zero,
                             ),
                             tileColor: _panelColor,
                             title: Text(modelId),
@@ -1010,7 +1010,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     ),
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(999),
+                      borderRadius: BorderRadius.zero,
                     ),
                     child: Text(
                       _riskLabel(assessment.riskLevel),
@@ -1306,7 +1306,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   BoxDecoration _surfaceDecoration() {
     return BoxDecoration(
       color: _surfaceColor,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.zero,
       boxShadow: const [
         BoxShadow(color: _shadowColor, blurRadius: 20, offset: Offset(0, 10)),
       ],
@@ -1397,7 +1397,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     ),
                     decoration: BoxDecoration(
                       color: _panelColor,
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.zero,
                     ),
                     child: Row(
                       children: [
@@ -1440,7 +1440,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                       ),
                       backgroundColor: _panelColor,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.zero,
                       ),
                     ),
                     child: Row(
@@ -1480,7 +1480,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: _surfaceColor,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.zero,
         ),
         child: Row(
           children: [
@@ -1513,7 +1513,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: _warningColor.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.zero,
       ),
       child: Text(
         'API key missing. Configure it in Settings.',
@@ -1532,7 +1532,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: _surfaceColor,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.zero,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1605,7 +1605,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                                 margin: const EdgeInsets.symmetric(vertical: 8),
                                 decoration: BoxDecoration(
                                   color: _panelColor,
-                                  borderRadius: BorderRadius.circular(999),
+                                  borderRadius: BorderRadius.zero,
                                 ),
                               ),
                             ),
@@ -1763,7 +1763,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
             onPressed: () => _handleQuickAction(prompt),
             backgroundColor: _panelColor,
             labelStyle: const TextStyle(color: Colors.white),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           );
         },
       ),
@@ -1801,15 +1801,15 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                       vertical: 16,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.zero,
+                      borderSide: const BorderSide(color: AppColors.border, width: 1),
                     ),
                     enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.zero,
+                      borderSide: const BorderSide(color: AppColors.border, width: 1),
                     ),
                     focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.zero,
                       borderSide: const BorderSide(
                         color: _primaryColor,
                         width: 1.2,
@@ -1834,7 +1834,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                 return Container(
                   decoration: BoxDecoration(
                     color: isDisabled ? _panelColor : _primaryColor,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.zero,
                   ),
                   child: IconButton(
                     onPressed: isDisabled || _isHistoryLoading
@@ -1884,7 +1884,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                   height: 4,
                   decoration: BoxDecoration(
                     color: _mutedColor.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
               ),
@@ -1895,7 +1895,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   color: _surfaceColor,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius: BorderRadius.zero,
                 ),
                 child: SegmentedButton<CopilotMode>(
                   segments: const [
@@ -1922,10 +1922,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                       }
                       return _mutedColor;
                     }),
-                    side: const WidgetStatePropertyAll(BorderSide.none),
+                    side: const WidgetStatePropertyAll(BorderSide(color: AppColors.border, width: 1)),
                     shape: WidgetStatePropertyAll(
                       RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.zero,
                       ),
                     ),
                     padding: const WidgetStatePropertyAll(
@@ -2043,7 +2043,7 @@ class _StepTimelineCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: _AiCopilotSheetState._surfaceColor,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.zero,
         boxShadow: const [
           BoxShadow(
             color: _AiCopilotSheetState._shadowColor,
@@ -2076,7 +2076,7 @@ class _StepTimelineCard extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: stateColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.zero,
                 ),
                 child: Text(
                   stateLabel,
@@ -2095,7 +2095,7 @@ class _StepTimelineCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: AppColors.danger.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.zero,
               ),
               child: Text(
                 warningText!,
@@ -2123,15 +2123,15 @@ class _StepTimelineCard extends StatelessWidget {
                 vertical: 14,
               ),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.zero,
+                borderSide: const BorderSide(color: AppColors.border, width: 1),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
-                borderSide: BorderSide.none,
+                borderRadius: BorderRadius.zero,
+                borderSide: const BorderSide(color: AppColors.border, width: 1),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.zero,
                 borderSide: const BorderSide(
                   color: _AiCopilotSheetState._primaryColor,
                   width: 1.2,
@@ -2164,7 +2164,7 @@ class _StepTimelineCard extends StatelessWidget {
                 backgroundColor: AppColors.textPrimary,
                 foregroundColor: AppColors.scaffoldBackground,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.zero,
                 ),
               ),
               icon:
@@ -2199,7 +2199,7 @@ class _RiskBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.zero,
       ),
       child: Text(
         label,
@@ -2285,7 +2285,7 @@ class _LoadingBubble extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: _AiCopilotSheetState._surfaceColor,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.zero,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -2326,7 +2326,7 @@ class _EmptyMessageCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: _AiCopilotSheetState._surfaceColor,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.zero,
       ),
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -2363,7 +2363,7 @@ class _ExecutionOutputCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: _AiCopilotSheetState._surfaceColor,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.zero,
       ),
       padding: const EdgeInsets.all(18),
       child: Column(
@@ -2382,7 +2382,7 @@ class _ExecutionOutputCard extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: AppColors.scaffoldBackground,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.zero,
             ),
             child: SelectableText(
               output,

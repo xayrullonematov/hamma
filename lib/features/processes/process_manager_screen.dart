@@ -218,8 +218,8 @@ class _ProcessManagerScreenState extends State<ProcessManagerScreen> {
                 filled: true,
                 fillColor: _surfaceColor,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+                  borderRadius: BorderRadius.zero,
+                  borderSide: const BorderSide(color: AppColors.border, width: 1),
                 ),
               ),
             ),
@@ -292,7 +292,7 @@ class _ProcessTile extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.zero,
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -356,7 +356,7 @@ class _UsageBar extends StatelessWidget {
         SizedBox(width: 35, child: Text(label, style: const TextStyle(color: AppColors.textMuted, fontSize: 10))),
         Expanded(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.zero,
             child: LinearProgressIndicator(
               value: (value / 100).clamp(0.0, 1.0),
               backgroundColor: AppColors.scaffoldBackground,

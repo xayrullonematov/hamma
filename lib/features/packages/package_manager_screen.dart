@@ -228,7 +228,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
           prefixIcon: const Icon(Icons.search, color: _mutedColor),
           filled: true,
           fillColor: _surfaceColor,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          border: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: const BorderSide(color: AppColors.border, width: 1)),
           suffixIcon: IconButton(
             icon: const Icon(Icons.close),
             onPressed: () {
@@ -431,7 +431,7 @@ class _StreamConsoleState extends State<_StreamConsole> {
                 child: Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.zero),
                   child: ListView.builder(
                     controller: _scrollController,
                     itemCount: _output.length,

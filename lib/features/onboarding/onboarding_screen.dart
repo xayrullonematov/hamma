@@ -136,7 +136,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         height: 8,
                         decoration: BoxDecoration(
                           color: _currentPage == index ? _primary : _surface,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.zero,
                         ),
                       ),
                     ),
@@ -152,7 +152,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           vertical: 16,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.zero,
                         ),
                       ),
                       child: const Text(

@@ -260,7 +260,7 @@ class _ContainerCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.zero,
         boxShadow: const [
           BoxShadow(color: Color(0x22000000), blurRadius: 10, offset: Offset(0, 4)),
         ],
@@ -404,7 +404,7 @@ class _DockerLogsViewState extends State<_DockerLogsView> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.black,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.zero,
               ),
               child: SingleChildScrollView(
                 child: SelectableText(

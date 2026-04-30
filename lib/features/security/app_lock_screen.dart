@@ -397,11 +397,11 @@ class _AppLockScreenState extends State<AppLockScreen> {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.zero,
           child: Ink(
             decoration: BoxDecoration(
               color: _panelColor,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.zero,
             ),
             child: Center(
               child: icon != null
@@ -517,7 +517,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: _surfaceColor,
-                    borderRadius: BorderRadius.circular(28),
+                    borderRadius: BorderRadius.zero,
                     boxShadow: const [
                       BoxShadow(
                         color: _shadowColor,
@@ -535,7 +535,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
                         height: 64,
                         decoration: BoxDecoration(
                           color: _primaryColor.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.zero,
                         ),
                         child: const Icon(
                           Icons.lock_outline,

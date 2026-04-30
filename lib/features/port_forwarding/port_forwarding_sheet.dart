@@ -57,7 +57,7 @@ class _PortForwardingSheetState extends State<PortForwardingSheet> {
   BoxDecoration _surfaceDecoration() {
     return BoxDecoration(
       color: _surfaceColor,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.zero,
       boxShadow: const [
         BoxShadow(color: _shadowColor, blurRadius: 20, offset: Offset(0, 10)),
       ],
@@ -180,7 +180,7 @@ class _PortForwardingSheetState extends State<PortForwardingSheet> {
                 ),
                 decoration: BoxDecoration(
                   color: _panelColor,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.zero,
                 ),
                 child: Text(
                   widget.sshService.isConnected ? 'Connected' : 'Disconnected',
@@ -295,7 +295,7 @@ class _PortForwardingSheetState extends State<PortForwardingSheet> {
               height: 40,
               decoration: BoxDecoration(
                 color: _primaryColor.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.zero,
               ),
               child: const Icon(Icons.router_outlined, color: _primaryColor),
             ),
@@ -358,7 +358,7 @@ class _PortForwardingSheetState extends State<PortForwardingSheet> {
                   height: 4,
                   decoration: BoxDecoration(
                     color: _mutedColor.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.zero,
                   ),
                 ),
               ),

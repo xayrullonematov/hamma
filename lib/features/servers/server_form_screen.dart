@@ -201,7 +201,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.black,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.zero,
               ),
               child: SelectableText(
                 publicKey,
@@ -441,7 +441,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
+                        borderRadius: BorderRadius.zero,
                       ),
                     ),
                     child: Text(_isEditing ? 'Save Changes' : 'Save Server'),
@@ -563,7 +563,7 @@ class _FormSectionCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: _ServerFormScreenState._surfaceColor,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.zero,
         boxShadow: const [
           BoxShadow(
             color: _ServerFormScreenState._shadowColor,
@@ -584,7 +584,7 @@ class _FormSectionCard extends StatelessWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.zero,
                 ),
                 child: Icon(icon, color: theme.colorScheme.primary),
               ),
