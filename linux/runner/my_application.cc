@@ -4,6 +4,11 @@
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
+#include <gdk/gdk.h>
+#include <limits.h>
+#include <unistd.h>
+#include <libgen.h>
+#include <string.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -48,6 +53,28 @@ static void my_application_activate(GApplication* application) {
   }
 
   gtk_window_set_default_size(window, 1280, 720);
+
+  // Set the window icon from the bundled PNG asset.
+  // The icon lives at <binary_dir>/data/flutter_assets/assets/images/logo.png
+  // which is consistent for both debug bundles and release builds.
+  {
+    char exe_path[PATH_MAX] = {0};
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len > 0) {
+      exe_path[len] = '\0';
+      char* dir = dirname(exe_path);
+      gchar* icon_path = g_build_filename(
+          dir, "data", "flutter_assets", "assets", "images", "logo.png", nullptr);
+      g_autoptr(GError) icon_err = nullptr;
+      GdkPixbuf* icon = gdk_pixbuf_new_from_file(icon_path, &icon_err);
+      if (icon != nullptr) {
+        gtk_window_set_icon(window, icon);
+        g_object_unref(icon);
+      }
+      g_free(icon_path);
+    }
+  }
+
   gtk_widget_show(GTK_WIDGET(window));
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

@@ -69,6 +69,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
   msix: ^3.16.13
+  flutter_launcher_icons: ^0.14.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -114,3 +115,15 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  image_path: "assets/images/logo.png"
+  android: true
+  min_sdk_android: 21
+  windows:
+    generate: true
+    image_path: "assets/images/logo.png"
+    icon_size: 48
+  linux:
+    generate: true
+    image_path: "assets/images/logo.png"
