@@ -86,6 +86,54 @@ The shell that demonstrates the pattern is `ServerDashboardScreen`:
   reconnect/disconnect/settings actions) and a bottom `NavigationBar`
   for the 5 tabs (Terminal / Files / Docker / Services / Packages)
 
+## Distribution Pipeline (CI/CD)
+
+All three platform builds run in GitHub Actions (`.github/workflows/main.yml`):
+
+| Trigger | What happens |
+|---------|-------------|
+| Push to `main` | Builds Android APKs, Linux AppImage, Windows installer; uploads as workflow artifacts |
+| Push of `v*` tag | Same builds, then creates a GitHub Release with all artifacts attached |
+| `workflow_dispatch` | Manual run of the same pipeline |
+
+### Build outputs
+
+| Platform | Artifact | How it's built |
+|----------|----------|----------------|
+| Android | `Hamma-arm64-v8a-release.apk` etc. | `flutter build apk --split-per-abi` |
+| Linux | `Hamma-x86_64.AppImage` | `appimagetool` wrapping the Flutter bundle |
+| Windows | `Hamma-Setup-Windows-x64.exe` | Inno Setup 6 from `installer/windows/hamma.iss` |
+
+### Releasing
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+CI builds all three platforms and publishes a GitHub Release automatically.
+Tags containing `alpha`, `beta`, or `rc` are marked as pre-releases.
+
+### Inno Setup script
+
+`installer/windows/hamma.iss` packages everything in
+`build\windows\x64\runner\Release\` into a single installer.
+App version is injected at build time via `/DAppVersion=` from the git tag.
+
+### AppImage structure
+
+The AppDir mirrors the Flutter Linux bundle layout so the binary's
+built-in asset path resolution works without changes:
+```
+Hamma.AppDir/
+  AppRun          ← sets LD_LIBRARY_PATH; execs hamma
+  hamma           ← binary
+  lib/            ← bundled shared libraries
+  data/           ← Flutter assets / plugins
+  hamma.png       ← icon
+  hamma.desktop   ← desktop entry
+```
+
 ## Visual Design — Geometric Brutalism
 
 The UI uses a strict "Terafab" brutalist visual identity defined in

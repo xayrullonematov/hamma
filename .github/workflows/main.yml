@@ -1,12 +1,22 @@
-name: Build Flutter Apps
+name: Build & Release Hamma
 
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
+# Allow the release job to publish GitHub Releases.
+permissions:
+  contents: write
+
 jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Android — APK (split per ABI)
+  # ─────────────────────────────────────────────────────────────
   build_android:
+    name: Android APK
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -28,9 +38,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Inject Sentry DSN
-        run: echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> $GITHUB_ENV
-
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
@@ -40,16 +47,27 @@ jobs:
       - name: Build APK
         run: flutter build apk --release --split-per-abi --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
 
+      - name: Rename APKs with brand prefix
+        run: |
+          cd build/app/outputs/flutter-apk
+          for f in app-*-release.apk; do
+            mv "$f" "Hamma-${f#app-}"
+          done
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: apks-${{ github.run_number }}
-          path: build/app/outputs/flutter-apk/*.apk
+          path: build/app/outputs/flutter-apk/Hamma-*.apk
 
+  # ─────────────────────────────────────────────────────────────
+  # Linux — AppImage
+  # ─────────────────────────────────────────────────────────────
   build_linux:
+    name: Linux AppImage
     runs-on: ubuntu-latest
     steps:
-      - name: Install Linux dependencies
+      - name: Install Linux build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -77,22 +95,71 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Inject Sentry DSN
-        run: echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> $GITHUB_ENV
-
       - name: Build Linux
         run: |
           export CC=/usr/bin/clang
           export CXX=/usr/bin/clang++
           flutter build linux --release --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
 
-      - name: Upload Linux artifact
+      - name: Package as AppImage
+        run: |
+          BUNDLE=build/linux/x64/release/bundle
+
+          # ── Assemble AppDir with the same layout as the Flutter bundle ──
+          mkdir -p Hamma.AppDir
+          cp -r "$BUNDLE"/. Hamma.AppDir/
+
+          # Icon (required by appimagetool; name must match Icon= in .desktop)
+          cp assets/images/logo.png Hamma.AppDir/hamma.png
+          cp assets/images/logo.png Hamma.AppDir/.DirIcon
+
+          # Desktop entry
+          cat > Hamma.AppDir/hamma.desktop << 'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=Hamma
+          Exec=hamma
+          Icon=hamma
+          Comment=AI Server Manager and SSH Client
+          Categories=Network;System;
+          DESKTOP
+
+          # Launcher: sets LD_LIBRARY_PATH so the binary finds its bundled .so files
+          cat > Hamma.AppDir/AppRun << 'APPRUN'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export LD_LIBRARY_PATH="$HERE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          exec "$HERE/hamma" "$@"
+          APPRUN
+          chmod +x Hamma.AppDir/AppRun
+          chmod +x Hamma.AppDir/hamma
+
+          # ── Download and run appimagetool ──
+          wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" \
+               -O appimagetool
+          chmod +x appimagetool
+
+          # APPIMAGE_EXTRACT_AND_RUN avoids the need for FUSE on the runner
+          ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 \
+            ./appimagetool --no-appstream Hamma.AppDir Hamma-x86_64.AppImage
+
+      - name: Upload Linux bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ github.run_number }}
+          name: linux-bundle-${{ github.run_number }}
           path: build/linux/x64/release/bundle/
 
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage-${{ github.run_number }}
+          path: Hamma-x86_64.AppImage
+
+  # ─────────────────────────────────────────────────────────────
+  # Windows — NSIS / Inno Setup installer (.exe)
+  # ─────────────────────────────────────────────────────────────
   build_windows:
+    name: Windows Installer
     runs-on: windows-latest
     steps:
       - name: Checkout repo
@@ -108,14 +175,94 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Inject Sentry DSN
-        run: echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> $GITHUB_ENV
-
       - name: Build Windows
         run: flutter build windows --release --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
 
-      - name: Upload Windows artifact
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          # Strip leading 'v' from tag (v1.2.3 → 1.2.3); fall back to 1.0.0
+          $version = if ($env:GITHUB_REF_NAME -match '^v(.+)') { $Matches[1] } else { '1.0.0' }
+          Write-Host "Building installer version $version"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+              "/DAppVersion=$version" `
+              "installer\windows\hamma.iss"
+
+      - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-${{ github.run_number }}
+          name: windows-bundle-${{ github.run_number }}
           path: build/windows/x64/runner/Release/
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-${{ github.run_number }}
+          path: Hamma-Setup-Windows-x64.exe
+
+  # ─────────────────────────────────────────────────────────────
+  # GitHub Release — only on v* tags
+  # ─────────────────────────────────────────────────────────────
+  release:
+    name: Publish GitHub Release
+    needs: [build_android, build_linux, build_windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download Android APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: apks-${{ github.run_number }}
+          path: dist/
+
+      - name: Download Linux AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-appimage-${{ github.run_number }}
+          path: dist/
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer-${{ github.run_number }}
+          path: dist/
+
+      - name: List release assets
+        run: ls -lh dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Hamma ${{ github.ref_name }}"
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
+          body: |
+            ## Hamma ${{ github.ref_name }}
+
+            ### Platform Downloads
+
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | 🤖 Android ARM64 | `Hamma-arm64-v8a-release.apk` | Most modern Android devices |
+            | 🤖 Android ARM32 | `Hamma-armeabi-v7a-release.apk` | Older Android devices |
+            | 🤖 Android x86_64 | `Hamma-x86_64-release.apk` | Android emulators |
+            | 🐧 Linux | `Hamma-x86_64.AppImage` | Any x86_64 Linux distro |
+            | 🪟 Windows | `Hamma-Setup-Windows-x64.exe` | Windows 10/11 installer |
+
+            ### Linux Quick Start
+            ```sh
+            chmod +x Hamma-x86_64.AppImage
+            ./Hamma-x86_64.AppImage
+            ```
+
+            ### Windows Quick Start
+            Run `Hamma-Setup-Windows-x64.exe` and follow the installer wizard.
+
+            ---
+            _Built automatically by GitHub Actions from tag `${{ github.ref_name }}`._
+          files: dist/*
