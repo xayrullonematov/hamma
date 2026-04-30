@@ -523,7 +523,13 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           serverName: _server.name,
         );
       default:
-        return const Center(child: Text('Coming Soon'));
+        return TerminalScreen(
+          sshService: _sshService,
+          serverName: _server.name,
+          aiProvider: _aiProvider,
+          apiKeyStorage: _apiKeyStorage,
+          openRouterModel: _openRouterModel,
+        );
     }
   }
 
