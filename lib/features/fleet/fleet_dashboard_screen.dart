@@ -18,7 +18,7 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
   static const _surfaceColor = AppColors.surface;
   static const _mutedColor = AppColors.textMuted;
   static const _primaryColor = AppColors.primary;
-  static const _successColor = AppColors.textPrimary;
+  static const _successColor = AppColors.accent;
   static const _warningColor = AppColors.danger;
   static const _dangerColor = AppColors.danger;
 
@@ -720,7 +720,7 @@ class _FleetMetricsCard extends StatelessWidget {
   static const _surfaceColor = AppColors.surface;
   static const _panelColor = AppColors.panel;
   static const _mutedColor = AppColors.textMuted;
-  static const _successColor = AppColors.textPrimary;
+  static const _successColor = AppColors.accent;
   static const _dangerColor = AppColors.danger;
 
   @override

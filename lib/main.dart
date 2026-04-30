@@ -447,15 +447,24 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
                     bottom: BorderSide(color: AppColors.border, width: 1),
                   ),
                 ),
-                child: const DragToMoveArea(
+                child: DragToMoveArea(
                   child: Row(
                     children: [
-                      SizedBox(width: 12),
-                      Text(
+                      const SizedBox(width: 10),
+                      // Logo mark
+                      Image.asset(
+                        AppColors.logoAsset,
+                        width: 18,
+                        height: 18,
+                        filterQuality: FilterQuality.high,
+                      ),
+                      const SizedBox(width: 7),
+                      // Wordmark in brand cyan
+                      const Text(
                         'HAMMA',
                         style: TextStyle(
                           fontSize: 11,
-                          color: AppColors.textPrimary,
+                          color: AppColors.accent,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 2.4,
                           fontFamily: AppColors.monoFamily,
@@ -749,9 +758,9 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
         ),
       ),
       tabBarTheme: const TabBarThemeData(
-        labelColor: AppColors.textPrimary,
+        labelColor: AppColors.accent,
         unselectedLabelColor: AppColors.textMuted,
-        indicatorColor: AppColors.textPrimary,
+        indicatorColor: AppColors.accent,
         indicatorSize: TabBarIndicatorSize.tab,
         dividerColor: AppColors.border,
         labelStyle: TextStyle(
@@ -800,12 +809,24 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
-      navigationBarTheme: const NavigationBarThemeData(
+      navigationBarTheme: NavigationBarThemeData(
         backgroundColor: AppColors.scaffoldBackground,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        indicatorColor: AppColors.primary,
-        indicatorShape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        indicatorColor: AppColors.accentDim,
+        indicatorShape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const IconThemeData(color: AppColors.accent);
+          }
+          return const IconThemeData(color: AppColors.textMuted);
+        }),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return const TextStyle(color: AppColors.accent, fontSize: 11, fontWeight: FontWeight.w600);
+          }
+          return const TextStyle(color: AppColors.textMuted, fontSize: 11);
+        }),
       ),
       textTheme: const TextTheme(
         displayLarge: TextStyle(

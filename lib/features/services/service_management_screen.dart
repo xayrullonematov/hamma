@@ -285,7 +285,7 @@ class _ServiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = service.isActive;
-    final color = isActive ? AppColors.textPrimary : AppColors.textMuted;
+    final color = isActive ? AppColors.accent : AppColors.textMuted;
 
     return Container(
       decoration: BoxDecoration(

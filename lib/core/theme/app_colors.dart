@@ -31,6 +31,15 @@ class AppColors {
   static const success = Color(0xFFFFFFFF);
   static const warning = Color(0xFFFF0000);
 
+  // Brand cyan — extracted from the Hamma logo (H mark).
+  // 11:1 contrast on pure black — WCAG AAA.
+  static const accent = Color(0xFF4ECDC4);
+  // Dimmer variant for subtle accent surfaces (borders, inactive tints).
+  static const accentDim = Color(0xFF1A4A47);
+
+  // Logo asset path.
+  static const logoAsset = 'assets/images/logo.png';
+
   // Terminal
   static const terminalBlack = Color(0xFF000000);
   static const terminalGreen = Color(0xFFFFFFFF);

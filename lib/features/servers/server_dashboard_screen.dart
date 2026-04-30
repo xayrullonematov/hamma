@@ -632,7 +632,7 @@ class _StatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = status.state;
     final color = state == SshConnectionState.connected
-        ? AppColors.textPrimary
+        ? AppColors.accent
         : (state == SshConnectionState.failed ||
                   state == SshConnectionState.disconnected
               ? AppColors.danger

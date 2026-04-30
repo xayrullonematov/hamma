@@ -531,7 +531,7 @@ class _ServerDashboardCard extends StatelessWidget {
   Color _getStatusColor() {
     switch (status.state) {
       case SshConnectionState.connected:
-        return AppColors.textPrimary;
+        return AppColors.accent;
       case SshConnectionState.connecting:
       case SshConnectionState.reconnecting:
         return AppColors.textMuted;

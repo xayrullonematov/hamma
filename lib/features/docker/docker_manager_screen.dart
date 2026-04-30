@@ -240,7 +240,7 @@ class _ContainerCard extends StatelessWidget {
   Color _getStateColor() {
     switch (container.state.toLowerCase()) {
       case 'running':
-        return AppColors.textPrimary;
+        return AppColors.accent;
       case 'exited':
       case 'dead':
         return AppColors.danger;

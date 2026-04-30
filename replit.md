@@ -94,9 +94,13 @@ The UI uses a strict "Terafab" brutalist visual identity defined in
 
 Five design pillars enforced across all screens:
 
-1. **Monochrome palette** — Pure black scaffold (`0xFF000000`), near-black
-   surfaces (`0xFF0A0A0A`), white primary, harsh red (`0xFFFF0000`) for any
-   risk/warning state. No slates, no soft grays.
+1. **Monochrome palette + brand accent** — Pure black scaffold (`0xFF000000`),
+   near-black surfaces (`0xFF0A0A0A`), white primary, harsh red (`0xFFFF0000`)
+   for risk/warning. Brand cyan `AppColors.accent = 0xFF4ECDC4` (11:1 contrast
+   on black, WCAG AAA) is used sparingly: HAMMA wordmark, active tab/nav
+   indicators, "connected" / "running" / "online" status dots, and Docker
+   running state. All other states stay white/gray/red. No slates or soft
+   grays elsewhere.
 2. **Zero-radius corners** — Every `RoundedRectangleBorder` uses
    `BorderRadius.zero`. No rounded chips, cards, or buttons.
 3. **Wireframe borders** — All `elevation` and `boxShadow` are zero. Cards,
@@ -109,6 +113,12 @@ Five design pillars enforced across all screens:
    back to the platform default sans/mono if missing.
 5. **Seamless AppBar** — `AppBarTheme.elevation = 0` and the AppBar
    background matches the scaffold so the app reads as one terminal pane.
+6. **Logo** — The official Hamma "H" mark is bundled as
+   `assets/images/logo.png` (registered in `pubspec.yaml`) and displayed
+   at 18×18 px beside the HAMMA wordmark in the custom title bar.
+   Flutter's asset pipeline automatically includes it in all builds
+   (Linux, Android, CI). The raw source PNG is also mirrored to
+   `linux/runner/resources/hamma.png` for future native window-icon use.
 
 Brutalist surfaces in custom widgets:
 
