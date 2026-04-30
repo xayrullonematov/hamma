@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Inject Sentry DSN
+        run: echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> $GITHUB_ENV
+
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
@@ -35,7 +38,7 @@ jobs:
         run: flutter test
 
       - name: Build APK
-        run: flutter build apk --release --split-per-abi
+        run: flutter build apk --release --split-per-abi --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -74,11 +77,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Inject Sentry DSN
+        run: echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> $GITHUB_ENV
+
       - name: Build Linux
         run: |
           export CC=/usr/bin/clang
           export CXX=/usr/bin/clang++
-          flutter build linux --release
+          flutter build linux --release --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -102,8 +108,11 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Inject Sentry DSN
+        run: echo "SENTRY_DSN=${{ secrets.SENTRY_DSN }}" >> $GITHUB_ENV
+
       - name: Build Windows
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
