@@ -64,6 +64,28 @@ flutter build linux --debug
 - **Crash reporting**: sentry_flutter (inproc mode on Linux)
 - **AI providers**: OpenAI, Google Gemini, OpenRouter (via HTTP)
 
+## Responsive Layout
+
+Hamma is a single Flutter codebase that runs on phone-class viewports
+(~360px wide), tablets, and desktop. The breakpoint helper lives in
+`lib/core/responsive/breakpoints.dart`:
+
+- `Breakpoints.mobile = 700` — below this, screens use a mobile shell
+- `Breakpoints.tablet = 1100` — between mobile and tablet, hybrid layouts
+- `Breakpoints.isMobile(context)` / `isTablet` / `isDesktop` helpers
+- `Breakpoints.value<T>(context, mobile:, tablet:, desktop:)` for inline
+  per-breakpoint values
+
+The desktop window minimum size in `main.dart` is set to `360x600` so
+the responsive (mobile) layout can be exercised by simply resizing the
+desktop window.
+
+The shell that demonstrates the pattern is `ServerDashboardScreen`:
+- Wide (≥700px): 240px brutalist sidebar in a `Row`, content beside it
+- Mobile (<700px): `Scaffold` with `AppBar` (server name + status pill +
+  reconnect/disconnect/settings actions) and a bottom `NavigationBar`
+  for the 5 tabs (Terminal / Files / Docker / Services / Packages)
+
 ## Visual Design — Geometric Brutalism
 
 The UI uses a strict "Terafab" brutalist visual identity defined in

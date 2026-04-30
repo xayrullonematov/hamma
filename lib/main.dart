@@ -36,7 +36,9 @@ void main() {
       
       const windowOptions = WindowOptions(
         size: Size(1100, 750),
-        minimumSize: Size(800, 600),
+        // Allow shrinking down to phone-class width so the responsive
+        // (mobile) layout can be tested directly on desktop.
+        minimumSize: Size(360, 600),
         center: true,
         titleBarStyle: TitleBarStyle.hidden,
         skipTaskbar: false,

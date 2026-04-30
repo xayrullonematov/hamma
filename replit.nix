@@ -1,5 +1,6 @@
 {pkgs}: {
   deps = [
+    pkgs.seagoat
     pkgs.mesa-demos
     pkgs.mesa
     pkgs.xorg.xauth
