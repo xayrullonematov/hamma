@@ -7,6 +7,10 @@ APPINDICATOR_DEV="/nix/store/0gfsfrizrf20m04fya53g8dbagdz3f2p-libappindicator-gt
 export JAVA_HOME
 export PKG_CONFIG_PATH="$SYSPROF_DEV/lib/pkgconfig:$APPINDICATOR_DEV/lib/pkgconfig:$PKG_CONFIG_PATH"
 
+# Use the lightweight inproc crash backend for the local dev build.
+# CI release builds set SENTRY_NATIVE_BACKEND=crashpad (see .github/workflows/main.yml).
+export SENTRY_NATIVE_BACKEND=inproc
+
 # Rebuild if binary doesn't exist
 if [ ! -f "build/install_prefix/hamma" ]; then
   echo "Building Flutter Linux app..."
@@ -14,6 +18,7 @@ if [ ! -f "build/install_prefix/hamma" ]; then
   if [ -f "build/linux/x64/debug/CMakeCache.txt" ]; then
     sed -i 's|CMAKE_INSTALL_PREFIX:PATH=/var/empty/local|CMAKE_INSTALL_PREFIX:PATH=/home/runner/workspace/build/install_prefix|g' build/linux/x64/debug/CMakeCache.txt
     sed -i 's|_GNUInstallDirs_LAST_CMAKE_INSTALL_PREFIX:INTERNAL=/var/empty/local|_GNUInstallDirs_LAST_CMAKE_INSTALL_PREFIX:INTERNAL=/home/runner/workspace/build/install_prefix|g' build/linux/x64/debug/CMakeCache.txt
+    sed -i 's|SENTRY_BACKEND:STRING=crashpad|SENTRY_BACKEND:STRING=inproc|g' build/linux/x64/debug/CMakeCache.txt
   fi
   flutter build linux --debug
 fi

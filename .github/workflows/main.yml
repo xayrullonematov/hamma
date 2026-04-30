@@ -99,6 +99,10 @@ jobs:
         run: |
           export CC=/usr/bin/clang
           export CXX=/usr/bin/clang++
+          # Use the crashpad backend in CI so released AppImages have proper
+          # out-of-process crash reporting. The inproc fallback is only used
+          # in the local dev build (see run.sh).
+          export SENTRY_NATIVE_BACKEND=crashpad
           flutter build linux --release --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
 
       - name: Package as AppImage
@@ -124,11 +128,13 @@ jobs:
           Categories=Network;System;
           DESKTOP
 
-          # Launcher: sets LD_LIBRARY_PATH so the binary finds its bundled .so files
+          # Launcher: sets LD_LIBRARY_PATH so the binary finds its bundled .so files,
+          # and adds lib/ to PATH so the sentry crashpad_handler executable is found.
           cat > Hamma.AppDir/AppRun << 'APPRUN'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"
           export LD_LIBRARY_PATH="$HERE/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export PATH="$HERE/lib:$PATH"
           exec "$HERE/hamma" "$@"
           APPRUN
           chmod +x Hamma.AppDir/AppRun

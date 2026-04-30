@@ -52,7 +52,7 @@ flutter build linux --debug
 ## Key Modifications
 
 - Fixed `DropdownButtonFormField.initialValue` → `value` in settings_screen.dart (Flutter 3.32.0 API change)
-- Modified sentry_flutter CMakeLists to use `inproc` backend instead of `crashpad` to avoid native build dependencies
+- Sentry backend: `inproc` for local dev (run.sh sets `SENTRY_NATIVE_BACKEND=inproc`); CI Linux builds use `crashpad` via `SENTRY_NATIVE_BACKEND=crashpad` in GitHub Actions
 - Build output redirected from `/var/empty/local` to `build/install_prefix/` (writable path)
 
 ## Tech Stack
@@ -61,8 +61,9 @@ flutter build linux --debug
 - **SSH/SFTP**: dartssh2
 - **Terminal emulation**: xterm
 - **Security**: flutter_secure_storage, encrypt, pinenacl
-- **Crash reporting**: sentry_flutter (inproc mode on Linux)
+- **Crash reporting**: sentry_flutter (inproc for local dev; crashpad in CI/release builds)
 - **AI providers**: OpenAI, Google Gemini, OpenRouter (via HTTP)
+- **Fonts**: Inter (variable, bundled at `assets/fonts/InterVariable.ttf`) and JetBrains Mono (4 weights, bundled at `assets/fonts/`)
 
 ## Responsive Layout
 
