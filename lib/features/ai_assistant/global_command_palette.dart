@@ -199,6 +199,7 @@ class _GlobalCommandPaletteState extends State<GlobalCommandPalette> {
                         },
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.textPrimary,
+                          foregroundColor: AppColors.scaffoldBackground,
                           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
