@@ -220,10 +220,7 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
   Future<void> _initTray() async {
     if (!Platform.isLinux && !Platform.isWindows && !Platform.isMacOS) return;
 
-    // Use a placeholder icon for now (or app icon if available)
-    await trayManager.setIcon(
-      Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon.png',
-    );
+    await trayManager.setIcon('assets/images/logo.png');
 
     final menu = Menu(
       items: [

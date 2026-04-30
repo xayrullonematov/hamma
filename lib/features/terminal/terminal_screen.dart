@@ -252,12 +252,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
               onTap: () => _terminalFocusNode.requestFocus(),
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.black,
-                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.zero,
                   child: TerminalView(
                     _terminal,
                     focusNode: _terminalFocusNode,
@@ -321,9 +320,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: _surfaceColor,
-        borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
