@@ -24,6 +24,8 @@ class TerminalScreen extends StatefulWidget {
     required this.aiProvider,
     required this.apiKeyStorage,
     required this.openRouterModel,
+    this.localEndpoint,
+    this.localModel,
   });
 
   final SshService sshService;
@@ -31,6 +33,8 @@ class TerminalScreen extends StatefulWidget {
   final AiProvider aiProvider;
   final ApiKeyStorage apiKeyStorage;
   final String? openRouterModel;
+  final String? localEndpoint;
+  final String? localModel;
 
   @override
   State<TerminalScreen> createState() => _TerminalScreenState();
@@ -198,6 +202,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
           provider: widget.aiProvider,
           apiKeyStorage: widget.apiKeyStorage,
           openRouterModel: widget.openRouterModel,
+          localEndpoint: widget.localEndpoint,
+          localModel: widget.localModel,
           executionTarget: AiCopilotExecutionTarget.terminal,
           canRunCommands: () => _session != null && widget.sshService.isConnected,
           getContext: () => _recentTerminalOutput,

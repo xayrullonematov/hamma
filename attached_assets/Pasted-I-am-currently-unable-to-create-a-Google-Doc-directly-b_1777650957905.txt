@@ -1,0 +1,57 @@
+I am currently unable to create a Google Doc directly because your Google Workspace connection is not fully enabled. However, here is the complete, structured document you can copy directly into your own files.
+# Hamma: Gemma 4 Good Hackathon Strategy
+**Project:** Hamma (Zero-Proxy DevOps)
+**Track:** Global Resilience & Safety
+**Objective:** Secure a winning submission for the May 18th, 2026 deadline.
+## 1. The Core Pivot: Emergency Infrastructure Manager
+To maximize alignment with the hackathon's "Good" mandate, Hamma must transition from a standard developer convenience tool into an **Offline Emergency Infrastructure Manager**.
+ * **The Problem:** During natural disasters or in heavily restricted networking environments, maintaining and securing server infrastructure without relying on external cloud APIs is a critical vulnerability.
+ * **The Solution:** A purely localized, edge-deployable application that utilizes on-device Gemma 4 models to intercept destructive commands and manage secure remote access without transmitting sensitive telemetry to the cloud.
+## 2. Visual & UI Identity
+The frontend must aggressively lean into a high-tech industrial aesthetic.
+ * **Typography & Theme:** Rely heavily on precise, authentic terminal typography (such as JetBrains Mono) and a stark geometric brutalist theme.
+ * **Impact:** Using pure blacks, wireframe borders, and harsh contrast (like #FF0000 for critical AI warnings) immediately communicates that this is a serious, lightweight, mission-critical tool, setting it apart from cluttered consumer applications. This clean design language translates perfectly to legacy operating systems, ensuring an authentic Linux terminal feel even on platforms like Windows 7.
+## 3. Architecture: The Local Network Bridge
+Transitioning away from OpenAI/OpenRouter cloud APIs requires a decoupled local architecture to respect hardware constraints (specifically an 8GB RAM ceiling).
+ 1. **The Engine Abstraction:** The Flutter frontend will implement a "Smart Provider" pattern, allowing dynamic switching between an OFF state and a NET_BRIDGE state.
+ 2. **The Go/Rust Inference Server:** A lightweight, standalone binary written in Go or Rust will wrap llama.cpp. This server runs locally on the host machine, listening on localhost:11434 and exposing an OpenAI-compatible endpoint.
+ 3. **Resource Management:** By keeping the multi-gigabyte Gemma model running in a separate backend process, the Flutter UI remains incredibly smooth. Toggling the AI OFF immediately dumps the model weights, reclaiming RAM for heavy compilation tasks.
+## 4. Execution Timeline
+ * **Days 1-3:** Build the UI toggles and abstract the Dart AI provider.
+ * **Days 4-7:** Compile the Go/Rust local inference server.
+ * **Days 8-11:** Tune the Gemma 4 system prompts for the CommandRiskAssessor.
+ * **Days 12-14:** Record the 3-minute hackathon demo video highlighting the offline risk interception.
+ * **Days 15-18:** Finalize repository documentation to cement this as a high-impact, verifiable credential for upcoming technical and academic portfolio evaluations.
+*(Page Break)*
+# [DEDICATED PAGE] Prompt Engineering Playbook
+Use the following prompts in your AI coding assistant to rapidly generate the specific codebase required for this pivot.
+### Prompt 1: The Flutter "Smart Provider" Architecture
+> "I have a Flutter application with a class called ai_provider.dart that currently routes requests to cloud APIs. I need to abstract this into an interface called GemmaEngine.
+>  1. Create the GemmaEngine abstract class.
+>  2. Implement a LocalNetworkEngine that sends an OpenAI-compatible HTTP POST request to http://localhost:11434/v1/chat/completions.
+>  3. Create a state controller that allows the app to dynamically switch between an OFF state and the LocalNetworkEngine seamlessly. Ensure that when it is toggled OFF, no network requests are attempted by the CommandRiskAssessor."
+> 
+### Prompt 2: Industrial Brutalist UI Toggles
+> "I am building a brutalist, high-tech industrial UI in Flutter using the JetBrains Mono font.
+> Create a custom toggle widget for my AI Engine state. It should not look like a standard Material switch. It should look like a raw, geometric terminal block with sharp edges.
+> States:
+>  * [ AI: OFF ] (Color: Muted Grey text on black background)
+>  * [ AI: NET_BRIDGE ] (Color: Deep Orange text, indicating active local inference)
+>    Provide the precise Dart code focusing on stark wireframe borders, pure black backgrounds, and perfect monospace text alignment."
+> 
+### Prompt 3: Go/Rust Local Inference Bridge
+> "Write a lightweight Go (or Rust) server that acts as a local bridge for llama.cpp.
+> Requirements:
+>  1. It must listen on port 11434.
+>  2. It must expose an endpoint /v1/chat/completions that perfectly mimics the OpenAI API JSON schema.
+>  3. When it receives a request, it should pass the prompt to a local Gemma 4 .gguf model using standard bindings.
+>  4. It must stream the response back in the OpenAI SSE (Server-Sent Events) format.
+>    Keep the code strictly organized so I can easily compile it into a highly performant, standalone executable."
+> 
+### Prompt 4: Gemma 4 CommandRiskAssessor System Prompt
+> "You are configuring the system instructions for a Gemma 4 model acting as a CommandRiskAssessor for an Offline Emergency Infrastructure Manager.
+> The user will provide a generated shell command. You must evaluate this command and output ONLY a JSON object with two keys:
+>  1. risk_level: Must be exactly one of 'LOW', 'MODERATE', 'HIGH', or 'CRITICAL'.
+>  2. reason: A single-sentence technical justification.
+> Strict Rule: Any command involving mass data deletion (e.g., rm -rf, dropping tables), network exposure, or recursive permission changes must instantly be flagged as CRITICAL. Draft the exact System Prompt text I should inject into my local inference engine to guarantee this JSON formatting and logic 100% of the time."
+> 

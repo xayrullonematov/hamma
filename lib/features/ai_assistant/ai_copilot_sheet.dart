@@ -19,6 +19,8 @@ class AiCopilotSheet extends StatefulWidget {
     required this.provider,
     required this.apiKeyStorage,
     required this.openRouterModel,
+    this.localEndpoint,
+    this.localModel,
     this.initialPrompt,
     required this.executionTarget,
     required this.canRunCommands,
@@ -31,6 +33,8 @@ class AiCopilotSheet extends StatefulWidget {
   final AiProvider provider;
   final ApiKeyStorage apiKeyStorage;
   final String? openRouterModel;
+  final String? localEndpoint;
+  final String? localModel;
   final String? initialPrompt;
   final AiCopilotExecutionTarget executionTarget;
   final bool Function() canRunCommands;
@@ -89,7 +93,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   bool _hasTriggeredInitialPrompt = false;
 
   bool get _isRunningStep => _runningCommandIndex != null;
-  bool get _hasActiveApiKey => _activeApiKey.trim().isNotEmpty;
+  bool get _hasActiveApiKey =>
+      _activeApiKey.trim().isNotEmpty || !_activeProvider.requiresApiKey;
 
   @override
   void initState() {
@@ -200,6 +205,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       provider: _activeProvider,
       apiKey: _activeApiKey,
       openRouterModel: _activeOpenRouterModel,
+      localEndpoint: widget.localEndpoint,
+      localModel: widget.localModel,
     );
   }
 
@@ -210,11 +217,23 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     setState(() {
       _activeProvider = targetProvider;
       _isLoadingActiveApiKey = true;
-      _status = 'Loading ${targetProvider.label} API key...';
+      _status = 'Loading ${targetProvider.label} configuration...';
     });
 
     if (targetProvider == AiProvider.openRouter) {
       unawaited(_loadOpenRouterModels());
+    }
+
+    if (!targetProvider.requiresApiKey) {
+      if (!mounted || generation != _providerLoadGeneration) return;
+      _activeApiKey = '';
+      _refreshAiCommandService();
+      setState(() {
+        _isLoadingActiveApiKey = false;
+        _status = _defaultStatusText();
+      });
+      _scheduleInitialPromptIfReady();
+      return;
     }
 
     try {

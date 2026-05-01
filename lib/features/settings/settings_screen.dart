@@ -22,6 +22,8 @@ class SettingsScreen extends StatefulWidget {
     required this.initialProvider,
     required this.initialApiKey,
     required this.initialOpenRouterModel,
+    this.initialLocalEndpoint,
+    this.initialLocalModel,
     required this.onSaveAiSettings,
     this.onBackupImported,
   });
@@ -29,10 +31,14 @@ class SettingsScreen extends StatefulWidget {
   final AiProvider initialProvider;
   final String initialApiKey;
   final String? initialOpenRouterModel;
+  final String? initialLocalEndpoint;
+  final String? initialLocalModel;
   final Future<void> Function(
     AiProvider provider,
     String apiKey,
     String? openRouterModel,
+    String? localEndpoint,
+    String? localModel,
   )
   onSaveAiSettings;
   final Future<void> Function()? onBackupImported;
@@ -50,6 +56,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _geminiApiKeyController;
   late final TextEditingController _openRouterApiKeyController;
   late final TextEditingController _openRouterModelController;
+  late final TextEditingController _localEndpointController;
+  late final TextEditingController _localModelController;
+  bool _isTestingLocalConnection = false;
+  String? _localConnectionTestResult;
+  bool? _localConnectionTestSuccess;
   final AppLockStorage _appLockStorage = AppLockStorage();
   final BackupService _backupService = BackupService();
   final ApiKeyStorage _apiKeyStorage = ApiKeyStorage();
@@ -110,6 +121,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _openRouterModelController = TextEditingController(
       text: _openRouterModel ?? '',
     );
+    _localEndpointController = TextEditingController(
+      text: widget.initialLocalEndpoint ?? 'http://localhost:11434',
+    );
+    _localModelController = TextEditingController(
+      text: widget.initialLocalModel ?? 'gemma3',
+    );
 
     _backupConfig = const BackupConfig(destination: BackupDestination.local);
     _sftpHostController = TextEditingController();
@@ -154,6 +171,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _geminiApiKeyController.dispose();
     _openRouterApiKeyController.dispose();
     _openRouterModelController.dispose();
+    _localEndpointController.dispose();
+    _localModelController.dispose();
     _sftpHostController.dispose();
     _sftpPortController.dispose();
     _sftpUsernameController.dispose();
@@ -179,6 +198,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return _geminiApiKeyController.text.trim();
       case AiProvider.openRouter:
         return _openRouterApiKeyController.text.trim();
+      case AiProvider.local:
+        return '';
     }
   }
 
@@ -235,6 +256,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _selectedProvider,
         selectedApiKey,
         resolvedOpenRouterModel,
+        _localEndpointController.text.trim().isEmpty
+            ? 'http://localhost:11434'
+            : _localEndpointController.text.trim(),
+        _localModelController.text.trim().isEmpty
+            ? 'gemma3'
+            : _localModelController.text.trim(),
       );
 
       await _appPrefsStorage.setHealthMonitoringEnabled(
@@ -591,10 +618,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _openRouterModel = _normalizeOpenRouterModel(
         _openRouterModelController.text,
       );
+      _localConnectionTestResult = null;
+      _localConnectionTestSuccess = null;
     });
 
     if (provider == AiProvider.openRouter) {
       _loadOpenRouterModels();
+    }
+  }
+
+  Future<void> _testLocalConnection() async {
+    final endpoint = _localEndpointController.text.trim().isEmpty
+        ? 'http://localhost:11434'
+        : _localEndpointController.text.trim();
+
+    setState(() {
+      _isTestingLocalConnection = true;
+      _localConnectionTestResult = null;
+      _localConnectionTestSuccess = null;
+    });
+
+    try {
+      final uri = Uri.parse('$endpoint/v1/models');
+      final response = await http
+          .get(uri)
+          .timeout(const Duration(seconds: 6));
+
+      if (!mounted) return;
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        int modelCount = 0;
+        try {
+          final decoded = jsonDecode(response.body);
+          final data = decoded['data'];
+          if (data is List) modelCount = data.length;
+        } catch (_) {}
+        setState(() {
+          _isTestingLocalConnection = false;
+          _localConnectionTestSuccess = true;
+          _localConnectionTestResult = modelCount > 0
+              ? 'ENGINE ONLINE — $modelCount model${modelCount == 1 ? "" : "s"} available'
+              : 'ENGINE ONLINE — connected (no models loaded yet)';
+        });
+      } else {
+        setState(() {
+          _isTestingLocalConnection = false;
+          _localConnectionTestSuccess = false;
+          _localConnectionTestResult = 'ENGINE UNREACHABLE — HTTP ${response.statusCode}';
+        });
+      }
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        _isTestingLocalConnection = false;
+        _localConnectionTestSuccess = false;
+        _localConnectionTestResult = 'CONNECTION TIMED OUT — is Ollama running?';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isTestingLocalConnection = false;
+        _localConnectionTestSuccess = false;
+        _localConnectionTestResult = 'CONNECTION FAILED — is Ollama running?';
+      });
     }
   }
 
@@ -697,6 +783,166 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _openRouterModel = _normalizeOpenRouterModel(value);
         });
       },
+    );
+  }
+
+  Widget _buildLocalAiSection(ThemeData theme) {
+    final testSuccess = _localConnectionTestSuccess;
+    final testResult = _localConnectionTestResult;
+    final testColor = testSuccess == null
+        ? _mutedColor
+        : testSuccess
+            ? const Color(0xFF00FF88)
+            : AppColors.danger;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: const BoxDecoration(
+            color: Color(0xFF0D1117),
+            border: Border(
+              left: BorderSide(color: Color(0xFF00FF88), width: 3),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFF00FF88), width: 1),
+                    ),
+                    child: Text(
+                      'ZERO TRUST',
+                      style: TextStyle(
+                        fontFamily: AppColors.monoFamily,
+                        fontSize: 10,
+                        color: const Color(0xFF00FF88),
+                        letterSpacing: 2,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFF00FF88), width: 1),
+                    ),
+                    child: Text(
+                      'OFFLINE CAPABLE',
+                      style: TextStyle(
+                        fontFamily: AppColors.monoFamily,
+                        fontSize: 10,
+                        color: const Color(0xFF00FF88),
+                        letterSpacing: 2,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'No API key required. No data leaves your machine. '
+                'Runs on any OpenAI-compatible local engine: Ollama, LM Studio, llama.cpp.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: _mutedColor,
+                  height: 1.5,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _localEndpointController,
+          enabled: !_isBusy,
+          decoration: const InputDecoration(
+            labelText: 'Engine Endpoint',
+            helperText: 'Base URL of your local AI server (no trailing slash).',
+            hintText: 'http://localhost:11434',
+          ),
+          style: TextStyle(fontFamily: AppColors.monoFamily, fontSize: 13),
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _localModelController,
+          enabled: !_isBusy,
+          decoration: const InputDecoration(
+            labelText: 'Model Name',
+            helperText: 'Exact model tag as shown by "ollama list".',
+            hintText: 'gemma3',
+          ),
+          style: TextStyle(fontFamily: AppColors.monoFamily, fontSize: 13),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: (_isBusy || _isTestingLocalConnection)
+                    ? null
+                    : _testLocalConnection,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  side: const BorderSide(color: Color(0xFF00FF88)),
+                  foregroundColor: const Color(0xFF00FF88),
+                ),
+                icon: _isTestingLocalConnection
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF00FF88),
+                        ),
+                      )
+                    : const Icon(Icons.electrical_services_rounded, size: 16),
+                label: Text(
+                  _isTestingLocalConnection ? 'TESTING...' : 'TEST CONNECTION',
+                  style: TextStyle(
+                    fontFamily: AppColors.monoFamily,
+                    fontSize: 12,
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (testResult != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: _panelColor,
+              border: Border(
+                left: BorderSide(color: testColor, width: 3),
+              ),
+            ),
+            child: Text(
+              testResult,
+              style: TextStyle(
+                fontFamily: AppColors.monoFamily,
+                fontSize: 12,
+                color: testColor,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -809,6 +1055,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(height: 16),
                         _buildOpenRouterModelSelector(theme),
+                      ],
+                      if (_selectedProvider == AiProvider.local) ...[
+                        const SizedBox(height: 20),
+                        _buildLocalAiSection(theme),
                       ],
                     ],
                   ),

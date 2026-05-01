@@ -21,6 +21,8 @@ class ServerDashboardScreen extends StatefulWidget {
     required this.aiProvider,
     required this.apiKey,
     required this.openRouterModel,
+    required this.localEndpoint,
+    required this.localModel,
     required this.onSaveAiSettings,
     this.onBackupImported,
   });
@@ -29,10 +31,14 @@ class ServerDashboardScreen extends StatefulWidget {
   final AiProvider aiProvider;
   final String apiKey;
   final String? openRouterModel;
+  final String localEndpoint;
+  final String localModel;
   final Future<void> Function(
     AiProvider provider,
     String apiKey,
     String? openRouterModel,
+    String? localEndpoint,
+    String? localModel,
   )
   onSaveAiSettings;
   final Future<void> Function()? onBackupImported;
@@ -47,6 +53,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   late AiProvider _aiProvider;
   late String _apiKey;
   late String? _openRouterModel;
+  late String _localEndpoint;
+  late String _localModel;
 
   int _activeTabIndex = 0;
 
@@ -59,6 +67,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     _aiProvider = widget.aiProvider;
     _apiKey = widget.apiKey;
     _openRouterModel = widget.openRouterModel;
+    _localEndpoint = widget.localEndpoint;
+    _localModel = widget.localModel;
 
     if (_sshService.currentStatus.isDisconnected ||
         _sshService.currentStatus.isFailed) {
@@ -170,12 +180,16 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           initialProvider: _aiProvider,
           initialApiKey: _apiKey,
           initialOpenRouterModel: _openRouterModel,
-          onSaveAiSettings: (p, k, m) async {
-            await widget.onSaveAiSettings(p, k, m);
+          initialLocalEndpoint: _localEndpoint,
+          initialLocalModel: _localModel,
+          onSaveAiSettings: (p, k, m, le, lm) async {
+            await widget.onSaveAiSettings(p, k, m, le, lm);
             setState(() {
               _aiProvider = p;
               _apiKey = k;
               _openRouterModel = m;
+              _localEndpoint = le ?? _localEndpoint;
+              _localModel = lm ?? _localModel;
             });
           },
           onBackupImported: widget.onBackupImported,
@@ -504,6 +518,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           aiProvider: _aiProvider,
           apiKeyStorage: _apiKeyStorage,
           openRouterModel: _openRouterModel,
+          localEndpoint: _localEndpoint,
+          localModel: _localModel,
         );
       case 1:
         return FileExplorerScreen(server: _server);
@@ -529,6 +545,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           aiProvider: _aiProvider,
           apiKeyStorage: _apiKeyStorage,
           openRouterModel: _openRouterModel,
+          localEndpoint: _localEndpoint,
+          localModel: _localModel,
         );
     }
   }

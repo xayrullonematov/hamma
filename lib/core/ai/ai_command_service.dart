@@ -17,6 +17,8 @@ class AiApiConfig {
     required AiProvider provider,
     required String apiKey,
     String? openRouterModel,
+    String? localEndpoint,
+    String? localModel,
   }) {
     switch (provider) {
       case AiProvider.openAi:
@@ -42,6 +44,18 @@ class AiApiConfig {
               ? openRouterModel!.trim()
               : 'meta-llama/llama-3-8b-instruct',
         );
+      case AiProvider.local:
+        final endpoint = (localEndpoint?.trim().isNotEmpty ?? false)
+            ? localEndpoint!.trim()
+            : 'http://localhost:11434';
+        return AiApiConfig(
+          provider: provider,
+          baseUrl: '$endpoint/v1',
+          apiKey: 'local',
+          model: (localModel?.trim().isNotEmpty ?? false)
+              ? localModel!.trim()
+              : 'gemma3',
+        );
     }
   }
 
@@ -50,7 +64,12 @@ class AiApiConfig {
   final String apiKey;
   final String model;
 
-  bool get isConfigured => apiKey.trim().isNotEmpty;
+  bool get isConfigured {
+    if (provider == AiProvider.local) {
+      return baseUrl.isNotEmpty;
+    }
+    return apiKey.trim().isNotEmpty;
+  }
 }
 
 class CommandIntent {
@@ -86,12 +105,16 @@ class AiCommandService {
     required AiProvider provider,
     required String apiKey,
     String? openRouterModel,
+    String? localEndpoint,
+    String? localModel,
   }) {
     return AiCommandService(
       config: AiApiConfig.forProvider(
         provider: provider,
         apiKey: apiKey,
         openRouterModel: openRouterModel,
+        localEndpoint: localEndpoint,
+        localModel: localModel,
       ),
       openRouterModel: openRouterModel,
     );
@@ -105,6 +128,22 @@ class AiCommandService {
 
   final AiApiConfig config;
   final String? openRouterModel;
+
+  Duration get _connectionTimeout =>
+      config.provider == AiProvider.local
+          ? const Duration(seconds: 5)
+          : const Duration(seconds: 15);
+
+  Duration get _responseTimeout =>
+      config.provider == AiProvider.local
+          ? const Duration(seconds: 120)
+          : const Duration(seconds: 30);
+
+  String _localUnavailableMessage() {
+    final host = config.baseUrl.replaceAll('/v1', '');
+    return 'Cannot reach local AI engine at $host. '
+        'Is Ollama running? Try: ollama serve';
+  }
 
   Future<CommandIntent> parseIntent(String prompt, List<String> availableServers) async {
     final trimmedPrompt = prompt.trim();
@@ -121,7 +160,7 @@ class AiCommandService {
         '{ "action": "<short description>", "target_server": "<server name from the available list, or null>", "command": "<bash command>", "explanation": "<short explanation>" }';
 
     final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 15);
+    client.connectionTimeout = _connectionTimeout;
 
     try {
       String response;
@@ -135,6 +174,9 @@ class AiCommandService {
         case AiProvider.openRouter:
           response = await _chatWithOpenAi(client, trimmedPrompt, [], systemInstruction: systemInstruction);
           break;
+        case AiProvider.local:
+          response = await _chatWithOpenAi(client, trimmedPrompt, [], systemInstruction: systemInstruction);
+          break;
       }
 
       final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(response);
@@ -142,6 +184,11 @@ class AiCommandService {
       final decoded = jsonDecode(jsonString) as Map<String, dynamic>;
 
       return CommandIntent.fromJson(decoded);
+    } on SocketException {
+      if (config.provider == AiProvider.local) {
+        throw AiCommandServiceException(_localUnavailableMessage());
+      }
+      throw AiCommandServiceException('Network error contacting ${config.provider.label}.');
     } on FormatException catch (e) {
       throw AiCommandServiceException('AI response was not valid JSON: $e');
     } catch (e) {
@@ -161,7 +208,7 @@ class AiCommandService {
     }
 
     final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 15);
+    client.connectionTimeout = _connectionTimeout;
 
     try {
       switch (config.provider) {
@@ -171,10 +218,18 @@ class AiCommandService {
           return await _chatWithGemini(client, trimmedPrompt, history);
         case AiProvider.openRouter:
           return await _chatWithOpenAi(client, trimmedPrompt, history);
+        case AiProvider.local:
+          return await _chatWithOpenAi(client, trimmedPrompt, history);
       }
     } on TimeoutException {
+      if (config.provider == AiProvider.local) {
+        throw AiCommandServiceException('Local AI engine timed out. The model may still be loading — try again.');
+      }
       throw AiCommandServiceException('${config.provider.label} timed out.');
     } on SocketException {
+      if (config.provider == AiProvider.local) {
+        throw AiCommandServiceException(_localUnavailableMessage());
+      }
       throw AiCommandServiceException('Network error contacting ${config.provider.label}.');
     } finally {
       client.close(force: true);
@@ -200,7 +255,7 @@ class AiCommandService {
     }
 
     final client = HttpClient();
-    client.connectionTimeout = const Duration(seconds: 15);
+    client.connectionTimeout = _connectionTimeout;
 
     try {
       String response;
@@ -212,6 +267,9 @@ class AiCommandService {
           response = await _chatWithGemini(client, fullPrompt, [], systemInstruction: systemInstruction);
           break;
         case AiProvider.openRouter:
+          response = await _chatWithOpenAi(client, fullPrompt, [], systemInstruction: systemInstruction);
+          break;
+        case AiProvider.local:
           response = await _chatWithOpenAi(client, fullPrompt, [], systemInstruction: systemInstruction);
           break;
       }
@@ -233,6 +291,11 @@ class AiCommandService {
       }
 
       return analysis;
+    } on SocketException {
+      if (config.provider == AiProvider.local) {
+        throw AiCommandServiceException(_localUnavailableMessage());
+      }
+      throw AiCommandServiceException('Network error contacting ${config.provider.label}.');
     } on FormatException catch (e) {
       throw AiCommandServiceException('AI response was not valid JSON: $e');
     } catch (e) {
@@ -249,9 +312,11 @@ class AiCommandService {
     List<Map<String, String>> history, {
     String? systemInstruction,
   }) async {
-    final request = await client.postUrl(Uri.parse('${config.baseUrl}/chat/completions')).timeout(const Duration(seconds: 15));
+    final request = await client.postUrl(Uri.parse('${config.baseUrl}/chat/completions')).timeout(_connectionTimeout);
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${config.apiKey}');
+    if (config.provider != AiProvider.local) {
+      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${config.apiKey}');
+    }
 
     final messages = [
       {'role': 'system', 'content': systemInstruction ?? _chatInstruction},
@@ -265,7 +330,7 @@ class AiCommandService {
       'messages': messages,
     }));
 
-    final response = await request.close().timeout(const Duration(seconds: 30));
+    final response = await request.close().timeout(_responseTimeout);
     final responseBody = await response.transform(utf8.decoder).join();
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -281,7 +346,7 @@ class AiCommandService {
     List<Map<String, String>> history, {
     String? systemInstruction,
   }) async {
-    final request = await client.postUrl(Uri.parse('${config.baseUrl}/models/${config.model}:generateContent')).timeout(const Duration(seconds: 15));
+    final request = await client.postUrl(Uri.parse('${config.baseUrl}/models/${config.model}:generateContent')).timeout(_connectionTimeout);
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
     request.headers.set('x-goog-api-key', config.apiKey);
 
@@ -303,7 +368,7 @@ class AiCommandService {
 
     request.write(jsonEncode({'contents': contents}));
 
-    final response = await request.close().timeout(const Duration(seconds: 30));
+    final response = await request.close().timeout(_responseTimeout);
     final responseBody = await response.transform(utf8.decoder).join();
 
     if (response.statusCode < 200 || response.statusCode >= 300) {

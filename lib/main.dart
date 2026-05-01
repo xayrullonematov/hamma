@@ -193,6 +193,8 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
   late AiProvider _aiProvider;
   late String _apiKey;
   late String? _openRouterModel;
+  late String _localEndpoint;
+  late String _localModel;
   late bool _isOnboardingComplete;
   List<ServerProfile> _servers = [];
 
@@ -206,6 +208,8 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
     _aiProvider = widget.initialSettings.provider;
     _apiKey = widget.initialSettings.apiKey;
     _openRouterModel = widget.initialSettings.openRouterModel;
+    _localEndpoint = widget.initialSettings.localEndpoint;
+    _localModel = widget.initialSettings.localModel;
     _isOnboardingComplete = widget.initialIsOnboardingComplete;
     _loadServers();
   }
@@ -359,17 +363,23 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
     AiProvider provider,
     String apiKey,
     String? openRouterModel,
+    String? localEndpoint,
+    String? localModel,
   ) async {
     await widget.apiKeyStorage.saveSettings(
       provider: provider,
       apiKey: apiKey,
       openRouterModel: openRouterModel,
+      localEndpoint: localEndpoint,
+      localModel: localModel,
     );
 
     setState(() {
       _aiProvider = provider;
       _apiKey = apiKey;
       _openRouterModel = openRouterModel;
+      if (localEndpoint != null) _localEndpoint = localEndpoint;
+      if (localModel != null) _localModel = localModel;
     });
   }
 
@@ -393,6 +403,8 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
       aiProvider: _aiProvider,
       apiKey: _apiKey,
       openRouterModel: _openRouterModel,
+      localEndpoint: _localEndpoint,
+      localModel: _localModel,
       onSaveAiSettings: _saveAiSettings,
       startupWarning: widget.initialAiSettingsLoadError,
     );
@@ -419,6 +431,8 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
       provider: _aiProvider,
       apiKey: _apiKey,
       openRouterModel: _openRouterModel,
+      localEndpoint: _localEndpoint,
+      localModel: _localModel,
     );
 
     return CommandPaletteManager(

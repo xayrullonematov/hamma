@@ -2,11 +2,16 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../ai/ai_provider.dart';
 
+const _defaultLocalEndpoint = 'http://localhost:11434';
+const _defaultLocalModel = 'gemma3';
+
 class AiSettings {
   const AiSettings({
     required this.provider,
     this.apiKeys = const {},
     this.openRouterModel,
+    this.localEndpoint = _defaultLocalEndpoint,
+    this.localModel = _defaultLocalModel,
   });
 
   factory AiSettings.fromJson(Map<String, dynamic> json) {
@@ -19,12 +24,16 @@ class AiSettings {
         legacyApiKey: json['apiKey'],
       ),
       openRouterModel: _normalizeOptionalString(json['openRouterModel']),
+      localEndpoint: _normalizeWithDefault(json['localEndpoint'], _defaultLocalEndpoint),
+      localModel: _normalizeWithDefault(json['localModel'], _defaultLocalModel),
     );
   }
 
   final AiProvider provider;
   final Map<AiProvider, String> apiKeys;
   final String? openRouterModel;
+  final String localEndpoint;
+  final String localModel;
 
   String get apiKey => apiKeyFor(provider);
 
@@ -41,12 +50,19 @@ class AiSettings {
           provider.storageValue: apiKeyFor(provider),
       },
       'openRouterModel': openRouterModel,
+      'localEndpoint': localEndpoint,
+      'localModel': localModel,
     };
   }
 
   static String? _normalizeOptionalString(Object? value) {
     final normalized = value?.toString().trim() ?? '';
     return normalized.isEmpty ? null : normalized;
+  }
+
+  static String _normalizeWithDefault(Object? value, String defaultValue) {
+    final normalized = value?.toString().trim() ?? '';
+    return normalized.isEmpty ? defaultValue : normalized;
   }
 
   static Map<AiProvider, String> _parseApiKeys(
@@ -83,6 +99,8 @@ class ApiKeyStorage {
   static const _legacyApiKeyStorageKey = 'ai_api_key';
   static const _providerStorageKey = 'ai_provider';
   static const _openRouterModelStorageKey = 'openrouter_model';
+  static const _localEndpointStorageKey = 'local_ai_endpoint';
+  static const _localModelStorageKey = 'local_ai_model';
 
   final FlutterSecureStorage _secureStorage;
 
@@ -90,6 +108,12 @@ class ApiKeyStorage {
     final storedProvider = await _secureStorage.read(key: _providerStorageKey);
     final storedOpenRouterModel = await _secureStorage.read(
       key: _openRouterModelStorageKey,
+    );
+    final storedLocalEndpoint = await _secureStorage.read(
+      key: _localEndpointStorageKey,
+    );
+    final storedLocalModel = await _secureStorage.read(
+      key: _localModelStorageKey,
     );
     final apiKeys = <AiProvider, String>{};
 
@@ -107,6 +131,8 @@ class ApiKeyStorage {
           provider.storageValue: apiKeys[provider] ?? '',
       },
       'openRouterModel': storedOpenRouterModel,
+      'localEndpoint': storedLocalEndpoint,
+      'localModel': storedLocalModel,
     });
   }
 
@@ -169,8 +195,12 @@ class ApiKeyStorage {
     required AiProvider provider,
     String? apiKey,
     String? openRouterModel,
+    String? localEndpoint,
+    String? localModel,
   }) async {
     final trimmedOpenRouterModel = openRouterModel?.trim() ?? '';
+    final trimmedLocalEndpoint = localEndpoint?.trim() ?? '';
+    final trimmedLocalModel = localModel?.trim() ?? '';
 
     await _secureStorage.write(
       key: _providerStorageKey,
@@ -183,12 +213,21 @@ class ApiKeyStorage {
 
     if (trimmedOpenRouterModel.isEmpty) {
       await _secureStorage.delete(key: _openRouterModelStorageKey);
-      return;
+    } else {
+      await _secureStorage.write(
+        key: _openRouterModelStorageKey,
+        value: trimmedOpenRouterModel,
+      );
     }
 
     await _secureStorage.write(
-      key: _openRouterModelStorageKey,
-      value: trimmedOpenRouterModel,
+      key: _localEndpointStorageKey,
+      value: trimmedLocalEndpoint.isEmpty ? _defaultLocalEndpoint : trimmedLocalEndpoint,
+    );
+
+    await _secureStorage.write(
+      key: _localModelStorageKey,
+      value: trimmedLocalModel.isEmpty ? _defaultLocalModel : trimmedLocalModel,
     );
   }
 

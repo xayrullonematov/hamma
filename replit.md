@@ -49,6 +49,31 @@ flutter build linux --debug
 - `xorg.xorgserver`, `xvfb-run` - Virtual framebuffer display
 - `zlib`, `curlFull` - For sentry-native build
 
+## Local AI Provider (Zero-Trust Mode)
+
+Hamma supports a fully offline, zero-trust AI mode via any OpenAI-compatible local inference engine (Ollama, LM Studio, llama.cpp).
+
+### Architecture
+- `AiProvider.local` — new enum value in `lib/core/ai/ai_provider.dart`; `requiresApiKey = false`
+- `AiApiConfig.forProvider()` — builds a config pointing to `{localEndpoint}/v1` with no Authorization header
+- `AiCommandService` — routes `local` through `_chatWithOpenAi()` (Ollama is OpenAI-compatible); 5s connection timeout, 120s response timeout
+- `AiSettings` — stores `localEndpoint` (default `http://localhost:11434`) and `localModel` (default `gemma3`) in secure storage
+- `AiCopilotSheet` — `_hasActiveApiKey` returns `true` for no-key providers; fast-paths `_loadActiveProviderState` to skip key loading
+- Settings UI — brutalist "ZERO TRUST / OFFLINE CAPABLE" badge, endpoint URL field, model name field, "TEST CONNECTION" button with real-time status
+
+### Usage
+1. In Settings, select "Local AI" as the provider
+2. Set engine endpoint (default: `http://localhost:11434`)
+3. Set model name matching `ollama list` output (e.g., `gemma3`, `llama3`, `mistral`)
+4. Click "TEST CONNECTION" to verify Ollama is running
+5. Save — no API key needed
+
+### Quick start (Ollama)
+```bash
+ollama serve          # start the engine
+ollama pull gemma3    # download the model (~5 GB)
+```
+
 ## Key Modifications
 
 - Fixed `DropdownButtonFormField.initialValue` → `value` in settings_screen.dart (Flutter 3.32.0 API change)
@@ -62,7 +87,7 @@ flutter build linux --debug
 - **Terminal emulation**: xterm
 - **Security**: flutter_secure_storage, encrypt, pinenacl
 - **Crash reporting**: sentry_flutter (inproc for local dev; crashpad in CI/release builds)
-- **AI providers**: OpenAI, Google Gemini, OpenRouter (via HTTP)
+- **AI providers**: OpenAI, Google Gemini, OpenRouter (cloud), **Local AI** (Ollama/LM Studio/llama.cpp via localhost:11434)
 - **Fonts**: Inter (variable, bundled at `assets/fonts/InterVariable.ttf`) and JetBrains Mono (4 weights, bundled at `assets/fonts/`)
 
 ## Responsive Layout

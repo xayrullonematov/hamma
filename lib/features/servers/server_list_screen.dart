@@ -17,6 +17,8 @@ class ServerListScreen extends StatefulWidget {
     required this.aiProvider,
     required this.apiKey,
     required this.openRouterModel,
+    required this.localEndpoint,
+    required this.localModel,
     required this.onSaveAiSettings,
     this.startupWarning,
   });
@@ -24,10 +26,14 @@ class ServerListScreen extends StatefulWidget {
   final AiProvider aiProvider;
   final String apiKey;
   final String? openRouterModel;
+  final String localEndpoint;
+  final String localModel;
   final Future<void> Function(
     AiProvider provider,
     String apiKey,
     String? openRouterModel,
+    String? localEndpoint,
+    String? localModel,
   )
   onSaveAiSettings;
   final String? startupWarning;
@@ -263,6 +269,8 @@ class _ServerListScreenState extends State<ServerListScreen> {
               aiProvider: widget.aiProvider,
               apiKey: widget.apiKey,
               openRouterModel: widget.openRouterModel,
+              localEndpoint: widget.localEndpoint,
+              localModel: widget.localModel,
               onSaveAiSettings: widget.onSaveAiSettings,
               onBackupImported: _loadServers,
             ),
@@ -278,6 +286,8 @@ class _ServerListScreenState extends State<ServerListScreen> {
               initialProvider: widget.aiProvider,
               initialApiKey: widget.apiKey,
               initialOpenRouterModel: widget.openRouterModel,
+              initialLocalEndpoint: widget.localEndpoint,
+              initialLocalModel: widget.localModel,
               onSaveAiSettings: widget.onSaveAiSettings,
               onBackupImported: _loadServers,
             ),
