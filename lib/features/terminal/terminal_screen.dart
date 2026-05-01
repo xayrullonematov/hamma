@@ -226,6 +226,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       backgroundColor: _backgroundColor,
       appBar: AppBar(
         backgroundColor: _backgroundColor,
+        automaticallyImplyLeading: false,
         title: Text('Terminal: ${widget.serverName}'),
         actions: [
           if (_isDesktop)

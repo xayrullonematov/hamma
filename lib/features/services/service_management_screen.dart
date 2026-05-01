@@ -174,6 +174,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
       backgroundColor: _backgroundColor,
       appBar: AppBar(
         backgroundColor: _backgroundColor,
+        automaticallyImplyLeading: false,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

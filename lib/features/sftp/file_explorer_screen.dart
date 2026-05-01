@@ -785,7 +785,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     if (_loadError != null && _entries.isEmpty) {
       return Scaffold(
         backgroundColor: _backgroundColor,
-        appBar: AppBar(title: const Text('File Explorer')),
+        appBar: AppBar(automaticallyImplyLeading: false, title: const Text('File Explorer')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -841,6 +841,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title:
             _isSearching
                 ? TextField(

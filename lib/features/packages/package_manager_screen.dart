@@ -168,6 +168,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
       backgroundColor: _backgroundColor,
       appBar: AppBar(
         backgroundColor: _backgroundColor,
+        automaticallyImplyLeading: false,
         title: const Text('Package Manager'),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _fetchUpgradable),
