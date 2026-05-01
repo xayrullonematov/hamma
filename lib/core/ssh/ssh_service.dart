@@ -260,6 +260,16 @@ class SshService {
       _client = client;
       _reconnectAttempts = 0; // Reset on true success
       _lastSuccessfulConnection = DateTime.now();
+
+      // Detect transport closure immediately — covers network drops, server
+      // reboots, and any case where the underlying socket closes without an
+      // explicit call to disconnect().
+      client.done.then((_) {
+        _handleDisconnect(reason: 'Transport closed');
+      }, onError: (_) {
+        _handleDisconnect(reason: 'Transport error');
+      });
+
       _startHeartbeat();
       _updateStatus(ConnectionStatus.connected(lastSuccessfulConnection: _lastSuccessfulConnection));
     } catch (e, stackTrace) {
@@ -312,12 +322,13 @@ class SshService {
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (_client != null) {
-        try {
-          _client!.ping();
-        } catch (_) {
-          _handleDisconnect(reason: 'Heartbeat failed');
-        }
+      final client = _client;
+      if (client != null) {
+        // ping() returns a Future — use .then/.catchError so async errors
+        // are caught rather than silently dropped in a try/catch.
+        client.ping().then((_) {}, onError: (_) {
+          _handleDisconnect(reason: 'Heartbeat ping failed');
+        });
       }
     });
   }
@@ -699,11 +710,19 @@ class SshService {
   bool _looksLikeDisconnect(Object error) {
     final message = error.toString().toLowerCase();
     const patterns = [
+      // dartssh2 SSHStateError messages
+      'transport is closed',
+      'transport closed',
+      'sshstateerror',
+      // Generic socket / network closure
       'not connected',
       'connection reset',
       'broken pipe',
       'socketexception',
       'connection closed',
+      'connection lost',
+      'network is unreachable',
+      // SSH channel / session errors
       'channel is not open',
       'failed host handshake',
     ];
