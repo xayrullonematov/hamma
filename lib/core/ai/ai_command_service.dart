@@ -145,6 +145,56 @@ class AiCommandService {
         'Is Ollama running? Try: ollama serve';
   }
 
+  /// Extracts the first well-formed JSON object from [text].
+  ///
+  /// Tries three strategies in order:
+  ///   1. Direct JSON parse (model returned pure JSON).
+  ///   2. Extract from a ```json ... ``` or ``` ... ``` code fence.
+  ///   3. Brace-depth scan — finds the first syntactically complete `{...}`
+  ///      block, ignoring any surrounding prose or markdown.
+  static Map<String, dynamic>? _parseJsonFromResponse(String text) {
+    final trimmed = text.trim();
+
+    // 1. Direct parse.
+    try {
+      final decoded = jsonDecode(trimmed);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {}
+
+    // 2. Code fence: ```json ... ``` or ``` ... ```
+    final codeFence =
+        RegExp(r'```(?:json)?\s*([\s\S]*?)\s*```').firstMatch(trimmed);
+    if (codeFence != null) {
+      try {
+        final decoded = jsonDecode(codeFence.group(1)!.trim());
+        if (decoded is Map<String, dynamic>) return decoded;
+      } catch (_) {}
+    }
+
+    // 3. Brace-depth scan — O(n), handles nested objects correctly.
+    int depth = 0;
+    int start = -1;
+    for (int i = 0; i < trimmed.length; i++) {
+      final ch = trimmed[i];
+      if (ch == '{') {
+        if (depth == 0) start = i;
+        depth++;
+      } else if (ch == '}') {
+        depth--;
+        if (depth == 0 && start != -1) {
+          try {
+            final candidate = trimmed.substring(start, i + 1);
+            final decoded = jsonDecode(candidate);
+            if (decoded is Map<String, dynamic>) return decoded;
+          } catch (_) {}
+          start = -1;
+        }
+      }
+    }
+
+    return null;
+  }
+
   Future<CommandIntent> parseIntent(String prompt, List<String> availableServers) async {
     final trimmedPrompt = prompt.trim();
     if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
@@ -179,9 +229,13 @@ class AiCommandService {
           break;
       }
 
-      final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(response);
-      final jsonString = jsonMatch?.group(0) ?? response;
-      final decoded = jsonDecode(jsonString) as Map<String, dynamic>;
+      final decoded = _parseJsonFromResponse(response);
+      if (decoded == null) {
+        throw const AiCommandServiceException(
+          'AI response did not contain a valid JSON object. '
+          'Try rephrasing your request.',
+        );
+      }
 
       return CommandIntent.fromJson(decoded);
     } on SocketException {
@@ -274,9 +328,13 @@ class AiCommandService {
           break;
       }
 
-      final jsonMatch = RegExp(r'\{[\s\S]*\}').firstMatch(response);
-      final jsonString = jsonMatch?.group(0) ?? response;
-      final decoded = jsonDecode(jsonString) as Map<String, dynamic>;
+      final decoded = _parseJsonFromResponse(response);
+      if (decoded == null) {
+        throw const AiCommandServiceException(
+          'AI response did not contain a valid JSON object. '
+          'Try rephrasing your request.',
+        );
+      }
 
       var analysis = CommandAnalysis.fromJson(decoded);
 

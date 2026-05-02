@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -34,6 +36,20 @@ jobs:
           channel: stable
           flutter-version: '3.41.8'
           cache: true
+
+      - name: Stamp version into pubspec.yaml
+        run: |
+          # Derive semantic version from tag (v1.2.3 → 1.2.3) or keep current.
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9] ]]; then
+            SEMVER="${GITHUB_REF_NAME#v}"
+          else
+            SEMVER=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          fi
+          # Auto-incrementing build number from total commit count.
+          BUILD=$(git rev-list --count HEAD)
+          sed -i "s/^version: .*/version: ${SEMVER}+${BUILD}/" pubspec.yaml
+          echo "Stamped version: ${SEMVER}+${BUILD}"
+          grep '^version:' pubspec.yaml
 
       - name: Install dependencies
         run: flutter pub get
@@ -84,6 +100,8 @@ jobs:
 
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -92,8 +110,23 @@ jobs:
           flutter-version: '3.41.8'
           cache: true
 
+      - name: Stamp version into pubspec.yaml
+        run: |
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9] ]]; then
+            SEMVER="${GITHUB_REF_NAME#v}"
+          else
+            SEMVER=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
+          fi
+          BUILD=$(git rev-list --count HEAD)
+          sed -i "s/^version: .*/version: ${SEMVER}+${BUILD}/" pubspec.yaml
+          echo "Stamped version: ${SEMVER}+${BUILD}"
+          grep '^version:' pubspec.yaml
+
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Build Linux
         run: |
@@ -170,6 +203,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -178,8 +213,31 @@ jobs:
           flutter-version: '3.41.8'
           cache: true
 
+      - name: Stamp version into pubspec.yaml
+        shell: pwsh
+        run: |
+          # Derive semantic version from tag (v1.2.3 → 1.2.3) or keep current.
+          $ref = $env:GITHUB_REF_NAME
+          if ($ref -match '^v(\d.+)') {
+            $semver = $Matches[1]
+          } else {
+            $semver = (Select-String '^version:' pubspec.yaml).Line `
+              -replace 'version: ', '' `
+              -replace '\+.*', ''
+          }
+          # Auto-incrementing build number from total commit count.
+          $build = (git rev-list --count HEAD).Trim()
+          (Get-Content pubspec.yaml) `
+            -replace '^version: .*', "version: ${semver}+${build}" `
+            | Set-Content pubspec.yaml
+          Write-Host "Stamped version: ${semver}+${build}"
+          Select-String '^version:' pubspec.yaml
+
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
 
       - name: Build Windows
         run: flutter build windows --release --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}

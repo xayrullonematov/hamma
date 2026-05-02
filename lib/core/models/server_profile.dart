@@ -74,15 +74,20 @@ class ServerProfile {
   }
 
   factory ServerProfile.fromJson(Map<String, dynamic> json) {
+    final rawPort = json['port'];
+    final port = rawPort is int
+        ? rawPort
+        : int.tryParse(rawPort?.toString() ?? '') ?? 22;
+
     return ServerProfile(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      host: json['host'] as String,
-      port: json['port'] as int,
-      username: json['username'] as String,
-      password: json['password'] as String,
-      privateKey: json['privateKey'] as String?,
-      privateKeyPassword: json['privateKeyPassword'] as String?,
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      host: json['host']?.toString() ?? '',
+      port: port,
+      username: json['username']?.toString() ?? '',
+      password: json['password']?.toString() ?? '',
+      privateKey: json['privateKey']?.toString(),
+      privateKeyPassword: json['privateKeyPassword']?.toString(),
     );
   }
 }
