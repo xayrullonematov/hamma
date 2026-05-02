@@ -217,6 +217,40 @@ Flutter-native on Linux, Windows, macOS, Android, and iOS. Brutalist UI tuned fo
 
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+
+### 🤖 Local Models Manager
+
+<img src="assets/screenshots/local-models.png" alt="Hamma Local Models manager — installed models list (gemma3, llama3.1, qwen2.5-coder) with size, status, set-default and delete actions, plus a curated catalog with one-tap pull and live progress" width="100%"/>
+
+```diff
++ Browse & pull from a curated catalog
++ Live pull progress (NDJSON streaming)
++ Set default model · delete unused weights
++ First-run wizard (Install → Pull → Done)
++ OS-aware install snippets (curl · winget)
++ Loopback-only — never reaches the network
+```
+
+</td>
+<td width="50%" valign="top">
+
+### 🟢 Engine Status Pill
+
+<img src="assets/screenshots/status-pills.png" alt="Hamma local engine status pill in all four states — online (cyan dot), loading model (amber spinner), loading (amber pulse), and offline (red dot with retry tap target)" width="100%"/>
+
+```diff
++ Header pill polls every 15 s
++ 4 states — online · loading-model · loading · offline
++ Tap to retry detection on failure
++ Surfaces the same probe the chat path uses
++ Single source of truth for engine health
++ Zero polling when chat is closed (auto-dispose)
+```
+
+</td>
+</tr>
 </table>
 
 <br/>
@@ -252,7 +286,7 @@ Flutter-native on Linux, Windows, macOS, Android, and iOS. Brutalist UI tuned fo
 </tr>
 </table>
 
-<sub>Renders use the live brutalist design system — palette, typography, and component vocabulary lifted directly from <code>lib/core/theme/app_colors.dart</code> and <code>lib/features/ai_assistant/widgets/local_engine_status_pill.dart</code>. Live runtime captures land alongside the next public-launch milestone.</sub>
+<sub>Captures are high-fidelity gallery renders of the shipped UI — every pixel uses the production palette, typography, spacing, and component code from <code>lib/core/theme/app_colors.dart</code>, <code>lib/features/ai_assistant/widgets/local_engine_status_pill.dart</code>, and the brutalist tokens enforced across the app. Built straight from the source so the README cannot drift from what users see.</sub>
 
 </div>
 
