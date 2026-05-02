@@ -316,7 +316,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
       final models =
           data
-              .whereType<Map>()
+              .whereType<Map<dynamic, dynamic>>()
               .map((item) => (item['id'] ?? '').toString().trim())
               .where((id) => id.isNotEmpty)
               .toSet()

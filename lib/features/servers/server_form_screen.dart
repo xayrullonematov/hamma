@@ -184,7 +184,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   }
 
   void _showPublicKeyDialog(String publicKey) {
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Key Pair Generated'),

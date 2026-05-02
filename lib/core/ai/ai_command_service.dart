@@ -464,18 +464,19 @@ class AiCommandService {
 
   String? _extractOpenAiContent(String responseBody) {
     final decoded = jsonDecode(responseBody);
-    return decoded['choices']?[0]?['message']?['content'];
+    return decoded['choices']?[0]?['message']?['content'] as String?;
   }
 
   String? _extractGeminiContent(String responseBody) {
     final decoded = jsonDecode(responseBody);
-    return decoded['candidates']?[0]?['content']?['parts']?[0]?['text'];
+    return decoded['candidates']?[0]?['content']?['parts']?[0]?['text']
+        as String?;
   }
 
   String? _extractErrorMessage(String responseBody) {
     try {
       final decoded = jsonDecode(responseBody);
-      return decoded['error']?['message'];
+      return decoded['error']?['message'] as String?;
     } catch (_) {
       return null;
     }

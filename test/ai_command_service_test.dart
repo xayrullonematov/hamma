@@ -65,7 +65,7 @@ void main() {
         );
 
         expect(result, isNotNull);
-        expect(result!['meta'], isA<Map>());
+        expect(result!['meta'], isA<Map<dynamic, dynamic>>());
         expect((result['meta'] as Map)['safe'], isTrue);
       });
 

@@ -565,7 +565,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       final models =
           data
-              .whereType<Map>()
+              .whereType<Map<dynamic, dynamic>>()
               .map((item) => (item['id'] ?? '').toString().trim())
               .where((id) => id.isNotEmpty)
               .toSet()
@@ -1392,7 +1392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: FilledButton.tonalIcon(
                           onPressed: () {
                             Navigator.of(context).push(
-                              MaterialPageRoute(builder: (_) => const HelpCenterScreen()),
+                              MaterialPageRoute<void>(builder: (_) => const HelpCenterScreen()),
                             );
                           },
                           icon: const Icon(Icons.help_center_outlined),

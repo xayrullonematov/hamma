@@ -336,6 +336,21 @@ The two remaining heavy methods (`_buildMessageBubble` ~105 lines and `_buildCom
 ### Files NOT touched in this round
 - `file_explorer_screen.dart` (1072), `fleet_dashboard_screen.dart` (950), `ssh_service.dart` (810). Each is large but cohesive; splitting requires a state-management decision (controller pattern vs. notifier vs. callback list) that warrants its own design pass.
 
+## Analyzer Cleanup (2026-05-02)
+
+Cleared all 51 `flutter analyze` issues (16 errors, 32 warnings, 3 info) → "No issues found!". No behavior changes; full test suite (22 files) still green.
+
+### Patterns applied
+- **Typed JSON destructuring**: replaced `Map<String,dynamic>` field reads that flowed into typed locals with explicit casts. Touched: `ai_command_service.dart` (3 extractors → `String?`), `backup_service.dart`, `backup_storage.dart` (12 fields in `BackupConfig.fromJson` + decoded `loadConfig`), `chat_history_storage.dart` (List/Map decode sites), `ai_assistant_screen.dart` (outputs map cast).
+- **Raw type tightening**: `whereType<Map<dynamic,dynamic>>()` in `copilot_sheet` and `settings_screen`; tightened `isA<Map<dynamic,dynamic>>()` in `ai_command_service_test`.
+- **Generic inference fixes**: explicit `<void>` on `showDialog`, `showModalBottomSheet`, `MaterialPageRoute`, `Future.delayed`; explicit `void Function(...)` on callbacks.
+- **Stream subscription typing**: `StreamSubscription<String>?` for `log_viewer_screen` & `package_manager_screen` (which decode `.cast<List<int>>().transform(Utf8Decoder).transform(LineSplitter)`); `StreamSubscription<Uint8List>?` for `terminal_screen` (raw stream).
+- **Test locals**: renamed `_alice`/`_bob`/`_base` → `alice`/`bob`/`base` (no leading underscores in local vars).
+- **Dependencies**: added `meta: ^1.15.0` to `pubspec.yaml` dependencies (used by `@visibleForTesting` annotations in `ai_command_service.dart` and `backup_crypto.dart`).
+
+### Files NOT touched (deferred — need state-management design pass)
+Same as god-file refactor: `file_explorer_screen.dart`, `fleet_dashboard_screen.dart`, `ssh_service.dart`, plus `_buildMessageBubble`/`_buildCommandCard` in `ai_assistant_screen.dart`.
+
 ## Key Modifications
 
 - Fixed `DropdownButtonFormField.initialValue` → `value` in settings_screen.dart (Flutter 3.32.0 API change)

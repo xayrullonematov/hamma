@@ -18,7 +18,7 @@ class CommandPaletteManager extends StatefulWidget {
   final Widget child;
   final AiCommandService aiCommandService;
   final List<String> availableServers;
-  final Function(CommandIntent intent) onExecute;
+  final void Function(CommandIntent intent) onExecute;
 
   @override
   State<CommandPaletteManager> createState() => _CommandPaletteManagerState();
@@ -61,7 +61,7 @@ class _CommandPaletteManagerState extends State<CommandPaletteManager> {
   }
 
   void _showPalette(BuildContext context) {
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierColor: Colors.black54,
       builder: (context) => GlobalCommandPalette(
@@ -88,7 +88,7 @@ class GlobalCommandPalette extends StatefulWidget {
 
   final AiCommandService aiCommandService;
   final List<String> availableServers;
-  final Function(CommandIntent intent) onExecute;
+  final void Function(CommandIntent intent) onExecute;
 
   @override
   State<GlobalCommandPalette> createState() => _GlobalCommandPaletteState();

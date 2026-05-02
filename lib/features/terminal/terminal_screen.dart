@@ -50,8 +50,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
   late final Terminal _terminal;
   final FocusNode _terminalFocusNode = FocusNode();
   SSHSession? _session;
-  StreamSubscription? _stdoutSubscription;
-  StreamSubscription? _stderrSubscription;
+  StreamSubscription<Uint8List>? _stdoutSubscription;
+  StreamSubscription<Uint8List>? _stderrSubscription;
   String _recentTerminalOutput = '';
   bool _isFullScreen = false;
 

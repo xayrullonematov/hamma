@@ -13,7 +13,7 @@ void main() {
     storage = const SavedServersStorage();
   });
 
-  const _alice = ServerProfile(
+  const alice = ServerProfile(
     id: 'srv-001',
     name: 'Alice',
     host: '10.0.0.1',
@@ -22,7 +22,7 @@ void main() {
     password: 'pass1',
   );
 
-  const _bob = ServerProfile(
+  const bob = ServerProfile(
     id: 'srv-002',
     name: 'Bob',
     host: '10.0.0.2',
@@ -38,13 +38,13 @@ void main() {
     });
 
     test('returns saved servers in order', () async {
-      await storage.saveServers([_alice, _bob]);
+      await storage.saveServers([alice, bob]);
 
       final result = await storage.loadServers();
 
       expect(result, hasLength(2));
-      expect(result[0].id, _alice.id);
-      expect(result[1].id, _bob.id);
+      expect(result[0].id, alice.id);
+      expect(result[1].id, bob.id);
     });
 
     test('preserves all fields through save/load round-trip', () async {
@@ -76,17 +76,17 @@ void main() {
 
   group('saveServers', () {
     test('overwrites previous list with new one', () async {
-      await storage.saveServers([_alice]);
-      await storage.saveServers([_bob]);
+      await storage.saveServers([alice]);
+      await storage.saveServers([bob]);
 
       final result = await storage.loadServers();
 
       expect(result, hasLength(1));
-      expect(result.first.id, _bob.id);
+      expect(result.first.id, bob.id);
     });
 
     test('saves empty list — subsequent load returns empty', () async {
-      await storage.saveServers([_alice, _bob]);
+      await storage.saveServers([alice, bob]);
       await storage.saveServers([]);
 
       final result = await storage.loadServers();
@@ -96,7 +96,7 @@ void main() {
 
   group('clearServers', () {
     test('removes all saved servers', () async {
-      await storage.saveServers([_alice, _bob]);
+      await storage.saveServers([alice, bob]);
       await storage.clearServers();
 
       final result = await storage.loadServers();
@@ -112,15 +112,15 @@ void main() {
 
   group('delete single server (filter + re-save pattern)', () {
     test('removes the target server and keeps others', () async {
-      await storage.saveServers([_alice, _bob]);
+      await storage.saveServers([alice, bob]);
 
       final servers = await storage.loadServers();
-      final updated = servers.where((s) => s.id != _alice.id).toList();
+      final updated = servers.where((s) => s.id != alice.id).toList();
       await storage.saveServers(updated);
 
       final result = await storage.loadServers();
       expect(result, hasLength(1));
-      expect(result.first.id, _bob.id);
+      expect(result.first.id, bob.id);
     });
   });
 
@@ -135,7 +135,7 @@ void main() {
         password: 'dup-pass',
       );
 
-      await storage.saveServers([_alice, dup]);
+      await storage.saveServers([alice, dup]);
 
       final result = await storage.loadServers();
       final ids = result.map((s) => s.id).toList();

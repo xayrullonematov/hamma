@@ -153,7 +153,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
   }
 
   void _showStreamConsole(String title, String command, {VoidCallback? onDone}) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.black,
       isScrollControlled: true,
@@ -361,8 +361,8 @@ class _StreamConsole extends StatefulWidget {
 class _StreamConsoleState extends State<_StreamConsole> {
   final List<_ConsoleLine> _output = [];
   final ScrollController _scrollController = ScrollController();
-  StreamSubscription? _stdoutSub;
-  StreamSubscription? _stderrSub;
+  StreamSubscription<String>? _stdoutSub;
+  StreamSubscription<String>? _stderrSub;
   bool _isDone = false;
 
   @override

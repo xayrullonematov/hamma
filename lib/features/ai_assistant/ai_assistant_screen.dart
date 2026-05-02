@@ -230,7 +230,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       if (mounted) {
         setState(() {
           final outputs = Map<String, dynamic>.from(
-            _messages[msgIndex]['outputs'] ?? {},
+            (_messages[msgIndex]['outputs'] as Map?) ?? <String, dynamic>{},
           );
           outputs[command] = output.isEmpty ? '(No output)' : output;
           _messages[msgIndex]['outputs'] = outputs;
@@ -242,7 +242,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       if (mounted) {
         setState(() {
           final outputs = Map<String, dynamic>.from(
-            _messages[msgIndex]['outputs'] ?? {},
+            (_messages[msgIndex]['outputs'] as Map?) ?? <String, dynamic>{},
           );
           outputs[command] = 'Error: $e';
           _messages[msgIndex]['outputs'] = outputs;

@@ -31,8 +31,8 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
   final TextEditingController _customPathController = TextEditingController();
 
   SSHSession? _session;
-  StreamSubscription? _stdoutSubscription;
-  StreamSubscription? _stderrSubscription;
+  StreamSubscription<String>? _stdoutSubscription;
+  StreamSubscription<String>? _stderrSubscription;
   bool _isPaused = false;
   bool _autoScroll = true;
   String _filter = '';

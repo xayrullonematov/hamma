@@ -45,6 +45,7 @@ dependencies:
   workmanager: ^0.9.0
   hotkey_manager: ^0.2.3
   tray_manager: ^0.5.2
+  meta: ^1.15.0
 
 dev_dependencies:
   flutter_test:

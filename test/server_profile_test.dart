@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hamma/core/models/server_profile.dart';
 
 void main() {
-  const _base = ServerProfile(
+  const base = ServerProfile(
     id: 'srv-1',
     name: 'Production',
     host: '10.0.0.1',
@@ -13,46 +13,46 @@ void main() {
 
   group('ServerProfile.isValid', () {
     test('returns true when all required fields are set (password auth)', () {
-      expect(_base.isValid, isTrue);
+      expect(base.isValid, isTrue);
     });
 
     test('returns true when private key is provided instead of password', () {
-      final profile = _base.copyWith(password: '', privateKey: '-----BEGIN...');
+      final profile = base.copyWith(password: '', privateKey: '-----BEGIN...');
       expect(profile.isValid, isTrue);
     });
 
     test('returns false when host is blank', () {
-      final profile = _base.copyWith(host: '   ');
+      final profile = base.copyWith(host: '   ');
       expect(profile.isValid, isFalse);
     });
 
     test('returns false when name is blank', () {
-      final profile = _base.copyWith(name: '');
+      final profile = base.copyWith(name: '');
       expect(profile.isValid, isFalse);
     });
 
     test('returns false when username is blank', () {
-      final profile = _base.copyWith(username: '   ');
+      final profile = base.copyWith(username: '   ');
       expect(profile.isValid, isFalse);
     });
 
     test('returns false when both password and private key are blank', () {
-      final profile = _base.copyWith(password: '', privateKey: null);
+      final profile = base.copyWith(password: '', privateKey: null);
       expect(profile.isValid, isFalse);
     });
 
     test('returns false when port is 0', () {
-      final profile = _base.copyWith(port: 0);
+      final profile = base.copyWith(port: 0);
       expect(profile.isValid, isFalse);
     });
 
     test('returns false when port exceeds 65535', () {
-      final profile = _base.copyWith(port: 65536);
+      final profile = base.copyWith(port: 65536);
       expect(profile.isValid, isFalse);
     });
 
     test('returns true for port boundary value 65535', () {
-      final profile = _base.copyWith(port: 65535);
+      final profile = base.copyWith(port: 65535);
       expect(profile.isValid, isTrue);
     });
   });
@@ -83,14 +83,14 @@ void main() {
     });
 
     test('round-trips correctly when optional fields are null', () {
-      final restored = ServerProfile.fromJson(_base.toJson());
+      final restored = ServerProfile.fromJson(base.toJson());
 
       expect(restored.privateKey, isNull);
       expect(restored.privateKeyPassword, isNull);
     });
 
     test('toJson contains all expected keys', () {
-      final json = _base.toJson();
+      final json = base.toJson();
 
       expect(json.keys, containsAll(['id', 'name', 'host', 'port', 'username', 'password', 'privateKey', 'privateKeyPassword']));
     });
@@ -135,7 +135,7 @@ void main() {
 
     test('parses string-encoded port (legitimate JSON variation)', () {
       final restored = ServerProfile.fromJson({
-        ..._base.toJson(),
+        ...base.toJson(),
         'port': '2222',
       });
 
@@ -147,7 +147,7 @@ void main() {
       // We want a corrupted port to fail isValid rather than silently
       // defaulting to 22 and connecting somewhere unexpected.
       final restored = ServerProfile.fromJson({
-        ..._base.toJson(),
+        ...base.toJson(),
         'port': 'not-a-number',
       });
 
@@ -157,7 +157,7 @@ void main() {
 
     test('marks port as invalid (0) when stored value is wrong type', () {
       final restored = ServerProfile.fromJson({
-        ..._base.toJson(),
+        ...base.toJson(),
         'port': true,
       });
 
@@ -170,7 +170,7 @@ void main() {
       // which could superficially pass isValid. Type-checked accessors
       // return empty string instead so isValid catches the corruption.
       final restored = ServerProfile.fromJson({
-        ..._base.toJson(),
+        ...base.toJson(),
         'host': {'nested': 'object'},
         'username': [1, 2, 3],
       });
@@ -182,7 +182,7 @@ void main() {
 
     test('does not coerce non-string privateKey values to a string', () {
       final restored = ServerProfile.fromJson({
-        ..._base.toJson(),
+        ...base.toJson(),
         'privateKey': 12345,
       });
 
@@ -194,7 +194,7 @@ void main() {
       // Symmetry with privateKey — both optional string fields must apply
       // the same type-checking rules.
       final restored = ServerProfile.fromJson({
-        ..._base.toJson(),
+        ...base.toJson(),
         'privateKeyPassword': {'wrong': 'type'},
       });
 
@@ -204,7 +204,7 @@ void main() {
     test('legacy JSON missing the port field stays valid (defaults to 22)', () {
       // Backward-compat path: older saved profiles may not have a port
       // key at all. They must still load as valid SSH profiles on port 22.
-      final json = _base.toJson()..remove('port');
+      final json = base.toJson()..remove('port');
       final restored = ServerProfile.fromJson(json);
 
       expect(restored.port, 22);
@@ -213,7 +213,7 @@ void main() {
 
     test('JSON with explicit null port stays valid (defaults to 22)', () {
       final restored = ServerProfile.fromJson({
-        ..._base.toJson(),
+        ...base.toJson(),
         'port': null,
       });
 
@@ -224,22 +224,22 @@ void main() {
 
   group('ServerProfile.copyWith', () {
     test('returns new instance with updated field', () {
-      final updated = _base.copyWith(host: '192.168.1.1');
+      final updated = base.copyWith(host: '192.168.1.1');
 
       expect(updated.host, '192.168.1.1');
-      expect(updated.name, _base.name);
-      expect(updated.id, _base.id);
+      expect(updated.name, base.name);
+      expect(updated.id, base.id);
     });
 
     test('explicitly clears privateKey when passed null', () {
-      final withKey = _base.copyWith(privateKey: '-----BEGIN...');
+      final withKey = base.copyWith(privateKey: '-----BEGIN...');
       final cleared = withKey.copyWith(privateKey: null);
 
       expect(cleared.privateKey, isNull);
     });
 
     test('preserves existing privateKey when not specified in copyWith', () {
-      final withKey = _base.copyWith(privateKey: '-----BEGIN...');
+      final withKey = base.copyWith(privateKey: '-----BEGIN...');
       final updated = withKey.copyWith(name: 'New Name');
 
       expect(updated.privateKey, '-----BEGIN...');

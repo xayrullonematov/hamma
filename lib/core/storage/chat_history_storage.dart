@@ -15,8 +15,10 @@ class ChatHistoryStorage {
     final raw = await _secureStorage.read(key: '$_sessionsPrefix$serverId');
     if (raw == null) return [];
     try {
-      final List decoded = jsonDecode(raw);
-      return decoded.map((e) => Map<String, String>.from(e)).toList();
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map((e) => Map<String, String>.from(e as Map))
+          .toList();
     } catch (_) {
       return [];
     }
@@ -30,8 +32,10 @@ class ChatHistoryStorage {
     final raw = await _secureStorage.read(key: '$_messagesPrefix${serverId}_$sessionId');
     if (raw == null) return [];
     try {
-      final List decoded = jsonDecode(raw);
-      return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
     } catch (_) {
       return [];
     }

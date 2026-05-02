@@ -210,7 +210,7 @@ class BackupService {
     // that no longer exist on the source device don't linger.
     await _secureStorage.deleteAll();
     for (final entry in decodedData.entries) {
-      await _secureStorage.write(key: entry.key, value: entry.value);
+      await _secureStorage.write(key: entry.key, value: entry.value as String?);
     }
   }
 

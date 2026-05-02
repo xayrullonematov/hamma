@@ -65,7 +65,7 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
 
   void _showBulkActionDialog() {
     final controller = TextEditingController();
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: _surfaceColor,
@@ -154,7 +154,7 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
   }
 
   void _showBulkResultsSheet(String command) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,

@@ -58,20 +58,20 @@ class BackupConfig {
         (e) => e.name == json['destination'],
         orElse: () => BackupDestination.local,
       ),
-      sftpHost: json['sftpHost'] ?? '',
-      sftpPort: json['sftpPort'] ?? 22,
-      sftpUsername: json['sftpUsername'] ?? '',
-      sftpPassword: json['sftpPassword'] ?? '',
-      sftpPath: json['sftpPath'] ?? '',
-      webdavUrl: json['webdavUrl'] ?? '',
-      webdavUsername: json['webdavUsername'] ?? '',
-      webdavPassword: json['webdavPassword'] ?? '',
-      syncthingPath: json['syncthingPath'] ?? '',
-      autoBackupEnabled: json['autoBackupEnabled'] ?? false,
+      sftpHost: (json['sftpHost'] as String?) ?? '',
+      sftpPort: (json['sftpPort'] as int?) ?? 22,
+      sftpUsername: (json['sftpUsername'] as String?) ?? '',
+      sftpPassword: (json['sftpPassword'] as String?) ?? '',
+      sftpPath: (json['sftpPath'] as String?) ?? '',
+      webdavUrl: (json['webdavUrl'] as String?) ?? '',
+      webdavUsername: (json['webdavUsername'] as String?) ?? '',
+      webdavPassword: (json['webdavPassword'] as String?) ?? '',
+      syncthingPath: (json['syncthingPath'] as String?) ?? '',
+      autoBackupEnabled: (json['autoBackupEnabled'] as bool?) ?? false,
       lastBackupTime: json['lastBackupTime'] != null
-          ? DateTime.tryParse(json['lastBackupTime'])
+          ? DateTime.tryParse(json['lastBackupTime'] as String)
           : null,
-      lastBackupStatus: json['lastBackupStatus'],
+      lastBackupStatus: json['lastBackupStatus'] as String?,
     );
   }
 }
@@ -88,7 +88,7 @@ class BackupStorage {
     final raw = await _secureStorage.read(key: _backupConfigKey);
     if (raw == null) return const BackupConfig(destination: BackupDestination.local);
     try {
-      return BackupConfig.fromJson(jsonDecode(raw));
+      return BackupConfig.fromJson(jsonDecode(raw) as Map<String, dynamic>);
     } catch (_) {
       return const BackupConfig(destination: BackupDestination.local);
     }

@@ -86,7 +86,7 @@ class _DockerManagerScreenState extends State<DockerManagerScreen> {
   }
 
   Future<void> _showLogs(DockerContainer container) async {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: _backgroundColor,
       isScrollControlled: true,
@@ -241,7 +241,7 @@ class _ContainerCard extends StatelessWidget {
   });
 
   final DockerContainer container;
-  final Function(String) onAction;
+  final void Function(String) onAction;
   final VoidCallback onShowLogs;
 
   Color _getStateColor() {

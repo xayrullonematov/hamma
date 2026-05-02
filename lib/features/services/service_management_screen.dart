@@ -138,7 +138,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
       }
 
       // Wait for systemd to finish transition
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future<void>.delayed(const Duration(milliseconds: 800));
       
       await _fetchServices();
     } catch (e) {
@@ -281,7 +281,7 @@ class _ServiceCard extends StatelessWidget {
 
   final LinuxService service;
   final bool isTransitioning;
-  final Function(String) onAction;
+  final void Function(String) onAction;
 
   @override
   Widget build(BuildContext context) {
