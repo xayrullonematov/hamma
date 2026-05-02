@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800" font-family="JetBrains Mono, Menlo, Consolas, monospace">
+  <defs>
+    <style>
+      .sans { font-family: Inter, 'Segoe UI', sans-serif; }
+      .mono { font-family: 'JetBrains Mono', Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <!-- Scaffold -->
+  <rect width="1280" height="800" fill="#000000"/>
+
+  <!-- Top app bar -->
+  <rect x="0" y="0" width="1280" height="56" fill="#0A0A0A"/>
+  <line x1="0" y1="56" x2="1280" y2="56" stroke="#222222" stroke-width="1"/>
+
+  <!-- Brand mark -->
+  <rect x="16" y="14" width="28" height="28" fill="#000000" stroke="#4ECDC4" stroke-width="1.5"/>
+  <text x="30" y="34" font-size="18" font-weight="700" fill="#4ECDC4" text-anchor="middle" class="sans">H</text>
+  <text x="56" y="35" font-size="14" font-weight="700" fill="#FFFFFF" letter-spacing="2" class="sans">HAMMA</text>
+
+  <!-- Server breadcrumb -->
+  <text x="148" y="35" font-size="12" fill="#888888" class="mono">root@prod-edge-01</text>
+  <text x="304" y="35" font-size="12" fill="#444444" class="mono">·</text>
+  <text x="316" y="35" font-size="12" fill="#888888" class="mono">10.0.4.12:22</text>
+
+  <!-- Status pill (top right) -->
+  <rect x="980" y="16" width="186" height="24" fill="#000000" stroke="#00FF88" stroke-width="1"/>
+  <circle cx="994" cy="28" r="3" fill="#00FF88"/>
+  <text x="1004" y="32" font-size="11" font-weight="700" fill="#00FF88" letter-spacing="1" class="mono">LOCAL · ONLINE · GEMMA3</text>
+
+  <!-- Settings icon -->
+  <g transform="translate(1196,20)" stroke="#FFFFFF" stroke-width="1.4" fill="none">
+    <circle cx="10" cy="10" r="3"/>
+    <path d="M10 0v4 M10 16v4 M0 10h4 M16 10h4 M3 3l3 3 M14 14l3 3 M17 3l-3 3 M6 14l-3 3"/>
+  </g>
+  <g transform="translate(1232,20)" stroke="#FFFFFF" stroke-width="1.4" fill="none">
+    <circle cx="10" cy="10" r="6"/>
+    <path d="M10 5v5l3 2"/>
+  </g>
+
+  <!-- Tab strip -->
+  <rect x="0" y="56" width="1280" height="36" fill="#050505"/>
+  <line x1="0" y1="92" x2="1280" y2="92" stroke="#222222" stroke-width="1"/>
+
+  <!-- Tab 1 (inactive) -->
+  <rect x="0" y="56" width="220" height="36" fill="#050505"/>
+  <line x1="220" y1="56" x2="220" y2="92" stroke="#222222"/>
+  <text x="16" y="79" font-size="11" fill="#888888" letter-spacing="1" class="mono">staging-api</text>
+  <text x="200" y="79" font-size="14" fill="#444444" text-anchor="middle" class="mono">×</text>
+
+  <!-- Tab 2 (active) -->
+  <rect x="220" y="56" width="220" height="36" fill="#0A0A0A"/>
+  <rect x="220" y="56" width="220" height="2" fill="#4ECDC4"/>
+  <line x1="440" y1="56" x2="440" y2="92" stroke="#222222"/>
+  <text x="236" y="79" font-size="11" font-weight="700" fill="#FFFFFF" letter-spacing="1" class="mono">prod-edge-01</text>
+  <text x="420" y="79" font-size="14" fill="#FFFFFF" text-anchor="middle" class="mono">×</text>
+
+  <!-- Tab 3 (inactive) -->
+  <rect x="440" y="56" width="220" height="36" fill="#050505"/>
+  <line x1="660" y1="56" x2="660" y2="92" stroke="#222222"/>
+  <text x="456" y="79" font-size="11" fill="#888888" letter-spacing="1" class="mono">db-primary</text>
+  <text x="640" y="79" font-size="14" fill="#444444" text-anchor="middle" class="mono">×</text>
+
+  <!-- New tab + -->
+  <text x="678" y="80" font-size="18" fill="#888888" class="mono">+</text>
+
+  <!-- Terminal body -->
+  <rect x="0" y="92" width="1280" height="660" fill="#000000"/>
+
+  <!-- Terminal lines -->
+  <g class="mono" font-size="13">
+    <text x="16" y="124" fill="#888888">root@prod-edge-01:~# </text><text x="178" y="124" fill="#FFFFFF">systemctl status nginx</text>
+    <text x="16" y="148" fill="#FFFFFF">● nginx.service - A high performance web server and a reverse proxy</text>
+    <text x="16" y="166" fill="#FFFFFF">     Loaded: loaded (/lib/systemd/system/nginx.service; enabled; preset: enabled)</text>
+    <text x="16" y="184" fill="#FFFFFF">     Active: <tspan fill="#00FF88">active (running)</tspan> since Sat 2026-05-02 04:18:33 UTC; 2h 41min ago</text>
+    <text x="16" y="202" fill="#FFFFFF">       Docs: man:nginx(8)</text>
+    <text x="16" y="220" fill="#FFFFFF">    Process: 4218 ExecStartPre=/usr/sbin/nginx -t -q -g daemon on; (code=exited)</text>
+    <text x="16" y="238" fill="#FFFFFF">    Process: 4220 ExecStart=/usr/sbin/nginx -g daemon on; master_process on;</text>
+    <text x="16" y="256" fill="#FFFFFF">   Main PID: 4221 (nginx)</text>
+    <text x="16" y="274" fill="#FFFFFF">      Tasks: 5 (limit: 9395)</text>
+    <text x="16" y="292" fill="#FFFFFF">     Memory: 12.4M (peak: 14.1M)</text>
+    <text x="16" y="310" fill="#FFFFFF">        CPU: 86ms</text>
+    <text x="16" y="328" fill="#FFFFFF">     CGroup: /system.slice/nginx.service</text>
+    <text x="16" y="346" fill="#FFFFFF">             ├─4221 "nginx: master process /usr/sbin/nginx -g daemon on;"</text>
+    <text x="16" y="364" fill="#FFFFFF">             ├─4222 "nginx: worker process"</text>
+    <text x="16" y="382" fill="#FFFFFF">             └─4223 "nginx: worker process"</text>
+
+    <text x="16" y="416" fill="#888888">May 02 04:18:33 prod-edge-01 systemd[1]: Starting nginx.service...</text>
+    <text x="16" y="434" fill="#888888">May 02 04:18:33 prod-edge-01 systemd[1]: Started nginx.service.</text>
+    <text x="16" y="452" fill="#888888">May 02 06:42:11 prod-edge-01 nginx[4221]: 2026/05/02 06:42:11 [notice] worker</text>
+
+    <text x="16" y="486" fill="#888888">root@prod-edge-01:~# </text><text x="178" y="486" fill="#FFFFFF">df -h | head -6</text>
+    <text x="16" y="510" fill="#FFFFFF">Filesystem      Size  Used Avail Use% Mounted on</text>
+    <text x="16" y="528" fill="#FFFFFF">tmpfs           1.6G  2.0M  1.6G   1% /run</text>
+    <text x="16" y="546" fill="#FFFFFF">/dev/sda2       194G   84G  101G  46% /</text>
+    <text x="16" y="564" fill="#FFFFFF">tmpfs           7.8G  4.0K  7.8G   1% /dev/shm</text>
+    <text x="16" y="582" fill="#FFFFFF">tmpfs           5.0M     0  5.0M   0% /run/lock</text>
+    <text x="16" y="600" fill="#FFFFFF">/dev/sda1       512M   12M  501M   3% /boot/efi</text>
+
+    <text x="16" y="634" fill="#888888">root@prod-edge-01:~# </text><text x="178" y="634" fill="#FFFFFF">tail -f /var/log/nginx/access.log</text>
+    <text x="16" y="658" fill="#FFFFFF">198.51.100.42 - - [02/May/2026:06:58:14 +0000] "GET /api/v1/users HTTP/2" 200 1842</text>
+    <text x="16" y="676" fill="#FFFFFF">203.0.113.7  - - [02/May/2026:06:58:15 +0000] "POST /api/v1/login HTTP/2" 204 0</text>
+    <text x="16" y="694" fill="#FFFFFF">198.51.100.91 - - [02/May/2026:06:58:15 +0000] "GET /assets/app.js HTTP/2" 304 0</text>
+    <text x="16" y="712" fill="#888888">root@prod-edge-01:~# </text>
+    <rect x="178" y="700" width="9" height="14" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Custom keyboard row (mobile-style helper) -->
+  <rect x="0" y="752" width="1280" height="48" fill="#0A0A0A"/>
+  <line x1="0" y1="752" x2="1280" y2="752" stroke="#222222" stroke-width="1"/>
+  <g class="mono" font-size="11" font-weight="700" fill="#FFFFFF" letter-spacing="1">
+    <rect x="16"  y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="44"  y="781" text-anchor="middle">CTRL</text>
+    <rect x="80"  y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="108" y="781" text-anchor="middle">ALT</text>
+    <rect x="144" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="172" y="781" text-anchor="middle">TAB</text>
+    <rect x="208" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="236" y="781" text-anchor="middle">ESC</text>
+    <rect x="272" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="300" y="781" text-anchor="middle">~</text>
+    <rect x="336" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="364" y="781" text-anchor="middle">|</text>
+    <rect x="400" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="428" y="781" text-anchor="middle">/</text>
+    <rect x="464" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="492" y="781" text-anchor="middle">-</text>
+
+    <rect x="1024" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="1052" y="781" text-anchor="middle">←</text>
+    <rect x="1088" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="1116" y="781" text-anchor="middle">↑</text>
+    <rect x="1152" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="1180" y="781" text-anchor="middle">↓</text>
+    <rect x="1216" y="764" width="56" height="24" fill="#000000" stroke="#222222"/><text x="1244" y="781" text-anchor="middle">→</text>
+  </g>
+</svg>

@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800">
+  <defs>
+    <style>
+      .sans { font-family: Inter, 'Segoe UI', sans-serif; }
+      .mono { font-family: 'JetBrains Mono', Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="800" fill="#000000"/>
+
+  <!-- Top app bar -->
+  <rect x="0" y="0" width="1280" height="56" fill="#0A0A0A"/>
+  <line x1="0" y1="56" x2="1280" y2="56" stroke="#222222"/>
+
+  <text x="16" y="36" font-size="20" font-weight="700" fill="#FFFFFF" class="sans">←</text>
+  <text x="48" y="36" font-size="13" font-weight="700" fill="#FFFFFF" letter-spacing="3" class="sans">LOCAL MODELS</text>
+  <text x="208" y="36" font-size="12" fill="#888888" class="mono">ollama 0.4.7 · 127.0.0.1:11434</text>
+
+  <!-- Status pill -->
+  <rect x="980" y="16" width="186" height="24" fill="#000000" stroke="#00FF88"/>
+  <circle cx="994" cy="28" r="3" fill="#00FF88"/>
+  <text x="1004" y="32" font-size="11" font-weight="700" fill="#00FF88" letter-spacing="1" class="mono">LOCAL · ONLINE · GEMMA3</text>
+
+  <!-- Sub-header -->
+  <rect x="0" y="56" width="1280" height="44" fill="#050505"/>
+  <line x1="0" y1="100" x2="1280" y2="100" stroke="#222222"/>
+  <text x="16" y="84" font-size="11" font-weight="700" fill="#FFFFFF" letter-spacing="2" class="sans">INSTALLED</text>
+  <text x="106" y="84" font-size="11" fill="#888888" class="mono">3 models · 11.4 GB on disk</text>
+  <g class="sans" font-size="10" font-weight="700" letter-spacing="2">
+    <rect x="1108" y="64" width="76" height="28" fill="#000000" stroke="#FFFFFF"/><text x="1146" y="82" fill="#FFFFFF" text-anchor="middle">RELOAD</text>
+    <rect x="1192" y="64" width="76" height="28" fill="#FFFFFF"/><text x="1230" y="82" fill="#000000" text-anchor="middle">+ PULL</text>
+  </g>
+
+  <!-- Installed: model card 1 (default — gemma3) -->
+  <rect x="16" y="116" width="1248" height="84" fill="#0A0A0A" stroke="#4ECDC4"/>
+  <text x="36" y="146" font-size="18" font-weight="700" fill="#FFFFFF" class="sans">gemma3</text>
+  <rect x="138" y="130" width="64" height="20" fill="#000000" stroke="#FFB000"/>
+  <text x="170" y="144" font-size="10" font-weight="700" fill="#FFB000" letter-spacing="1" text-anchor="middle" class="sans">★ DEFAULT</text>
+  <rect x="208" y="130" width="64" height="20" fill="#000000" stroke="#00FF88"/>
+  <text x="240" y="144" font-size="10" font-weight="700" fill="#00FF88" letter-spacing="1" text-anchor="middle" class="sans">IN RAM</text>
+  <text x="36" y="172" font-size="11" fill="#888888" class="mono">7B params · Q4_K_M · pulled 2 days ago · context 8 K · multimodal</text>
+  <text x="36" y="190" font-size="11" fill="#888888" class="sans">Google's Gemma 3 — fast, well-tuned for code Q&amp;A. Good default on a laptop.</text>
+  <text x="1100" y="146" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="end" class="mono">4.8 GB</text>
+  <g class="sans" font-size="10" font-weight="700" letter-spacing="1">
+    <rect x="1116" y="160" width="64" height="24" fill="#000000" stroke="#FFFFFF"/><text x="1148" y="176" fill="#FFFFFF" text-anchor="middle">CHAT</text>
+    <rect x="1188" y="160" width="64" height="24" fill="#000000" stroke="#FF0000"/><text x="1220" y="176" fill="#FF0000" text-anchor="middle">DELETE</text>
+  </g>
+
+  <!-- Installed: model card 2 -->
+  <rect x="16" y="208" width="1248" height="84" fill="#0A0A0A" stroke="#222222"/>
+  <text x="36" y="238" font-size="18" font-weight="700" fill="#FFFFFF" class="sans">llama3.1</text>
+  <text x="36" y="264" font-size="11" fill="#888888" class="mono">8B params · Q4_K_M · pulled 6 days ago · context 128 K</text>
+  <text x="36" y="282" font-size="11" fill="#888888" class="sans">Meta's Llama 3.1 — strong general reasoning, larger context window than gemma3.</text>
+  <text x="1100" y="238" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="end" class="mono">4.7 GB</text>
+  <g class="sans" font-size="10" font-weight="700" letter-spacing="1">
+    <rect x="1044" y="252" width="64" height="24" fill="#000000" stroke="#FFB000"/><text x="1076" y="268" fill="#FFB000" text-anchor="middle">★ SET</text>
+    <rect x="1116" y="252" width="64" height="24" fill="#000000" stroke="#FFFFFF"/><text x="1148" y="268" fill="#FFFFFF" text-anchor="middle">CHAT</text>
+    <rect x="1188" y="252" width="64" height="24" fill="#000000" stroke="#FF0000"/><text x="1220" y="268" fill="#FF0000" text-anchor="middle">DELETE</text>
+  </g>
+
+  <!-- Installed: model card 3 -->
+  <rect x="16" y="300" width="1248" height="84" fill="#0A0A0A" stroke="#222222"/>
+  <text x="36" y="330" font-size="18" font-weight="700" fill="#FFFFFF" class="sans">qwen2.5-coder</text>
+  <text x="36" y="356" font-size="11" fill="#888888" class="mono">7B params · Q4_K_M · pulled 11 days ago · context 32 K · code-tuned</text>
+  <text x="36" y="374" font-size="11" fill="#888888" class="sans">Alibaba's Qwen 2.5 Coder — best-in-class for command synthesis and bash one-liners.</text>
+  <text x="1100" y="330" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="end" class="mono">1.9 GB</text>
+  <g class="sans" font-size="10" font-weight="700" letter-spacing="1">
+    <rect x="1044" y="344" width="64" height="24" fill="#000000" stroke="#FFB000"/><text x="1076" y="360" fill="#FFB000" text-anchor="middle">★ SET</text>
+    <rect x="1116" y="344" width="64" height="24" fill="#000000" stroke="#FFFFFF"/><text x="1148" y="360" fill="#FFFFFF" text-anchor="middle">CHAT</text>
+    <rect x="1188" y="344" width="64" height="24" fill="#000000" stroke="#FF0000"/><text x="1220" y="360" fill="#FF0000" text-anchor="middle">DELETE</text>
+  </g>
+
+  <!-- Catalog header -->
+  <rect x="0" y="400" width="1280" height="44" fill="#050505"/>
+  <line x1="0" y1="400" x2="1280" y2="400" stroke="#222222"/>
+  <line x1="0" y1="444" x2="1280" y2="444" stroke="#222222"/>
+  <text x="16" y="428" font-size="11" font-weight="700" fill="#FFFFFF" letter-spacing="2" class="sans">CURATED CATALOG</text>
+  <text x="172" y="428" font-size="11" fill="#888888" class="mono">curated by Hamma · all open-weight</text>
+
+  <!-- Catalog cards (3 across) -->
+  <g>
+    <!-- mistral -->
+    <rect x="16" y="460" width="408" height="148" fill="#0A0A0A" stroke="#222222"/>
+    <text x="36" y="490" font-size="16" font-weight="700" fill="#FFFFFF" class="sans">mistral</text>
+    <text x="36" y="514" font-size="11" fill="#888888" class="mono">7B · Q4_K_M · 4.1 GB</text>
+    <text x="36" y="540" font-size="11" fill="#888888" class="sans">Snappy general-purpose chat. Tight</text>
+    <text x="36" y="558" font-size="11" fill="#888888" class="sans">latency on 16 GB RAM machines.</text>
+    <rect x="36" y="574" width="100" height="22" fill="#000000" stroke="#00FF88"/>
+    <text x="86" y="589" font-size="10" font-weight="700" fill="#00FF88" letter-spacing="2" text-anchor="middle" class="sans">↓ PULL</text>
+
+    <!-- phi3 -->
+    <rect x="436" y="460" width="408" height="148" fill="#0A0A0A" stroke="#222222"/>
+    <text x="456" y="490" font-size="16" font-weight="700" fill="#FFFFFF" class="sans">phi3</text>
+    <text x="456" y="514" font-size="11" fill="#888888" class="mono">3.8B · Q4_K_M · 2.3 GB</text>
+    <text x="456" y="540" font-size="11" fill="#888888" class="sans">Microsoft's Phi-3 — small, surprisingly</text>
+    <text x="456" y="558" font-size="11" fill="#888888" class="sans">capable. Great for low-RAM devices.</text>
+    <rect x="456" y="574" width="100" height="22" fill="#000000" stroke="#00FF88"/>
+    <text x="506" y="589" font-size="10" font-weight="700" fill="#00FF88" letter-spacing="2" text-anchor="middle" class="sans">↓ PULL</text>
+
+    <!-- llama3.2 — currently pulling -->
+    <rect x="856" y="460" width="408" height="148" fill="#0A0A0A" stroke="#FFB000"/>
+    <text x="876" y="490" font-size="16" font-weight="700" fill="#FFFFFF" class="sans">llama3.2</text>
+    <text x="876" y="514" font-size="11" fill="#888888" class="mono">3B · Q4_K_M · 2.0 GB</text>
+    <text x="876" y="540" font-size="11" fill="#FFB000" font-weight="700" letter-spacing="1" class="mono">PULLING · 1.4 GB / 2.0 GB · 71%</text>
+    <!-- Progress bar -->
+    <rect x="876" y="554" width="368" height="6" fill="#222222"/>
+    <rect x="876" y="554" width="261" height="6" fill="#FFB000"/>
+    <text x="876" y="582" font-size="10" fill="#888888" class="mono">14.2 MB/s · 4 of 7 layers · ETA 41 s</text>
+    <rect x="876" y="588" width="120" height="22" fill="#000000" stroke="#FF0000"/>
+    <text x="936" y="603" font-size="10" font-weight="700" fill="#FF0000" letter-spacing="2" text-anchor="middle" class="sans">⨯ CANCEL</text>
+  </g>
+
+  <!-- Bottom strip: zero-trust pledge -->
+  <rect x="0" y="752" width="1280" height="48" fill="#0A0A0A" stroke="#222222"/>
+  <circle cx="20" cy="776" r="4" fill="#00FF88"/>
+  <text x="32" y="780" font-size="11" font-weight="700" fill="#00FF88" letter-spacing="2" class="mono">ZERO-TRUST PLEDGE</text>
+  <text x="206" y="780" font-size="11" fill="#888888" class="sans">Hamma will never let your prompts touch a non-loopback host. Runtime-guarded, test-enforced, audited.</text>
+  <text x="1140" y="780" font-size="11" fill="#888888" class="mono">Disk free: 101 GB</text>
+</svg>

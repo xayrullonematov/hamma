@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800">
+  <defs>
+    <style>
+      .sans { font-family: Inter, 'Segoe UI', sans-serif; }
+      .mono { font-family: 'JetBrains Mono', Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="800" fill="#000000"/>
+
+  <!-- Top app bar -->
+  <rect x="0" y="0" width="1280" height="56" fill="#0A0A0A"/>
+  <line x1="0" y1="56" x2="1280" y2="56" stroke="#222222"/>
+
+  <rect x="16" y="14" width="28" height="28" fill="#000000" stroke="#4ECDC4" stroke-width="1.5"/>
+  <text x="30" y="34" font-size="18" font-weight="700" fill="#4ECDC4" text-anchor="middle" class="sans">H</text>
+  <text x="56" y="36" font-size="13" font-weight="700" fill="#FFFFFF" letter-spacing="3" class="sans">SFTP</text>
+  <text x="116" y="36" font-size="12" fill="#888888" class="mono">root@prod-edge-01</text>
+
+  <!-- Status pill -->
+  <rect x="980" y="16" width="186" height="24" fill="#000000" stroke="#00FF88" stroke-width="1"/>
+  <circle cx="994" cy="28" r="3" fill="#00FF88"/>
+  <text x="1004" y="32" font-size="11" font-weight="700" fill="#00FF88" letter-spacing="1" class="mono">LOCAL · ONLINE · GEMMA3</text>
+
+  <!-- Breadcrumb / path bar -->
+  <rect x="0" y="56" width="1280" height="44" fill="#050505"/>
+  <line x1="0" y1="100" x2="1280" y2="100" stroke="#222222"/>
+  <text x="16" y="83" font-size="13" fill="#888888" class="mono">/</text>
+  <text x="28" y="83" font-size="13" fill="#FFFFFF" font-weight="700" class="mono">etc</text>
+  <text x="60" y="83" font-size="13" fill="#888888" class="mono">›</text>
+
+  <!-- Search box -->
+  <rect x="780" y="64" width="240" height="28" fill="#000000" stroke="#222222"/>
+  <text x="792" y="83" font-size="11" fill="#888888" class="sans">Filter…</text>
+
+  <!-- Toolbar buttons -->
+  <g class="sans" font-size="10" font-weight="700" letter-spacing="1">
+    <rect x="1032" y="64" width="68"  height="28" fill="#000000" stroke="#FFFFFF"/><text x="1066" y="82" fill="#FFFFFF" text-anchor="middle">UPLOAD</text>
+    <rect x="1108" y="64" width="68"  height="28" fill="#000000" stroke="#FFFFFF"/><text x="1142" y="82" fill="#FFFFFF" text-anchor="middle">NEW DIR</text>
+    <rect x="1184" y="64" width="68"  height="28" fill="#000000" stroke="#FFFFFF"/><text x="1218" y="82" fill="#FFFFFF" text-anchor="middle">RELOAD</text>
+  </g>
+
+  <!-- Column headers -->
+  <rect x="0" y="100" width="1280" height="32" fill="#000000"/>
+  <line x1="0" y1="132" x2="1280" y2="132" stroke="#222222"/>
+  <g class="sans" font-size="10" font-weight="700" fill="#888888" letter-spacing="2">
+    <text x="48"   y="120">NAME</text>
+    <text x="640"  y="120">SIZE</text>
+    <text x="780"  y="120">MODIFIED</text>
+    <text x="980"  y="120">PERMS</text>
+    <text x="1140" y="120">OWNER</text>
+  </g>
+
+  <!-- File rows -->
+  <g class="mono" font-size="12">
+    <!-- Up dir -->
+    <rect x="0" y="132" width="1280" height="36" fill="#0A0A0A"/>
+    <text x="20" y="155" fill="#888888">↑</text>
+    <text x="48" y="155" fill="#888888">..</text>
+
+    <!-- Folders -->
+    <g fill="#FFFFFF">
+      <rect x="0" y="168" width="1280" height="36" fill="#000000"/>
+      <text x="20" y="191" fill="#4ECDC4">▶</text>
+      <text x="48" y="191" font-weight="700">apt/</text>
+      <text x="640" y="191" fill="#888888">—</text>
+      <text x="780" y="191" fill="#888888">2026-04-30 22:14</text>
+      <text x="980" y="191" fill="#888888">drwxr-xr-x</text>
+      <text x="1140" y="191" fill="#888888">root</text>
+
+      <rect x="0" y="204" width="1280" height="36" fill="#0A0A0A"/>
+      <text x="20" y="227" fill="#4ECDC4">▶</text>
+      <text x="48" y="227" font-weight="700">nginx/</text>
+      <text x="640" y="227" fill="#888888">—</text>
+      <text x="780" y="227" fill="#888888">2026-05-01 09:02</text>
+      <text x="980" y="227" fill="#888888">drwxr-xr-x</text>
+      <text x="1140" y="227" fill="#888888">root</text>
+
+      <rect x="0" y="240" width="1280" height="36" fill="#000000"/>
+      <text x="20" y="263" fill="#4ECDC4">▶</text>
+      <text x="48" y="263" font-weight="700">ssh/</text>
+      <text x="640" y="263" fill="#888888">—</text>
+      <text x="780" y="263" fill="#888888">2026-04-22 18:41</text>
+      <text x="980" y="263" fill="#888888">drwxr-xr-x</text>
+      <text x="1140" y="263" fill="#888888">root</text>
+
+      <rect x="0" y="276" width="1280" height="36" fill="#0A0A0A"/>
+      <text x="20" y="299" fill="#4ECDC4">▶</text>
+      <text x="48" y="299" font-weight="700">systemd/</text>
+      <text x="640" y="299" fill="#888888">—</text>
+      <text x="780" y="299" fill="#888888">2026-04-30 22:14</text>
+      <text x="980" y="299" fill="#888888">drwxr-xr-x</text>
+      <text x="1140" y="299" fill="#888888">root</text>
+
+      <!-- Selected: ufw with row highlight -->
+      <rect x="0" y="312" width="1280" height="36" fill="#0A0A0A" stroke="#4ECDC4"/>
+      <text x="20" y="335" fill="#4ECDC4">▶</text>
+      <text x="48" y="335" font-weight="700">ufw/</text>
+      <text x="640" y="335" fill="#888888">—</text>
+      <text x="780" y="335" fill="#888888">2026-05-02 06:11</text>
+      <text x="980" y="335" fill="#888888">drwxr-x---</text>
+      <text x="1140" y="335" fill="#888888">root</text>
+    </g>
+
+    <!-- Files -->
+    <g>
+      <rect x="0" y="348" width="1280" height="36" fill="#000000"/>
+      <text x="20" y="371" fill="#888888">·</text>
+      <text x="48" y="371" fill="#FFFFFF">fstab</text>
+      <text x="640" y="371" fill="#FFFFFF">812 B</text>
+      <text x="780" y="371" fill="#888888">2026-04-22 18:39</text>
+      <text x="980" y="371" fill="#888888">-rw-r--r--</text>
+      <text x="1140" y="371" fill="#888888">root</text>
+
+      <rect x="0" y="384" width="1280" height="36" fill="#0A0A0A"/>
+      <text x="20" y="407" fill="#888888">·</text>
+      <text x="48" y="407" fill="#FFFFFF">hostname</text>
+      <text x="640" y="407" fill="#FFFFFF">14 B</text>
+      <text x="780" y="407" fill="#888888">2026-04-22 18:40</text>
+      <text x="980" y="407" fill="#888888">-rw-r--r--</text>
+      <text x="1140" y="407" fill="#888888">root</text>
+
+      <rect x="0" y="420" width="1280" height="36" fill="#000000"/>
+      <text x="20" y="443" fill="#888888">·</text>
+      <text x="48" y="443" fill="#FFFFFF">hosts</text>
+      <text x="640" y="443" fill="#FFFFFF">228 B</text>
+      <text x="780" y="443" fill="#888888">2026-04-22 18:40</text>
+      <text x="980" y="443" fill="#888888">-rw-r--r--</text>
+      <text x="1140" y="443" fill="#888888">root</text>
+
+      <rect x="0" y="456" width="1280" height="36" fill="#0A0A0A"/>
+      <text x="20" y="479" fill="#888888">·</text>
+      <text x="48" y="479" fill="#FFFFFF">os-release</text>
+      <text x="640" y="479" fill="#FFFFFF">386 B</text>
+      <text x="780" y="479" fill="#888888">2026-04-22 18:39</text>
+      <text x="980" y="479" fill="#888888">-rw-r--r--</text>
+      <text x="1140" y="479" fill="#888888">root</text>
+
+      <!-- restricted: passwd -->
+      <rect x="0" y="492" width="1280" height="36" fill="#000000"/>
+      <text x="20" y="515" fill="#888888">·</text>
+      <text x="48" y="515" fill="#FFFFFF">passwd</text>
+      <text x="640" y="515" fill="#FFFFFF">2.4 KB</text>
+      <text x="780" y="515" fill="#888888">2026-05-01 14:08</text>
+      <text x="980" y="515" fill="#888888">-rw-r--r--</text>
+      <text x="1140" y="515" fill="#888888">root</text>
+
+      <!-- shadow — locked, will trigger sudo -->
+      <rect x="0" y="528" width="1280" height="36" fill="#0A0A0A"/>
+      <text x="20" y="551" fill="#FF0000">⚠</text>
+      <text x="48" y="551" fill="#FFFFFF">shadow</text>
+      <text x="640" y="551" fill="#FFFFFF">1.6 KB</text>
+      <text x="780" y="551" fill="#888888">2026-05-01 14:08</text>
+      <text x="980" y="551" fill="#FF0000">-rw-r-----</text>
+      <text x="1140" y="551" fill="#888888">root</text>
+
+      <rect x="0" y="564" width="1280" height="36" fill="#000000"/>
+      <text x="20" y="587" fill="#888888">·</text>
+      <text x="48" y="587" fill="#FFFFFF">resolv.conf</text>
+      <text x="640" y="587" fill="#FFFFFF">142 B</text>
+      <text x="780" y="587" fill="#888888">2026-05-02 06:00</text>
+      <text x="980" y="587" fill="#888888">-rw-r--r--</text>
+      <text x="1140" y="587" fill="#888888">root</text>
+
+      <rect x="0" y="600" width="1280" height="36" fill="#0A0A0A"/>
+      <text x="20" y="623" fill="#888888">·</text>
+      <text x="48" y="623" fill="#FFFFFF">sudoers</text>
+      <text x="640" y="623" fill="#FFFFFF">748 B</text>
+      <text x="780" y="623" fill="#888888">2026-04-22 18:41</text>
+      <text x="980" y="623" fill="#FFB000">-r--r-----</text>
+      <text x="1140" y="623" fill="#888888">root</text>
+
+      <rect x="0" y="636" width="1280" height="36" fill="#000000"/>
+      <text x="20" y="659" fill="#888888">·</text>
+      <text x="48" y="659" fill="#FFFFFF">timezone</text>
+      <text x="640" y="659" fill="#FFFFFF">10 B</text>
+      <text x="780" y="659" fill="#888888">2026-04-22 18:39</text>
+      <text x="980" y="659" fill="#888888">-rw-r--r--</text>
+      <text x="1140" y="659" fill="#888888">root</text>
+    </g>
+  </g>
+
+  <!-- Bottom status bar with sudo elevation banner -->
+  <rect x="0" y="752" width="1280" height="48" fill="#0A0A0A"/>
+  <line x1="0" y1="752" x2="1280" y2="752" stroke="#222222"/>
+  <circle cx="20" cy="776" r="4" fill="#FFB000"/>
+  <text x="32" y="780" font-size="11" font-weight="700" fill="#FFB000" letter-spacing="1" class="mono">SUDO READY</text>
+  <text x="148" y="780" font-size="11" fill="#888888" class="mono">— Hamma will retry restricted reads with `sudo cat` on permission denied</text>
+  <text x="1140" y="780" font-size="11" fill="#888888" class="mono">37 items · 4.2 MB</text>
+</svg>

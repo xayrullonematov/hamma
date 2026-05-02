@@ -129,6 +129,9 @@ Flutter-native on Linux, Windows, macOS, Android, and iOS. Brutalist UI tuned fo
 <td width="50%" valign="top">
 
 ### 🧠 AI Copilot
+
+<img src="assets/screenshots/ai-copilot.png" alt="Hamma AI Copilot — streaming reply from local gemma3 model with safe / review / danger risk badges and zero-trust loopback footer" width="100%"/>
+
 ```diff
 + Local-first  (Ollama · LM Studio · llama.cpp · Jan)
 + Cloud option (OpenAI · Gemini · OpenRouter)
@@ -157,6 +160,9 @@ Flutter-native on Linux, Windows, macOS, Android, and iOS. Brutalist UI tuned fo
 <td width="50%" valign="top">
 
 ### 🖥️ Mobile-Optimized Terminal
+
+<img src="assets/screenshots/terminal.png" alt="Hamma terminal — multi-tab xterm session on prod-edge-01 with custom mobile keyboard row (Ctrl · Alt · Tab · Esc · ~ · | · arrows)" width="100%"/>
+
 ```diff
 + xterm.dart · 256-color · Unicode-safe
 + Custom keyboard row (Ctrl, Tab, arrows, ~, |)
@@ -169,6 +175,9 @@ Flutter-native on Linux, Windows, macOS, Android, and iOS. Brutalist UI tuned fo
 <td width="50%" valign="top">
 
 ### 📁 Visual SFTP
+
+<img src="assets/screenshots/sftp.png" alt="Hamma SFTP browser at /etc — directory listing with permissions, sudo-ready footer for restricted reads like /etc/shadow" width="100%"/>
+
 ```diff
 + Browse, edit, upload, download, chmod
 + In-app editor with syntax highlighting
@@ -183,6 +192,9 @@ Flutter-native on Linux, Windows, macOS, Android, and iOS. Brutalist UI tuned fo
 <td width="50%" valign="top">
 
 ### 🐳 Docker & Service Control
+
+<img src="assets/screenshots/docker.png" alt="Hamma Docker manager — container list with live docker logs -f panel and an AI Watch insight banner flagging an upstream connection refused warning" width="100%"/>
+
 ```diff
 + List / start / stop / restart containers
 + Live `docker logs -f` streaming
@@ -206,6 +218,43 @@ Flutter-native on Linux, Windows, macOS, Android, and iOS. Brutalist UI tuned fo
 </td>
 </tr>
 </table>
+
+<br/>
+
+---
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ SCREENSHOTS GALLERY ━━━━━━━━━━━━━━━━━━━━ -->
+
+## 📸 Screenshots
+
+<div align="center">
+
+<table>
+<tr>
+<td width="50%" align="center">
+<img src="assets/screenshots/terminal.png" alt="Multi-tab terminal" width="100%"/>
+<br/><sub><b>Terminal</b> — multi-tab session, custom mobile keyboard row</sub>
+</td>
+<td width="50%" align="center">
+<img src="assets/screenshots/ai-copilot.png" alt="AI Copilot streaming" width="100%"/>
+<br/><sub><b>AI Copilot</b> — streaming local model with risk-scored commands</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<img src="assets/screenshots/sftp.png" alt="SFTP browser" width="100%"/>
+<br/><sub><b>SFTP</b> — visual file manager with automatic sudo fallback</sub>
+</td>
+<td width="50%" align="center">
+<img src="assets/screenshots/docker.png" alt="Docker manager" width="100%"/>
+<br/><sub><b>Docker</b> — container list, live logs, AI Watch anomaly banner</sub>
+</td>
+</tr>
+</table>
+
+<sub>Renders use the live brutalist design system — palette, typography, and component vocabulary lifted directly from <code>lib/core/theme/app_colors.dart</code> and <code>lib/features/ai_assistant/widgets/local_engine_status_pill.dart</code>. Live runtime captures land alongside the next public-launch milestone.</sub>
+
+</div>
 
 <br/>
 
@@ -283,6 +332,10 @@ flowchart LR
 <img src="https://img.shields.io/badge/+-LLAMA.CPP-FF6B6B?style=for-the-badge" />
 <img src="https://img.shields.io/badge/+-JAN-3B82F6?style=for-the-badge" />
 
+<br/><br/>
+
+<img src="assets/screenshots/status-pills.png" alt="Local engine status pill — all four states: ONLINE · GEMMA3 (green), LOADING MODEL (amber), CONNECTING (amber), OFFLINE (red with retry)" width="100%"/>
+
 </div>
 
 <br/>
@@ -296,6 +349,16 @@ flowchart LR
 | 3-step onboarding (Install · Pull · Done)                 | ✅ OS-aware     |
 | Loopback-only enforcement                                 | ✅ Runtime + tests |
 
+<div align="center">
+
+<img src="assets/screenshots/local-models.png" alt="Local Models manager — installed models (gemma3 default, llama3.1, qwen2.5-coder) with curated catalog and an in-flight pull progress bar" width="100%"/>
+
+<sub><b>Local Models manager</b> — pull, swap default, and delete models from inside Hamma. No CLI required.</sub>
+
+</div>
+
+<br/>
+
 **Quick start with Ollama:**
 
 ```bash
@@ -308,6 +371,16 @@ ollama pull gemma3
 # 3. Open Hamma → Settings → AI → Local AI → FIRST-RUN SETUP
 #    You'll be chatting in under 60 seconds.
 ```
+
+<br/>
+
+<div align="center">
+
+<img src="assets/screenshots/onboarding.png" alt="First-run setup wizard — 3-step flow (Install · Pull Model · Done) with OS-aware command snippets and zero-trust guarantee callout" width="100%"/>
+
+<sub><b>First-run setup</b> — OS-aware 3-step onboarding: install the engine, pull a starter model, done.</sub>
+
+</div>
 
 <br/>
 

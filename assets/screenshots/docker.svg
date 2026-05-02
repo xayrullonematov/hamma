@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800">
+  <defs>
+    <style>
+      .sans { font-family: Inter, 'Segoe UI', sans-serif; }
+      .mono { font-family: 'JetBrains Mono', Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="800" fill="#000000"/>
+
+  <!-- Top app bar -->
+  <rect x="0" y="0" width="1280" height="56" fill="#0A0A0A"/>
+  <line x1="0" y1="56" x2="1280" y2="56" stroke="#222222"/>
+
+  <rect x="16" y="14" width="28" height="28" fill="#000000" stroke="#4ECDC4" stroke-width="1.5"/>
+  <text x="30" y="34" font-size="18" font-weight="700" fill="#4ECDC4" text-anchor="middle" class="sans">H</text>
+  <text x="56" y="36" font-size="13" font-weight="700" fill="#FFFFFF" letter-spacing="3" class="sans">DOCKER</text>
+  <text x="138" y="36" font-size="12" fill="#888888" class="mono">root@prod-edge-01 · v27.0.3</text>
+
+  <!-- Status pill -->
+  <rect x="980" y="16" width="186" height="24" fill="#000000" stroke="#00FF88"/>
+  <circle cx="994" cy="28" r="3" fill="#00FF88"/>
+  <text x="1004" y="32" font-size="11" font-weight="700" fill="#00FF88" letter-spacing="1" class="mono">LOCAL · ONLINE · GEMMA3</text>
+
+  <!-- Tab strip -->
+  <rect x="0" y="56" width="1280" height="40" fill="#050505"/>
+  <line x1="0" y1="96" x2="1280" y2="96" stroke="#222222"/>
+  <g class="sans" font-size="11" font-weight="700" letter-spacing="2">
+    <text x="24"  y="82" fill="#FFFFFF">CONTAINERS</text>
+    <rect x="24"  y="92" width="100" height="2" fill="#4ECDC4"/>
+    <text x="144" y="82" fill="#888888">IMAGES</text>
+    <text x="232" y="82" fill="#888888">VOLUMES</text>
+    <text x="332" y="82" fill="#888888">NETWORKS</text>
+  </g>
+
+  <!-- Action buttons (right) -->
+  <g class="sans" font-size="10" font-weight="700" letter-spacing="2">
+    <rect x="1024" y="62" width="76" height="28" fill="#000000" stroke="#FFFFFF"/><text x="1062" y="80" fill="#FFFFFF" text-anchor="middle">PRUNE</text>
+    <rect x="1108" y="62" width="76" height="28" fill="#000000" stroke="#FFFFFF"/><text x="1146" y="80" fill="#FFFFFF" text-anchor="middle">RELOAD</text>
+    <rect x="1192" y="62" width="76" height="28" fill="#FFFFFF"/><text x="1230" y="80" fill="#000000" text-anchor="middle">+ RUN</text>
+  </g>
+
+  <!-- Container table column headers -->
+  <rect x="0" y="96" width="1280" height="32" fill="#000000"/>
+  <line x1="0" y1="128" x2="1280" y2="128" stroke="#222222"/>
+  <g class="sans" font-size="10" font-weight="700" fill="#888888" letter-spacing="2">
+    <text x="20"   y="116">STATE</text>
+    <text x="140"  y="116">NAME</text>
+    <text x="320"  y="116">IMAGE</text>
+    <text x="640"  y="116">PORTS</text>
+    <text x="840"  y="116">UP</text>
+    <text x="940"  y="116">CPU</text>
+    <text x="1020" y="116">MEM</text>
+    <text x="1140" y="116">ACTIONS</text>
+  </g>
+
+  <!-- Container rows -->
+  <g class="mono" font-size="12">
+    <!-- Selected row -->
+    <rect x="0" y="128" width="1280" height="40" fill="#0A0A0A" stroke="#4ECDC4"/>
+    <circle cx="32" cy="148" r="5" fill="#00FF88"/>
+    <text x="48" y="152" fill="#00FF88" font-weight="700" letter-spacing="1" font-size="10" class="sans">RUNNING</text>
+    <text x="140" y="152" fill="#FFFFFF" font-weight="700">edge-nginx</text>
+    <text x="320" y="152" fill="#FFFFFF">nginx:1.27-alpine</text>
+    <text x="640" y="152" fill="#FFFFFF">0.0.0.0:80→80, 443→443</text>
+    <text x="840" y="152" fill="#FFFFFF">2h 41m</text>
+    <text x="940" y="152" fill="#FFFFFF">0.4%</text>
+    <text x="1020" y="152" fill="#FFFFFF">12.4M</text>
+    <g class="sans" font-size="10" font-weight="700" fill="#FFFFFF" letter-spacing="1">
+      <rect x="1140" y="138" width="32" height="22" fill="#000000" stroke="#FFFFFF"/><text x="1156" y="153" text-anchor="middle">▶</text>
+      <rect x="1176" y="138" width="32" height="22" fill="#000000" stroke="#FFFFFF"/><text x="1192" y="153" text-anchor="middle">↻</text>
+      <rect x="1212" y="138" width="32" height="22" fill="#000000" stroke="#FF0000"/><text x="1228" y="153" text-anchor="middle" fill="#FF0000">■</text>
+    </g>
+
+    <rect x="0" y="168" width="1280" height="40" fill="#000000"/>
+    <circle cx="32" cy="188" r="5" fill="#00FF88"/>
+    <text x="48" y="192" fill="#00FF88" font-weight="700" letter-spacing="1" font-size="10" class="sans">RUNNING</text>
+    <text x="140" y="192" fill="#FFFFFF">api-gunicorn</text>
+    <text x="320" y="192" fill="#FFFFFF">company/api:2026.05.01</text>
+    <text x="640" y="192" fill="#888888">127.0.0.1:8001→8001</text>
+    <text x="840" y="192" fill="#FFFFFF">52m</text>
+    <text x="940" y="192" fill="#FFFFFF">3.1%</text>
+    <text x="1020" y="192" fill="#FFFFFF">186M</text>
+
+    <rect x="0" y="208" width="1280" height="40" fill="#0A0A0A"/>
+    <circle cx="32" cy="228" r="5" fill="#00FF88"/>
+    <text x="48" y="232" fill="#00FF88" font-weight="700" letter-spacing="1" font-size="10" class="sans">RUNNING</text>
+    <text x="140" y="232" fill="#FFFFFF">postgres-15</text>
+    <text x="320" y="232" fill="#FFFFFF">postgres:15.7-bookworm</text>
+    <text x="640" y="232" fill="#888888">127.0.0.1:5432→5432</text>
+    <text x="840" y="232" fill="#FFFFFF">7d 02h</text>
+    <text x="940" y="232" fill="#FFFFFF">1.2%</text>
+    <text x="1020" y="232" fill="#FFFFFF">412M</text>
+
+    <rect x="0" y="248" width="1280" height="40" fill="#000000"/>
+    <circle cx="32" cy="268" r="5" fill="#00FF88"/>
+    <text x="48" y="272" fill="#00FF88" font-weight="700" letter-spacing="1" font-size="10" class="sans">RUNNING</text>
+    <text x="140" y="272" fill="#FFFFFF">redis-cache</text>
+    <text x="320" y="272" fill="#FFFFFF">redis:7.4-alpine</text>
+    <text x="640" y="272" fill="#888888">127.0.0.1:6379→6379</text>
+    <text x="840" y="272" fill="#FFFFFF">7d 02h</text>
+    <text x="940" y="272" fill="#FFFFFF">0.1%</text>
+    <text x="1020" y="272" fill="#FFFFFF">8.4M</text>
+
+    <rect x="0" y="288" width="1280" height="40" fill="#0A0A0A"/>
+    <circle cx="32" cy="308" r="5" fill="#FFB000"/>
+    <text x="48" y="312" fill="#FFB000" font-weight="700" letter-spacing="1" font-size="10" class="sans">RESTART</text>
+    <text x="140" y="312" fill="#FFFFFF">grafana</text>
+    <text x="320" y="312" fill="#FFFFFF">grafana/grafana:11.1.0</text>
+    <text x="640" y="312" fill="#FFFFFF">0.0.0.0:3000→3000</text>
+    <text x="840" y="312" fill="#FFFFFF">14s</text>
+    <text x="940" y="312" fill="#FFFFFF">—</text>
+    <text x="1020" y="312" fill="#FFFFFF">—</text>
+
+    <rect x="0" y="328" width="1280" height="40" fill="#000000"/>
+    <circle cx="32" cy="348" r="5" fill="#FF0000"/>
+    <text x="48" y="352" fill="#FF0000" font-weight="700" letter-spacing="1" font-size="10" class="sans">EXITED</text>
+    <text x="140" y="352" fill="#888888">old-jobs-worker</text>
+    <text x="320" y="352" fill="#888888">company/jobs:2026.04.18</text>
+    <text x="640" y="352" fill="#888888">—</text>
+    <text x="840" y="352" fill="#888888">5d</text>
+    <text x="940" y="352" fill="#888888">—</text>
+    <text x="1020" y="352" fill="#888888">—</text>
+  </g>
+
+  <!-- Logs panel header -->
+  <rect x="0" y="384" width="1280" height="40" fill="#050505"/>
+  <line x1="0" y1="424" x2="1280" y2="424" stroke="#222222"/>
+  <text x="20" y="410" font-size="11" font-weight="700" fill="#FFFFFF" letter-spacing="2" class="sans">LIVE LOGS</text>
+  <text x="120" y="410" font-size="11" fill="#888888" class="mono">edge-nginx · docker logs -f --tail 200</text>
+  <g class="sans" font-size="10" font-weight="700" fill="#FFFFFF" letter-spacing="1">
+    <rect x="996"  y="392" width="80" height="24" fill="#000000" stroke="#FFFFFF"/><text x="1036" y="408" text-anchor="middle">FOLLOW</text>
+    <rect x="1084" y="392" width="80" height="24" fill="#000000" stroke="#FFFFFF"/><text x="1124" y="408" text-anchor="middle">FILTER</text>
+    <rect x="1172" y="392" width="80" height="24" fill="#000000" stroke="#00FF88"/><text x="1212" y="408" text-anchor="middle" fill="#00FF88">AI · WATCH</text>
+  </g>
+
+  <!-- Logs body -->
+  <rect x="0" y="424" width="1280" height="376" fill="#000000"/>
+  <g class="mono" font-size="12">
+    <text x="20" y="448" fill="#888888">2026-05-02T06:58:14.812Z </text><text x="244" y="448" fill="#FFFFFF">198.51.100.42 - "GET /api/v1/users HTTP/2.0" 200 1842 "-" "Mozilla/5.0"</text>
+    <text x="20" y="466" fill="#888888">2026-05-02T06:58:15.014Z </text><text x="244" y="466" fill="#FFFFFF">203.0.113.7  - "POST /api/v1/login HTTP/2.0" 204 0    "-" "HammaApp/1.1.0"</text>
+    <text x="20" y="484" fill="#888888">2026-05-02T06:58:15.401Z </text><text x="244" y="484" fill="#FFFFFF">198.51.100.91 - "GET /assets/app.js HTTP/2.0" 304 0    "-" "Mozilla/5.0"</text>
+    <text x="20" y="502" fill="#888888">2026-05-02T06:58:16.119Z </text><text x="244" y="502" fill="#FFFFFF">198.51.100.42 - "GET /api/v1/health HTTP/2.0" 200 12   "-" "kube-probe/1.30"</text>
+    <text x="20" y="520" fill="#888888">2026-05-02T06:58:16.802Z </text><text x="244" y="520" fill="#FFB000">2026/05/02 06:58:16 [warn] worker_connections exceed open file resource limit</text>
+    <text x="20" y="538" fill="#888888">2026-05-02T06:58:17.015Z </text><text x="244" y="538" fill="#FFFFFF">203.0.113.18 - "GET /api/v1/orders HTTP/2.0" 200 8421 "-" "HammaApp/1.1.0"</text>
+    <text x="20" y="556" fill="#888888">2026-05-02T06:58:17.402Z </text><text x="244" y="556" fill="#FF0000">2026/05/02 06:58:17 [error] connect() failed (111: Connection refused) upstream</text>
+    <text x="20" y="574" fill="#888888">2026-05-02T06:58:17.404Z </text><text x="244" y="574" fill="#FFFFFF">198.51.100.42 - "GET /api/v1/me HTTP/2.0" 502 568  "-" "HammaApp/1.1.0"</text>
+    <text x="20" y="592" fill="#888888">2026-05-02T06:58:18.001Z </text><text x="244" y="592" fill="#FFFFFF">203.0.113.7  - "POST /api/v1/sync HTTP/2.0" 200 24   "-" "HammaApp/1.1.0"</text>
+    <text x="20" y="610" fill="#888888">2026-05-02T06:58:18.412Z </text><text x="244" y="610" fill="#FFFFFF">198.51.100.91 - "GET /api/v1/feed HTTP/2.0" 200 4212 "-" "Mozilla/5.0"</text>
+    <text x="20" y="628" fill="#888888">2026-05-02T06:58:19.144Z </text><text x="244" y="628" fill="#FFFFFF">203.0.113.18 - "GET /api/v1/me HTTP/2.0" 200 612  "-" "HammaApp/1.1.0"</text>
+    <text x="20" y="646" fill="#888888">2026-05-02T06:58:19.501Z </text><text x="244" y="646" fill="#FFFFFF">198.51.100.42 - "GET /assets/icons.svg HTTP/2.0" 200 14821 "-" "Mozilla/5.0"</text>
+  </g>
+
+  <!-- AI insight banner at bottom -->
+  <rect x="0" y="700" width="1280" height="80" fill="#0A0A0A" stroke="#00FF88"/>
+  <text x="20" y="724" font-size="11" font-weight="700" fill="#00FF88" letter-spacing="2" class="sans">AI · WATCH</text>
+  <rect x="100" y="710" width="80" height="20" fill="#000000" stroke="#FFB000"/>
+  <text x="140" y="725" font-size="10" font-weight="700" fill="#FFB000" letter-spacing="1" text-anchor="middle" class="sans">WARN</text>
+  <text x="200" y="724" font-size="11" font-weight="700" fill="#FFFFFF" class="sans">1 upstream connection refused (api-gunicorn) and a worker_connections warning in the last 30 s.</text>
+  <text x="20" y="746" font-size="11" fill="#888888" class="sans">Suggested next: </text>
+  <text x="116" y="746" font-size="11" font-weight="700" fill="#FFFFFF" class="mono">systemctl status gunicorn --no-pager</text>
+  <rect x="380" y="734" width="78" height="18" fill="#000000" stroke="#00FF88"/>
+  <text x="419" y="747" font-size="10" font-weight="700" fill="#00FF88" letter-spacing="1" text-anchor="middle" class="mono">SAFE · RUN</text>
+  <rect x="468" y="734" width="78" height="18" fill="#000000" stroke="#888888"/>
+  <text x="507" y="747" font-size="10" font-weight="700" fill="#888888" letter-spacing="1" text-anchor="middle" class="sans">MUTE 5m</text>
+  <text x="20" y="768" font-size="10" fill="#888888" class="mono">Local model: gemma3 · 50-line batch · analyzed at 06:58:19 · loopback only</text>
+</svg>
