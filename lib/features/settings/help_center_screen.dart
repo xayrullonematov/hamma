@@ -44,6 +44,44 @@ The AI Copilot helps you manage servers without writing complex commands:
 '''
       },
       {
+        'title': 'Local AI (Zero Trust)',
+        'markdown': '''
+# Local AI — Zero Trust mode
+Hamma can run the AI assistant entirely on your own machine. **No API key,
+no cloud, no traffic leaves localhost.**
+
+## Quick start
+1. Install a local engine — Ollama is the easiest:
+   - macOS / Linux: `curl -fsSL https://ollama.com/install.sh | sh`
+   - Windows: `winget install Ollama.Ollama`
+2. Pull a model: `ollama pull gemma3` (≈5 GB).
+3. In **Settings → AI Configuration**, choose **Local AI**.
+4. Tap **DETECT ENGINES** — Hamma scans the usual ports (Ollama 11434,
+   LM Studio 1234, llama.cpp 8080, Jan 1337) and pre-fills the endpoint.
+5. Tap **MANAGE MODELS** to install / delete / set the default model
+   without leaving the app.
+
+## Brand-new? Use the wizard
+Tap **FIRST-RUN SETUP** in the Local AI section for a 3-step walkthrough
+(Install → Pull → Detect). The setup screen copies OS-aware install
+snippets to your clipboard.
+
+## Streaming
+With a local engine, the assistant streams tokens as the model produces
+them — you'll see the reply appear word-by-word.
+
+## Live status
+The AI screens show a **LOCAL · ONLINE / OFFLINE** pill. Tapping the
+pill while it's offline retries the connection.
+
+## Supported engines
+- **Ollama** — full integration (model listing, pulling, deleting,
+  streaming). Recommended.
+- **LM Studio**, **llama.cpp server**, **Jan** — chat works (via the
+  OpenAI-compatible endpoint), but the model manager is Ollama-only.
+'''
+      },
+      {
         'title': 'Fleet Monitoring',
         'markdown': '''
 # Fleet Monitoring

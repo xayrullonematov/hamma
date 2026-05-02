@@ -51,21 +51,39 @@ flutter build linux --debug
 
 ## Local AI Provider (Zero-Trust Mode)
 
-Hamma supports a fully offline, zero-trust AI mode via any OpenAI-compatible local inference engine (Ollama, LM Studio, llama.cpp).
+Hamma supports a fully offline, zero-trust AI mode via any OpenAI-compatible local inference engine (Ollama, LM Studio, llama.cpp, Jan). The integration is first-class: streaming, model management, engine auto-detection, health monitoring, and onboarding all live in-app.
 
 ### Architecture
-- `AiProvider.local` — new enum value in `lib/core/ai/ai_provider.dart`; `requiresApiKey = false`
-- `AiApiConfig.forProvider()` — builds a config pointing to `{localEndpoint}/v1` with no Authorization header
-- `AiCommandService` — routes `local` through `_chatWithOpenAi()` (Ollama is OpenAI-compatible); 5s connection timeout, 120s response timeout
-- `AiSettings` — stores `localEndpoint` (default `http://localhost:11434`) and `localModel` (default `gemma3`) in secure storage
-- `AiCopilotSheet` — `_hasActiveApiKey` returns `true` for no-key providers; fast-paths `_loadActiveProviderState` to skip key loading
-- Settings UI — brutalist "ZERO TRUST / OFFLINE CAPABLE" badge, endpoint URL field, model name field, "TEST CONNECTION" button with real-time status
+
+Pure-Dart core (no Flutter dependency, fully unit-tested):
+
+- `lib/core/ai/ai_provider.dart` — `AiProvider.local` enum; `requiresApiKey = false`
+- `lib/core/ai/ai_command_service.dart` — routes `local` through OpenAI-compatible `_chatWithOpenAi()`; **`streamChatResponse()`** uses SSE (`stream: true`) for real token-by-token output; non-local providers degrade to a single-emit stream so UI code is uniform; 5s connect / 120s response timeout
+- `lib/core/ai/ollama_client.dart` — native typed client for the Ollama HTTP API: `version()`, `listModels()`, `listLoadedModels()` (`/api/ps`), `deleteModel()`, `pullModel()` (NDJSON progress stream), `streamChat()` (NDJSON delta stream). Pure Dart, injectable `httpClientFactory`.
+- `lib/core/ai/local_engine_detector.dart` — probes `127.0.0.1` on the well-known ports of Ollama (11434), LM Studio (1234), llama.cpp server (8080), Jan (1337) in parallel; identifies via `/api/version` (Ollama) or `/v1/models` (others)
+- `lib/core/ai/local_engine_health_monitor.dart` — single-timer broadcast `Stream<LocalEngineHealth>` (loading / online / offline) backed by `OllamaClient.version()` + `listLoadedModels()`; default 15 s interval; `probeNow()` for retry buttons
+
+UI layer:
+
+- `lib/features/ai_assistant/widgets/local_engine_status_pill.dart` — brutalist pill (`LOCAL · ONLINE/CHECKING/OFFLINE`) that subscribes to a health monitor; tap-to-retry when offline; `#00FF88` when online
+- `lib/features/ai_assistant/ai_assistant_screen.dart` & `ai_copilot_sheet.dart` — both use `streamChatResponse()` so local-provider replies type out token-by-token. A placeholder bubble is inserted on send and grown as deltas arrive; if the stream errors before any tokens, the placeholder is dropped and a system error is shown instead.
+- `lib/features/settings/local_models_screen.dart` — in-app model manager: lists installed models (`/api/tags`), highlights ones currently loaded in RAM (`/api/ps`), shows a curated catalog (Gemma, Llama, Mistral, Phi, Qwen-Coder, DeepSeek-Coder, TinyLlama), supports deletion with a confirm dialog, and a streaming pull bottom-sheet with live byte progress and cancel
+- `lib/features/settings/local_ai_onboarding_screen.dart` — 3-step wizard (Install · Pull · Done) with OS-aware install snippets (curl on Linux/macOS, winget on Windows); copies snippets to clipboard; final step runs `LocalEngineDetector.detect()` and returns the chosen endpoint to Settings
+- `lib/features/settings/settings_screen.dart` — Local AI section now exposes **DETECT ENGINES** (auto-fills endpoint), **MANAGE MODELS**, and **FIRST-RUN SETUP** buttons next to the existing **TEST CONNECTION** button. Detected engines render as selectable cards under the buttons.
+
+### Zero-trust guarantees
+
+The `test/zero_trust_network_guard_test.dart` suite enforces — at the unit-test level — that every local-AI component (`OllamaClient`, `LocalEngineDetector`, `LocalEngineHealthMonitor`, `AiCommandService.streamChatResponse(local)`) only ever dials loopback (`127.0.0.0/8`, `localhost`, or `::1`). A recording `HttpClient` intercepts every URL and the test fails if any non-loopback host shows up.
 
 ### Usage
+
+**First-time:** Settings → AI Configuration → Local AI → tap **FIRST-RUN SETUP** for a guided 3-step install/pull/detect flow.
+
+**Manual:**
 1. In Settings, select "Local AI" as the provider
-2. Set engine endpoint (default: `http://localhost:11434`)
-3. Set model name matching `ollama list` output (e.g., `gemma3`, `llama3`, `mistral`)
-4. Click "TEST CONNECTION" to verify Ollama is running
+2. Tap **DETECT ENGINES** to scan localhost (or set the endpoint manually; default `http://localhost:11434`)
+3. Tap **MANAGE MODELS** to pull or pick a default (or type a tag matching `ollama list`)
+4. Tap **TEST CONNECTION** to verify
 5. Save — no API key needed
 
 ### Quick start (Ollama)

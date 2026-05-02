@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/ai/ai_provider.dart';
+import '../../core/ai/local_engine_detector.dart';
 import '../../core/background/background_keepalive.dart';
 import '../../core/backup/backup_service.dart';
 import '../../core/storage/api_key_storage.dart';
@@ -15,6 +16,8 @@ import '../../core/storage/backup_storage.dart';
 import '../security/app_lock_screen.dart';
 import '../../core/theme/app_colors.dart';
 import 'help_center_screen.dart';
+import 'local_ai_onboarding_screen.dart';
+import 'local_models_screen.dart';
 import 'widgets/settings_section_card.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -62,6 +65,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isTestingLocalConnection = false;
   String? _localConnectionTestResult;
   bool? _localConnectionTestSuccess;
+  bool _isDetectingLocalEngines = false;
+  List<DetectedEngine> _detectedLocalEngines = const [];
+  String? _detectError;
   final AppLockStorage _appLockStorage = AppLockStorage();
   final BackupService _backupService = BackupService();
   final ApiKeyStorage _apiKeyStorage = ApiKeyStorage();
@@ -628,6 +634,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _detectLocalEngines() async {
+    setState(() {
+      _isDetectingLocalEngines = true;
+      _detectError = null;
+      _detectedLocalEngines = const [];
+    });
+    try {
+      final engines = await LocalEngineDetector().detect();
+      if (!mounted) return;
+      setState(() {
+        _detectedLocalEngines = engines;
+        _detectError = engines.isEmpty
+            ? 'No engines responded on localhost. Is Ollama / LM Studio running?'
+            : null;
+      });
+      // Auto-fill the endpoint with the first detected engine if the
+      // current value is still the default and we found something usable.
+      if (engines.isNotEmpty &&
+          _localEndpointController.text.trim() == 'http://localhost:11434') {
+        _localEndpointController.text = engines.first.endpoint;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _detectError = e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _isDetectingLocalEngines = false);
+      }
+    }
+  }
+
+  Future<void> _openLocalModelManager() async {
+    final endpoint = _localEndpointController.text.trim().isEmpty
+        ? 'http://localhost:11434'
+        : _localEndpointController.text.trim();
+    final newDefault = await Navigator.of(context).push<String?>(
+      MaterialPageRoute(
+        builder: (_) => LocalModelsScreen(
+          endpoint: endpoint,
+          currentDefault: _localModelController.text.trim().isEmpty
+              ? null
+              : _localModelController.text.trim(),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (newDefault != null && newDefault.isNotEmpty) {
+      setState(() {
+        _localModelController.text = newDefault;
+      });
+    }
+  }
+
+  Future<void> _runLocalAiOnboarding() async {
+    final endpoint = await Navigator.of(context).push<String?>(
+      MaterialPageRoute(
+        builder: (_) => const LocalAiOnboardingScreen(),
+      ),
+    );
+    if (!mounted) return;
+    if (endpoint != null && endpoint.isNotEmpty) {
+      setState(() {
+        _localEndpointController.text = endpoint;
+      });
+    }
+  }
+
   Future<void> _testLocalConnection() async {
     final endpoint = _localEndpointController.text.trim().isEmpty
         ? 'http://localhost:11434'
@@ -939,6 +1012,176 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 fontSize: 12,
                 color: testColor,
                 letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: (_isBusy || _isDetectingLocalEngines)
+                    ? null
+                    : _detectLocalEngines,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  side: const BorderSide(color: Color(0xFF00FF88)),
+                  foregroundColor: const Color(0xFF00FF88),
+                ),
+                icon: _isDetectingLocalEngines
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Color(0xFF00FF88),
+                        ),
+                      )
+                    : const Icon(Icons.radar_rounded, size: 16),
+                label: Text(
+                  _isDetectingLocalEngines ? 'SCANNING...' : 'DETECT ENGINES',
+                  style: TextStyle(
+                    fontFamily: AppColors.monoFamily,
+                    fontSize: 12,
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _isBusy ? null : _openLocalModelManager,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  side: const BorderSide(color: Color(0xFF00FF88)),
+                  foregroundColor: const Color(0xFF00FF88),
+                ),
+                icon: const Icon(Icons.dns_rounded, size: 16),
+                label: Text(
+                  'MANAGE MODELS',
+                  style: TextStyle(
+                    fontFamily: AppColors.monoFamily,
+                    fontSize: 12,
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _isBusy ? null : _runLocalAiOnboarding,
+          icon: const Icon(Icons.auto_fix_high_rounded, size: 14),
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFF00FF88),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+          ),
+          label: Text(
+            'FIRST-RUN SETUP',
+            style: TextStyle(
+              fontFamily: AppColors.monoFamily,
+              fontSize: 11,
+              letterSpacing: 1.5,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        if (_detectedLocalEngines.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          ..._detectedLocalEngines.map((e) {
+            final selected = _localEndpointController.text.trim() == e.endpoint;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _localEndpointController.text = e.endpoint;
+                  });
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _panelColor,
+                    border: Border.all(
+                      color: selected
+                          ? const Color(0xFF00FF88)
+                          : AppColors.border,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        selected
+                            ? Icons.radio_button_checked_rounded
+                            : Icons.radio_button_unchecked_rounded,
+                        size: 16,
+                        color: selected
+                            ? const Color(0xFF00FF88)
+                            : AppColors.textMuted,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              e.displayLabel,
+                              style: TextStyle(
+                                fontFamily: AppColors.monoFamily,
+                                fontSize: 12,
+                                color: const Color(0xFF00FF88),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                            Text(
+                              e.endpoint,
+                              style: TextStyle(
+                                fontFamily: AppColors.monoFamily,
+                                fontSize: 11,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+        if (_detectError != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: _panelColor,
+              border: Border(
+                left: BorderSide(color: AppColors.danger, width: 3),
+              ),
+            ),
+            child: Text(
+              _detectError!,
+              style: TextStyle(
+                fontFamily: AppColors.monoFamily,
+                fontSize: 12,
+                color: AppColors.danger,
               ),
             ),
           ),
