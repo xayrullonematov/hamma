@@ -15,8 +15,21 @@ class AppPrefsStorage {
   static const _healthMonitoringEnabledKey = 'health_monitoring_enabled';
   static const _healthCheckIntervalKey = 'health_check_interval';
   static const _serverLastStatesKey = 'server_last_states';
+  static const _localAiOnboardingSeenKey = 'local_ai_onboarding_seen';
 
   final FlutterSecureStorage _secureStorage;
+
+  /// Whether the user has already seen (or dismissed) the Local AI
+  /// onboarding wizard. Used by Settings to auto-launch the wizard once
+  /// when the user picks the Local AI provider and no engine is reachable.
+  Future<bool> isLocalAiOnboardingSeen() async {
+    final value = await _secureStorage.read(key: _localAiOnboardingSeenKey);
+    return value == 'true';
+  }
+
+  Future<void> setLocalAiOnboardingSeen() async {
+    await _secureStorage.write(key: _localAiOnboardingSeenKey, value: 'true');
+  }
 
   Future<bool> isOnboardingComplete() async {
     final value = await _secureStorage.read(key: _onboardingCompleteKey);

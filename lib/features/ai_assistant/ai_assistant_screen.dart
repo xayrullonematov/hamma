@@ -5,11 +5,13 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import '../../core/ai/ai_command_service.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
+import '../../core/ai/local_engine_health_monitor.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/chat_history_storage.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/chat_avatar.dart';
 import 'widgets/chat_session_drawer.dart';
+import 'widgets/local_engine_status_pill.dart';
 import 'widgets/typing_indicator.dart';
 
 class AiAssistantScreen extends StatefulWidget {
@@ -19,12 +21,18 @@ class AiAssistantScreen extends StatefulWidget {
     required this.provider,
     required this.apiKey,
     required this.serverId,
+    this.localEndpoint,
   });
 
   final SshService sshService;
   final AiProvider provider;
   final String apiKey;
   final String serverId;
+
+  /// Base URL of the configured local AI engine. Required for the
+  /// status pill to render in the header when [provider] is
+  /// [AiProvider.local]; ignored otherwise.
+  final String? localEndpoint;
 
   @override
   State<AiAssistantScreen> createState() => _AiAssistantScreenState();
@@ -47,6 +55,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   String? _currentSessionId;
   List<Map<String, dynamic>> _messages = [];
   bool _isLoading = false;
+  LocalEngineHealthMonitor? _localMonitor;
 
   @override
   void initState() {
@@ -55,6 +64,12 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       provider: widget.provider,
       apiKey: widget.apiKey,
     );
+    final endpoint = widget.localEndpoint?.trim();
+    if (widget.provider == AiProvider.local &&
+        endpoint != null &&
+        endpoint.isNotEmpty) {
+      _localMonitor = LocalEngineHealthMonitor(endpoint: endpoint);
+    }
     _initChat();
   }
 
@@ -115,6 +130,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   void dispose() {
     _inputController.dispose();
     _scrollController.dispose();
+    unawaited(_localMonitor?.dispose());
+    _localMonitor = null;
     super.dispose();
   }
 
@@ -469,6 +486,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         backgroundColor: _backgroundColor,
         title: const Text('AI Assistant'),
         elevation: 0,
+        actions: [
+          if (_localMonitor != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              child: LocalEngineStatusPill(monitor: _localMonitor!),
+            ),
+        ],
       ),
       drawer: ChatSessionDrawer(
         sessions: _sessions,

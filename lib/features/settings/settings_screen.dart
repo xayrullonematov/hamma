@@ -631,7 +631,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (provider == AiProvider.openRouter) {
       _loadOpenRouterModels();
+    } else if (provider == AiProvider.local) {
+      // Best-effort: probe loopback once and, if nothing answers and the
+      // user has never seen the wizard, walk them through install + pull.
+      // We never block provider selection on the result.
+      unawaited(_maybeAutoLaunchLocalAiOnboarding());
     }
+  }
+
+  /// Detects engines on loopback. If none are found and the user has
+  /// not yet acknowledged the Local AI onboarding wizard, push the
+  /// wizard automatically. Persists the "seen" flag the first time the
+  /// wizard is shown so subsequent provider switches do not nag.
+  Future<void> _maybeAutoLaunchLocalAiOnboarding() async {
+    final alreadySeen = await _appPrefsStorage.isLocalAiOnboardingSeen();
+    if (alreadySeen || !mounted) return;
+    if (_selectedProvider != AiProvider.local) return;
+
+    List<DetectedEngine> engines = const [];
+    try {
+      engines = await LocalEngineDetector().detect();
+    } catch (_) {
+      // Ignore detector failures — treat as "no engines reachable".
+    }
+    if (!mounted || _selectedProvider != AiProvider.local) return;
+    if (engines.isNotEmpty) {
+      // Engine already running; record the auto-fill and skip the wizard.
+      if (_localEndpointController.text.trim() == 'http://localhost:11434') {
+        setState(() {
+          _localEndpointController.text = engines.first.endpoint;
+        });
+      }
+      return;
+    }
+
+    await _appPrefsStorage.setLocalAiOnboardingSeen();
+    if (!mounted || _selectedProvider != AiProvider.local) return;
+    await _runLocalAiOnboarding();
   }
 
   Future<void> _detectLocalEngines() async {

@@ -9,6 +9,12 @@ import '../../../core/theme/app_colors.dart';
 /// The pill is purely a presenter: it expects an externally-managed
 /// [LocalEngineHealthMonitor] (so multiple surfaces can share one timer
 /// and one HTTP cycle).
+///
+/// States rendered:
+///  - **Online + loaded model**: green `LOCAL · ONLINE · {model}`
+///  - **Online, no model loaded**: green `LOCAL · ONLINE`
+///  - **Loading / first probe**: amber `LOCAL · LOADING…` (spinner)
+///  - **Offline**: red `LOCAL · OFFLINE` (tap to retry)
 class LocalEngineStatusPill extends StatefulWidget {
   const LocalEngineStatusPill({
     super.key,
@@ -23,7 +29,8 @@ class LocalEngineStatusPill extends StatefulWidget {
   /// offline. If omitted, the pill triggers `monitor.probeNow()` itself.
   final VoidCallback? onRetry;
 
-  /// When `true`, hides the version label to save space.
+  /// When `true`, hides the version label and trims long model names so
+  /// the pill fits in cramped headers.
   final bool compact;
 
   @override
@@ -32,6 +39,15 @@ class LocalEngineStatusPill extends StatefulWidget {
 
 class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
   static const _zeroTrustGreen = Color(0xFF00FF88);
+  static const _loadingAmber = Color(0xFFFFB000);
+
+  /// Strip a trailing `:latest` so the pill stays compact.
+  String _shortName(String tag) {
+    if (tag.endsWith(':latest')) {
+      return tag.substring(0, tag.length - ':latest'.length);
+    }
+    return tag;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,22 +60,38 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
 
         final color = switch (status) {
           LocalEngineHealthStatus.online => _zeroTrustGreen,
-          LocalEngineHealthStatus.loading => AppColors.textMuted,
+          LocalEngineHealthStatus.loading => _loadingAmber,
           LocalEngineHealthStatus.offline => AppColors.danger,
         };
 
-        final label = switch (status) {
-          LocalEngineHealthStatus.online => 'LOCAL · ONLINE',
-          LocalEngineHealthStatus.loading => 'LOCAL · CHECKING',
-          LocalEngineHealthStatus.offline => 'LOCAL · OFFLINE',
-        };
+        // Online label includes the first loaded-in-RAM model, mirroring
+        // the spec ("Online · gemma3"). Falls back to plain ONLINE when
+        // the engine is up but no model is currently warm.
+        String label;
+        switch (status) {
+          case LocalEngineHealthStatus.online:
+            final loaded = health?.loadedModels ?? const [];
+            if (loaded.isNotEmpty) {
+              final name = _shortName(loaded.first);
+              label = 'LOCAL · ONLINE · ${name.toUpperCase()}';
+            } else {
+              label = 'LOCAL · ONLINE';
+            }
+          case LocalEngineHealthStatus.loading:
+            label = 'LOCAL · LOADING…';
+          case LocalEngineHealthStatus.offline:
+            label = 'LOCAL · OFFLINE';
+        }
 
         final tooltip = switch (status) {
           LocalEngineHealthStatus.online =>
             health?.version?.isNotEmpty ?? false
                 ? 'Local engine online · v${health!.version}'
                 : 'Local engine online',
-          LocalEngineHealthStatus.loading => 'Pinging local engine…',
+          LocalEngineHealthStatus.loading =>
+            health?.loadedModels.isNotEmpty ?? false
+                ? 'Loading model ${health!.loadedModels.first}…'
+                : 'Pinging local engine…',
           LocalEngineHealthStatus.offline => health?.error ?? 'Engine offline',
         };
 

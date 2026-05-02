@@ -7,11 +7,13 @@ import 'package:http/http.dart' as http;
 import '../../core/ai/ai_command_service.dart';
 import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
+import '../../core/ai/local_engine_health_monitor.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/chat_history_storage.dart';
 import 'copilot/widgets/copilot_chrome.dart';
 import 'copilot/widgets/step_timeline_card.dart';
 import 'widgets/interactive_command_block.dart';
+import 'widgets/local_engine_status_pill.dart';
 import '../../core/theme/app_colors.dart';
 
 class AiCopilotSheet extends StatefulWidget {
@@ -93,6 +95,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   List<String> _openRouterModels = const [];
   int _providerLoadGeneration = 0;
   bool _hasTriggeredInitialPrompt = false;
+  LocalEngineHealthMonitor? _localMonitor;
+  String? _localMonitorEndpoint;
 
   bool get _isRunningStep => _runningCommandIndex != null;
   bool get _hasActiveApiKey =>
@@ -105,6 +109,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     _activeOpenRouterModel = _normalizeOpenRouterModel(widget.openRouterModel);
     _seedInitialPrompt();
     _refreshAiCommandService();
+    _syncLocalEngineMonitor();
     _loadChatHistory();
     _loadActiveProviderState();
   }
@@ -116,6 +121,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         oldWidget.apiKeyStorage != widget.apiKeyStorage) {
       _activeProvider = widget.provider;
       _loadActiveProviderState(widget.provider);
+      _syncLocalEngineMonitor();
     }
 
     if (oldWidget.openRouterModel != widget.openRouterModel) {
@@ -123,6 +129,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         widget.openRouterModel,
       );
       _refreshAiCommandService();
+    }
+
+    if (oldWidget.localEndpoint != widget.localEndpoint) {
+      _syncLocalEngineMonitor();
     }
 
     if (oldWidget.serverId != widget.serverId) {
@@ -140,7 +150,27 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   void dispose() {
     _disposePlanSteps();
     _promptController.dispose();
+    unawaited(_localMonitor?.dispose());
+    _localMonitor = null;
     super.dispose();
+  }
+
+  /// Spin up (or tear down) the local engine health monitor whenever
+  /// the active provider or configured endpoint changes. Reuses the
+  /// existing monitor if the endpoint is unchanged so we don't reset
+  /// the polling clock on every rebuild.
+  void _syncLocalEngineMonitor() {
+    final endpoint = widget.localEndpoint?.trim();
+    final shouldRun = _activeProvider == AiProvider.local &&
+        endpoint != null &&
+        endpoint.isNotEmpty;
+    if (shouldRun && _localMonitorEndpoint == endpoint) return;
+    unawaited(_localMonitor?.dispose());
+    _localMonitor = null;
+    _localMonitorEndpoint = null;
+    if (!shouldRun) return;
+    _localMonitor = LocalEngineHealthMonitor(endpoint: endpoint);
+    _localMonitorEndpoint = endpoint;
   }
 
   void _disposePlanSteps() {
@@ -1399,6 +1429,16 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                   ],
                 ),
               ),
+              if (_activeProvider == AiProvider.local &&
+                  _localMonitor != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(right: 8, top: 2),
+                  child: LocalEngineStatusPill(
+                    monitor: _localMonitor!,
+                    compact: true,
+                  ),
+                ),
+              ],
               IconButton(
                 onPressed:
                     _isHistoryLoading || _isGenerating || _chatMessages.isEmpty

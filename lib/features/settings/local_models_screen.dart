@@ -108,6 +108,24 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
   List<OllamaModel> _models = const [];
   List<OllamaLoadedModel> _loaded = const [];
 
+  /// Render an Ollama `modified_at` ISO-8601 timestamp as a compact
+  /// relative string ("3d ago", "5h ago", "just now"). Returns `null`
+  /// when the input is missing or unparseable so callers can skip it.
+  static String? _formatRelativeTime(String iso) {
+    if (iso.isEmpty) return null;
+    final parsed = DateTime.tryParse(iso);
+    if (parsed == null) return null;
+    final delta = DateTime.now().toUtc().difference(parsed.toUtc());
+    if (delta.isNegative) return 'just now';
+    if (delta.inMinutes < 1) return 'just now';
+    if (delta.inHours < 1) return '${delta.inMinutes}m ago';
+    if (delta.inDays < 1) return '${delta.inHours}h ago';
+    if (delta.inDays < 30) return '${delta.inDays}d ago';
+    final months = delta.inDays ~/ 30;
+    if (months < 12) return '${months}mo ago';
+    return '${delta.inDays ~/ 365}y ago';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -399,6 +417,8 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                     if (m.parameterSize.isNotEmpty) m.parameterSize,
                     if (m.quantization.isNotEmpty) m.quantization,
                     if (isLoaded) 'in RAM',
+                    if (_formatRelativeTime(m.modifiedAt) != null)
+                      'updated ${_formatRelativeTime(m.modifiedAt)}',
                   ].join(' · '),
                   style: const TextStyle(
                     fontFamily: AppColors.monoFamily,
