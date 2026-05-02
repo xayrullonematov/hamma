@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
@@ -15,6 +14,8 @@ import '../../core/storage/app_prefs_storage.dart';
 import '../../core/storage/backup_storage.dart';
 import '../security/app_lock_screen.dart';
 import '../../core/theme/app_colors.dart';
+import 'help_center_screen.dart';
+import 'widgets/settings_section_card.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -967,7 +968,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: ListView(
               padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
               children: [
-                _SettingsSectionCard(
+                SettingsSectionCard(
                   title: 'AI Configuration',
                   subtitle:
                       'Choose your default AI provider and manage the saved keys used by the copilot.',
@@ -1064,7 +1065,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                _SettingsSectionCard(
+                SettingsSectionCard(
                   title: 'Health Monitoring',
                   subtitle:
                       'Monitor server health in the background and receive alerts for downtime or high resource usage.',
@@ -1143,7 +1144,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
                 const SizedBox(height: 20),
-                _SettingsSectionCard(
+                SettingsSectionCard(
                   title: 'Security',
                   subtitle:
                       'Protect local app access with a custom 4-digit PIN and optional biometric unlock.',
@@ -1192,7 +1193,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                _SettingsSectionCard(
+                SettingsSectionCard(
                   title: 'Backup & Restore',
                   subtitle:
                       'Securely backup your servers, AI keys, and chat history to your own server or local storage.',
@@ -1380,7 +1381,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                _SettingsSectionCard(
+                SettingsSectionCard(
                   title: 'Support',
                   subtitle: 'Access the help center and documentation.',
                   icon: Icons.support_agent_outlined,
@@ -1423,191 +1424,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class HelpCenterScreen extends StatelessWidget {
-  const HelpCenterScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final topics = [
-      {
-        'title': 'Connecting via SSH',
-        'markdown': '''
-# Connecting via SSH
-Hamma uses `dartssh2` to establish secure connections. To connect:
-1. Tap **Add Server**.
-2. Enter the **Host** (IP or Domain) and **Port** (default 22).
-3. Provide your **Username**.
-4. Use either a **Password** or a **Private Key** (Ed25519 or RSA).
-5. Tap **Test Connection** to verify settings before saving.
-'''
-      },
-      {
-        'title': 'Managing Docker',
-        'markdown': '''
-# Managing Docker
-Hamma provides a simplified Docker dashboard:
-1. Open a server from the list.
-2. Select **Docker Manager**.
-3. View running containers, stats, and images.
-4. Perform actions like **Restart**, **Stop**, or **View Logs** directly from buttons.
-'''
-      },
-      {
-        'title': 'Using AI Assistant',
-        'markdown': '''
-# Using AI Assistant
-The AI Copilot helps you manage servers without writing complex commands:
-1. Tap the **AI Assistant** icon in a server dashboard.
-2. Ask questions like "How do I check Nginx logs?" or "Restart my Postgres container".
-3. The AI suggests commands which you can **edit** and **run** after explicit confirmation.
-4. If a command fails, use **Smart Error Analysis** to get a technical breakdown of the failure.
-'''
-      },
-      {
-        'title': 'Fleet Monitoring',
-        'markdown': '''
-# Fleet Monitoring
-Monitor your entire infrastructure at once:
-1. Open the **Fleet Command Center** from the main server list.
-2. View CPU, RAM, and Disk metrics across all saved servers.
-3. Enable **Background Health Monitoring** in Settings to receive alerts if a server goes offline or exceeds resource thresholds.
-'''
-      },
-    ];
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Help Center')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 800),
-          child: ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: topics.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final topic = topics[index];
-              return Card(
-                child: ListTile(
-                  title: Text(topic['title']!),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => Scaffold(
-                          appBar: AppBar(title: Text(topic['title']!)),
-                          body: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 900),
-                              child: SingleChildScrollView(
-                                padding: const EdgeInsets.all(16),
-                                child: MarkdownBody(
-                                  data: topic['markdown']!,
-                                  selectable: true,
-                                  styleSheet: MarkdownStyleSheet(
-                                    h1: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
-                                    p: const TextStyle(color: AppColors.textPrimary, height: 1.6, fontSize: 15),
-                                    listBullet: const TextStyle(color: AppColors.textPrimary),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsSectionCard extends StatelessWidget {
-  const _SettingsSectionCard({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.child,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Widget child;
-
-  static const _surfaceColor = AppColors.surface;
-  static const _mutedColor = AppColors.textMuted;
-  static const _shadowColor = Color(0x22000000);
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: _surfaceColor,
-        borderRadius: BorderRadius.zero,
-        boxShadow: const [
-          BoxShadow(
-            color: _shadowColor,
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: Icon(icon, color: theme.colorScheme.primary),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: _mutedColor,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          child,
-        ],
       ),
     );
   }

@@ -8,6 +8,9 @@ import '../../core/ai/command_risk_assessor.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/chat_history_storage.dart';
 import '../../core/theme/app_colors.dart';
+import 'widgets/chat_avatar.dart';
+import 'widgets/chat_session_drawer.dart';
+import 'widgets/typing_indicator.dart';
 
 class AiAssistantScreen extends StatefulWidget {
   const AiAssistantScreen({
@@ -441,7 +444,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         title: const Text('AI Assistant'),
         elevation: 0,
       ),
-      drawer: _buildDrawer(),
+      drawer: ChatSessionDrawer(
+        sessions: _sessions,
+        currentSessionId: _currentSessionId,
+        onCreateNewChat: _createNewChat,
+        onLoadSession: _loadSession,
+        onDeleteSession: _deleteSession,
+      ),
       body: Column(
         children: [
           Expanded(
@@ -450,76 +459,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               itemCount: _messages.length + (_isLoading ? 1 : 0),
               itemBuilder: (context, index) {
-                if (index == _messages.length) return _buildTypingIndicator();
+                if (index == _messages.length) return const TypingIndicator();
                 return _buildMessageBubble(index);
               },
             ),
           ),
           _buildInputArea(),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDrawer() {
-    return Drawer(
-      backgroundColor: _backgroundColor,
-      child: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: FilledButton.icon(
-                onPressed: _createNewChat,
-                icon: const Icon(Icons.add),
-                label: const Text('New Chat'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 48),
-                  backgroundColor: _primaryColor,
-                  foregroundColor: AppColors.scaffoldBackground,
-                ),
-              ),
-            ),
-            const Divider(color: Colors.white12),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _sessions.length,
-                itemBuilder: (context, index) {
-                  final session = _sessions[index];
-                  final isSelected = session['id'] == _currentSessionId;
-                  return ListTile(
-                    leading: Icon(
-                      Icons.chat_bubble_outline,
-                      color: isSelected ? _primaryColor : _mutedColor,
-                      size: 20,
-                    ),
-                    title: Text(
-                      session['title'] ?? 'Untitled Chat',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isSelected ? Colors.white : _mutedColor,
-                        fontSize: 14,
-                      ),
-                    ),
-                    selected: isSelected,
-                    trailing:
-                        isSelected
-                            ? null
-                            : IconButton(
-                              icon: const Icon(Icons.delete_outline, size: 18),
-                              onPressed: () => _deleteSession(session['id']!),
-                            ),
-                    onTap: () {
-                      _loadSession(session['id']!);
-                      Navigator.pop(context);
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -563,7 +509,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         mainAxisAlignment:
             isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          if (!isUser) _buildAvatar(false),
+          if (!isUser) const ChatAvatar(isUser: false),
           const SizedBox(width: 12),
           Flexible(
             child: Column(
@@ -623,24 +569,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
             ),
           ),
           const SizedBox(width: 12),
-          if (isUser) _buildAvatar(true),
+          if (isUser) const ChatAvatar(isUser: true),
         ],
-      ),
-    );
-  }
-
-  Widget _buildAvatar(bool isUser) {
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        color: isUser ? _surfaceColor : _primaryColor.withValues(alpha: 0.2),
-        shape: BoxShape.circle,
-      ),
-      child: Icon(
-        isUser ? Icons.person_outline : Icons.smart_toy_outlined,
-        color: isUser ? _mutedColor : _primaryColor,
-        size: 18,
       ),
     );
   }
@@ -843,21 +773,4 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     );
   }
 
-  Widget _buildTypingIndicator() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 24, left: 44),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: _surfaceColor,
-          borderRadius: BorderRadius.zero,
-        ),
-        child: const Text(
-          '...',
-          style: TextStyle(color: _mutedColor, fontWeight: FontWeight.bold),
-        ),
-      ),
-    );
-  }
 }

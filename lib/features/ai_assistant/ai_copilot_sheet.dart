@@ -9,6 +9,8 @@ import '../../core/ai/ai_provider.dart';
 import '../../core/ai/command_risk_assessor.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/chat_history_storage.dart';
+import 'copilot/widgets/copilot_chrome.dart';
+import 'copilot/widgets/step_timeline_card.dart';
 import 'widgets/interactive_command_block.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -1591,9 +1593,9 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         ],
         const SizedBox(height: 16),
         if (_isGenerating && _planSteps.isEmpty)
-          const _LoadingBubble(label: 'Building a step-by-step plan...')
+          const LoadingBubble(label: 'Building a step-by-step plan...')
         else if (_planSteps.isEmpty)
-          _EmptyMessageCard(
+          EmptyMessageCard(
             title: 'No plan yet',
             message:
                 'Describe the server task and the copilot will turn it into a safe step sequence.',
@@ -1615,7 +1617,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                     width: 44,
                     child: Column(
                       children: [
-                        _StepNode(number: index + 1),
+                        StepNode(number: index + 1),
                         if (!isLast)
                           Expanded(
                             child: Center(
@@ -1634,7 +1636,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: _StepTimelineCard(
+                    child: StepTimelineCard(
                       title: step.title,
                       controller: step.controller,
                       stateLabel: _stepStateLabel(step.state),
@@ -1648,7 +1650,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                               : 'Earlier steps are not completed yet.',
                       isRunning: isRunning,
                       isBusy: _isGenerating || _isRunningStep,
-                      onChanged: () => setState(() {}),
+                      onChanged: (_) => setState(() {}),
                       onRun: () => _runCommand(index),
                     ),
                   ),
@@ -1660,7 +1662,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         if (widget.executionTarget == AiCopilotExecutionTarget.dashboard &&
             _commandOutput.isNotEmpty) ...[
           const SizedBox(height: 16),
-          _ExecutionOutputCard(output: _commandOutput),
+          ExecutionOutputCard(output: _commandOutput),
         ],
       ],
     );
@@ -1685,13 +1687,13 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         ),
         const SizedBox(height: 10),
         if (_isHistoryLoading)
-          const _LoadingBubble(label: 'Loading previous chat...')
+          const LoadingBubble(label: 'Loading previous chat...')
         else if (_chatMessages.isEmpty && !_isGenerating)
           Align(
             alignment: Alignment.centerLeft,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
-              child: _ChatBubble(
+              child: ChatBubble(
                 child: SelectableText(
                   'Ask about logs, Linux concepts, or debugging strategy.',
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -1715,7 +1717,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                   constraints: const BoxConstraints(maxWidth: 560),
                   child:
                       isUser
-                          ? _UserChatBubble(
+                          ? UserChatBubble(
                             child: SelectableText(
                               message.content,
                               style: theme.textTheme.bodyMedium?.copyWith(
@@ -1727,7 +1729,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                           : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _ChatBubble(
+                                ChatBubble(
                                   child: SelectableText(
                                     message.content,
                                     style: theme.textTheme.bodyMedium?.copyWith(
@@ -1760,7 +1762,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
             padding: EdgeInsets.only(top: 2),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: _LoadingBubble(label: 'Thinking...'),
+              child: LoadingBubble(label: 'Thinking...'),
             ),
           ),
       ],
@@ -1998,422 +2000,4 @@ class _ChatMessage {
   final String role;
   final String content;
   final CommandAnalysis? analysis;
-}
-
-class _StepNode extends StatelessWidget {
-  const _StepNode({required this.number});
-
-  final int number;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        color: AppColors.textPrimary.withValues(alpha: 0.18),
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        '$number',
-        style: const TextStyle(
-          color: AppColors.textPrimary,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _StepTimelineCard extends StatelessWidget {
-  const _StepTimelineCard({
-    required this.title,
-    required this.controller,
-    required this.stateLabel,
-    required this.stateColor,
-    required this.riskLabel,
-    required this.riskColor,
-    required this.riskExplanation,
-    required this.warningText,
-    required this.isRunning,
-    required this.isBusy,
-    required this.onChanged,
-    required this.onRun,
-  });
-
-  final String title;
-  final TextEditingController controller;
-  final String stateLabel;
-  final Color stateColor;
-  final String riskLabel;
-  final Color riskColor;
-  final String riskExplanation;
-  final String? warningText;
-  final bool isRunning;
-  final bool isBusy;
-  final VoidCallback onChanged;
-  final VoidCallback onRun;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: _AiCopilotSheetState._surfaceColor,
-        borderRadius: BorderRadius.zero,
-        boxShadow: const [
-          BoxShadow(
-            color: _AiCopilotSheetState._shadowColor,
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: stateColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: Text(
-                  stateLabel,
-                  style: TextStyle(
-                    color: stateColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (warningText != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.danger.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.zero,
-              ),
-              child: Text(
-                warningText!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: _AiCopilotSheetState._warningColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          TextField(
-            controller: controller,
-            maxLines: null,
-            onChanged: (_) => onChanged(),
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: Colors.white,
-              fontFamily: 'monospace',
-            ),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: _AiCopilotSheetState._panelColor,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(color: AppColors.border, width: 1),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(color: AppColors.border, width: 1),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(
-                  color: _AiCopilotSheetState._primaryColor,
-                  width: 1.2,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _RiskBadge(label: riskLabel, color: riskColor),
-              Text(
-                riskExplanation,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: _AiCopilotSheetState._mutedColor,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: isBusy ? null : onRun,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.textPrimary,
-                foregroundColor: AppColors.scaffoldBackground,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.zero,
-                ),
-              ),
-              icon:
-                  isRunning
-                      ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.scaffoldBackground,
-                        ),
-                      )
-                      : const Icon(Icons.play_arrow_rounded),
-              label: const Text('Run'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RiskBadge extends StatelessWidget {
-  const _RiskBadge({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
-          letterSpacing: 0.2,
-        ),
-      ),
-    );
-  }
-}
-
-class _ChatBubble extends StatelessWidget {
-  const _ChatBubble({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _AiCopilotSheetState._surfaceColor,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-          bottomRight: Radius.circular(24),
-          bottomLeft: Radius.circular(8),
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: _AiCopilotSheetState._shadowColor,
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
-class _UserChatBubble extends StatelessWidget {
-  const _UserChatBubble({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _AiCopilotSheetState._panelColor,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-          bottomRight: Radius.circular(8),
-          bottomLeft: Radius.circular(24),
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: _AiCopilotSheetState._shadowColor,
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
-class _LoadingBubble extends StatelessWidget {
-  const _LoadingBubble({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: _AiCopilotSheetState._surfaceColor,
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: _AiCopilotSheetState._primaryColor,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: _AiCopilotSheetState._mutedColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyMessageCard extends StatelessWidget {
-  const _EmptyMessageCard({required this.title, required this.message});
-
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: _AiCopilotSheetState._surfaceColor,
-        borderRadius: BorderRadius.zero,
-      ),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            message,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: _AiCopilotSheetState._mutedColor,
-              height: 1.45,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ExecutionOutputCard extends StatelessWidget {
-  const _ExecutionOutputCard({required this.output});
-
-  final String output;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _AiCopilotSheetState._surfaceColor,
-        borderRadius: BorderRadius.zero,
-      ),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Execution Output',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.scaffoldBackground,
-              borderRadius: BorderRadius.zero,
-            ),
-            child: SelectableText(
-              output,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontFamily: 'monospace',
-                height: 1.45,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

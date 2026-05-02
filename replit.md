@@ -309,6 +309,33 @@ The 3 catches in `lib/core/ai/ai_command_service.dart` `parseJsonFromResponse()`
 ### `ai_provider_test.dart` failing test fixed
 Test expected 3 enum values but `AiProvider` has 4 (`openAi`, `gemini`, `openRouter`, `local`). Added full coverage for the new `local` provider: `storageValue`, `label`, `helperText`, `requiresApiKey: false`, `isLocal: true`, and `aiProviderFromStorage('local')` parsing including case-insensitivity and whitespace trimming. Test count for this file went 11 → 27.
 
+## God-File Refactor (2026-05-02)
+
+Split three of the largest UI files into focused widget modules. Behavior preserved exactly; full test suite still green; analyzer baseline unchanged (52 issues).
+
+### `lib/features/ai_assistant/ai_copilot_sheet.dart` — 2419 → 2003 lines
+Extracted 7 leaf widgets that were defined as private types at the bottom of the file:
+- `lib/features/ai_assistant/copilot/widgets/copilot_chrome.dart` (247 lines) — `StepNode`, `RiskBadge`, `ChatBubble`, `UserChatBubble`, `LoadingBubble`, `EmptyMessageCard`, `ExecutionOutputCard` plus the shared `kCopilotShadowColor` constant.
+- `lib/features/ai_assistant/copilot/widgets/step_timeline_card.dart` (185 lines) — the `StepTimelineCard` (the largest single child widget, takes 12 props but no state).
+
+The widgets previously referenced private static aliases on the parent state (`_AiCopilotSheetState._surfaceColor`, etc.). Inlining to direct `AppColors.*` references eliminated that hidden coupling and made each widget independently usable.
+
+### `lib/features/settings/settings_screen.dart` — 1614 → 1431 lines
+Extracted two self-contained pieces:
+- `lib/features/settings/help_center_screen.dart` (107 lines) — full `HelpCenterScreen` (its own `Scaffold`, no shared state with settings; routes to itself only).
+- `lib/features/settings/widgets/settings_section_card.dart` (84 lines) — `SettingsSectionCard` reusable section wrapper used 5× in the main settings build.
+
+### `lib/features/ai_assistant/ai_assistant_screen.dart` — 863 → 776 lines
+Extracted three small, decoupled widgets to `lib/features/ai_assistant/widgets/`:
+- `chat_avatar.dart` (28 lines) — `ChatAvatar(isUser: bool)`, pure leaf.
+- `typing_indicator.dart` (29 lines) — `TypingIndicator()`, pure leaf.
+- `chat_session_drawer.dart` (85 lines) — `ChatSessionDrawer` taking `sessions`, `currentSessionId`, and three callbacks (`onCreateNewChat`, `onLoadSession`, `onDeleteSession`). State stays in the parent.
+
+The two remaining heavy methods (`_buildMessageBubble` ~105 lines and `_buildCommandCard` ~140 lines) were intentionally **not** extracted: they mutate `_messages[index]['outputs']` directly during command execution and would require either a state-management refactor or a long callback list to extract cleanly. Left as private build methods to avoid behavior risk.
+
+### Files NOT touched in this round
+- `file_explorer_screen.dart` (1072), `fleet_dashboard_screen.dart` (950), `ssh_service.dart` (810). Each is large but cohesive; splitting requires a state-management decision (controller pattern vs. notifier vs. callback list) that warrants its own design pass.
+
 ## Key Modifications
 
 - Fixed `DropdownButtonFormField.initialValue` → `value` in settings_screen.dart (Flutter 3.32.0 API change)
