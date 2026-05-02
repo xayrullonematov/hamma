@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -10,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:workmanager/workmanager.dart';
 
+import '../error/error_reporter.dart';
 import '../ssh/sftp_service.dart';
 import '../storage/app_lock_storage.dart';
 import '../storage/backup_storage.dart';
@@ -56,7 +58,16 @@ class BackupService {
           );
           try {
             await backupFile.delete();
-          } catch (_) {}
+          } catch (e, stack) {
+            // Best-effort cleanup of the temp file after the share sheet
+            // closes. Failure here is non-fatal (OS will reap the temp
+            // file eventually) but we still want telemetry.
+            unawaited(ErrorReporter.report(
+              e,
+              stack,
+              hint: 'BackupService: temp file cleanup after share',
+            ));
+          }
           break;
 
         case BackupDestination.sftp:

@@ -528,13 +528,17 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     final msg = _messages[index];
     final isUser = msg['role'] == 'user';
     final isSystem = msg['role'] == 'system';
+    // _messages is List<Map<String, dynamic>>; values arrive as `dynamic`
+    // (often from jsonDecode). Coerce once here so the rest of the widget
+    // can treat them as proper Strings.
+    final content = (msg['content'] as String?) ?? '';
 
     if (isSystem) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Text(
-            msg['content'],
+            content,
             style: const TextStyle(
               color: _dangerColor,
               fontSize: 12,
@@ -545,9 +549,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       );
     }
 
-    final commands = isUser ? <String>[] : _extractCommands(msg['content']);
+    final commands = isUser ? <String>[] : _extractCommands(content);
     final timestamp = DateTime.parse(
-      msg['timestamp'] ?? DateTime.now().toIso8601String(),
+      (msg['timestamp'] as String?) ?? DateTime.now().toIso8601String(),
     );
     final timeStr =
         '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
@@ -581,7 +585,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       MarkdownBody(
-                        data: msg['content'],
+                        data: content,
                         selectable: true,
                         styleSheet: MarkdownStyleSheet(
                           p: const TextStyle(
@@ -642,7 +646,11 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   }
 
   Widget _buildCommandCard(int msgIndex, String command) {
-    final output = _messages[msgIndex]['outputs']?[command];
+    // outputs map is also dynamic-typed; cast at the source so
+    // downstream conditions (`isError`) and Text widgets get a proper
+    // String? instead of dynamic.
+    final outputsRaw = _messages[msgIndex]['outputs'];
+    final output = (outputsRaw is Map) ? outputsRaw[command] as String? : null;
     final assessment = _riskAssessor.assess(command);
     final color = _riskColor(assessment.riskLevel);
     final isError = output?.startsWith('Error:') ?? false;

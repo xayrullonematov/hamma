@@ -285,6 +285,30 @@ advancing the clock past every retry timer with `async.elapse(...)`
 instead of relying on zero-second sleeps. Every other test still
 uses the zeroed `[0, 0, 0, 0, 0]` schedule for instant retries.
 
+## Production-Readiness Hardening (2026-05-02)
+
+Final round of fixes from the production-readiness audit. All checked in; full test suite (300+ tests across 22 files) is green under stricter analyzer rules.
+
+### Strict static analysis enabled
+`analysis_options.yaml` now activates the analyzer's strongest type checks:
+- `strict-casts: true` — implicit `dynamic → T` casts are errors
+- `strict-inference: true` — variables/returns must be explicitly typed when inference fails
+- `strict-raw-types: true` — `Map`, `List`, `StreamSubscription`, etc. must declare type arguments
+- `unawaited_futures: warning` — fire-and-forget futures must be wrapped in `unawaited(...)` or awaited
+
+These flags surfaced 15 latent bugs in `lib/features/ai_assistant/ai_assistant_screen.dart` and `lib/features/docker/docker_manager_screen.dart` where `dynamic` values from `jsonDecode` were flowing into `String` parameters — these would have crashed at runtime on any unexpected payload shape. All fixed via explicit casts (`as String?`) for trusted shapes and `?.toString() ?? ''` for untrusted external JSON (Docker daemon output).
+
+### Dangerous silent catches eliminated
+Three empty `catch (_) {}` blocks replaced with `unawaited(ErrorReporter.report(e, stack, hint: '…'))`:
+- `lib/core/backup/backup_service.dart` — temp file cleanup after share sheet closes
+- `lib/core/storage/app_prefs_storage.dart` — corrupt JSON in `getServerLastStates()`
+- `lib/features/packages/package_manager_screen.dart` — apt/dnf/yum detection failure
+
+The 3 catches in `lib/core/ai/ai_command_service.dart` `parseJsonFromResponse()` (lines 168/177/215) were **intentionally left untouched** — they implement a 3-stage parser fallthrough (direct → code-fence → brace-depth-scan) and are a documented design pattern, not silent error swallowing.
+
+### `ai_provider_test.dart` failing test fixed
+Test expected 3 enum values but `AiProvider` has 4 (`openAi`, `gemini`, `openRouter`, `local`). Added full coverage for the new `local` provider: `storageValue`, `label`, `helperText`, `requiresApiKey: false`, `isLocal: true`, and `aiProviderFromStorage('local')` parsing including case-insensitivity and whitespace trimming. Test count for this file went 11 → 27.
+
 ## Key Modifications
 
 - Fixed `DropdownButtonFormField.initialValue` → `value` in settings_screen.dart (Flutter 3.32.0 API change)

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../core/error/error_reporter.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -52,7 +53,15 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
       } else if (output.contains('yum')) {
         _packageManager = 'yum';
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      // SSH command failed — package manager stays at its default.
+      // Report so we know when detection silently fails on a real server.
+      unawaited(ErrorReporter.report(
+        e,
+        stack,
+        hint: 'PackageManagerScreen: apt/dnf/yum detection failed',
+      ));
+    }
   }
 
   Future<void> _fetchUpgradable() async {

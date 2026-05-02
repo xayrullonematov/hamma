@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../error/error_reporter.dart';
 
 class AppPrefsStorage {
   const AppPrefsStorage({FlutterSecureStorage? secureStorage})
@@ -82,7 +85,16 @@ class AppPrefsStorage {
       if (decoded is Map) {
         return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      // Stored value is corrupt or no longer matches the schema. Fall
+      // back to an empty map (the safe default) but report so we know
+      // when this happens in the wild.
+      unawaited(ErrorReporter.report(
+        e,
+        stack,
+        hint: 'AppPrefsStorage.getServerLastStates: corrupt stored value',
+      ));
+    }
     return {};
   }
 

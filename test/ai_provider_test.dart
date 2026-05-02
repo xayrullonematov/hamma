@@ -3,8 +3,20 @@ import 'package:hamma/core/ai/ai_provider.dart';
 
 void main() {
   group('AiProvider enum values', () {
-    test('has exactly three providers', () {
-      expect(AiProvider.values, hasLength(3));
+    test('has exactly four providers', () {
+      expect(AiProvider.values, hasLength(4));
+    });
+
+    test('contains openAi, gemini, openRouter, and local', () {
+      expect(
+        AiProvider.values,
+        containsAll(<AiProvider>[
+          AiProvider.openAi,
+          AiProvider.gemini,
+          AiProvider.openRouter,
+          AiProvider.local,
+        ]),
+      );
     });
   });
 
@@ -20,6 +32,10 @@ void main() {
     test('openRouter maps to "openrouter"', () {
       expect(AiProvider.openRouter.storageValue, 'openrouter');
     });
+
+    test('local maps to "local"', () {
+      expect(AiProvider.local.storageValue, 'local');
+    });
   });
 
   group('AiProviderPresentation.label', () {
@@ -33,6 +49,10 @@ void main() {
 
     test('openRouter label is "OpenRouter"', () {
       expect(AiProvider.openRouter.label, 'OpenRouter');
+    });
+
+    test('local label is "Local AI"', () {
+      expect(AiProvider.local.label, 'Local AI');
     });
   });
 
@@ -48,6 +68,32 @@ void main() {
     test('openRouter helper text mentions openrouter.ai', () {
       expect(AiProvider.openRouter.helperText.toLowerCase(), contains('openrouter'));
     });
+
+    test('local helper text mentions zero-trust / offline', () {
+      final text = AiProvider.local.helperText.toLowerCase();
+      expect(text, anyOf(contains('zero-trust'), contains('offline')));
+    });
+  });
+
+  group('AiProviderPresentation.requiresApiKey', () {
+    test('openAi, gemini, openRouter require an API key', () {
+      expect(AiProvider.openAi.requiresApiKey, isTrue);
+      expect(AiProvider.gemini.requiresApiKey, isTrue);
+      expect(AiProvider.openRouter.requiresApiKey, isTrue);
+    });
+
+    test('local does NOT require an API key', () {
+      expect(AiProvider.local.requiresApiKey, isFalse);
+    });
+  });
+
+  group('AiProviderPresentation.isLocal', () {
+    test('only local returns true', () {
+      expect(AiProvider.local.isLocal, isTrue);
+      expect(AiProvider.openAi.isLocal, isFalse);
+      expect(AiProvider.gemini.isLocal, isFalse);
+      expect(AiProvider.openRouter.isLocal, isFalse);
+    });
   });
 
   group('aiProviderFromStorage', () {
@@ -61,6 +107,10 @@ void main() {
 
     test('parses "openrouter" → AiProvider.openRouter', () {
       expect(aiProviderFromStorage('openrouter'), AiProvider.openRouter);
+    });
+
+    test('parses "local" → AiProvider.local', () {
+      expect(aiProviderFromStorage('local'), AiProvider.local);
     });
 
     test('defaults to openAi for null input', () {
@@ -79,10 +129,12 @@ void main() {
       expect(aiProviderFromStorage('GEMINI'), AiProvider.gemini);
       expect(aiProviderFromStorage('OpenAI'), AiProvider.openAi);
       expect(aiProviderFromStorage('OPENROUTER'), AiProvider.openRouter);
+      expect(aiProviderFromStorage('LOCAL'), AiProvider.local);
     });
 
     test('trims whitespace before matching', () {
       expect(aiProviderFromStorage('  gemini  '), AiProvider.gemini);
+      expect(aiProviderFromStorage('  local  '), AiProvider.local);
     });
   });
 }

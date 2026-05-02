@@ -216,13 +216,19 @@ class DockerContainer {
   });
 
   factory DockerContainer.fromJson(Map<String, dynamic> json) {
+    // `docker ps --format '{{json .}}'` is *supposed* to return strings
+    // for these fields, but on edge cases (older daemons, custom
+    // formats) values can come back as numbers or null. Coerce via
+    // `toString()` rather than a hard `as String` cast so unexpected
+    // types degrade gracefully into a printable label instead of
+    // crashing the screen.
     return DockerContainer(
-      id: json['ID'] ?? '',
-      name: json['Names'] ?? '',
-      image: json['Image'] ?? '',
-      status: json['Status'] ?? '',
-      state: json['State'] ?? '',
-      ports: json['Ports'] ?? '',
+      id: json['ID']?.toString() ?? '',
+      name: json['Names']?.toString() ?? '',
+      image: json['Image']?.toString() ?? '',
+      status: json['Status']?.toString() ?? '',
+      state: json['State']?.toString() ?? '',
+      ports: json['Ports']?.toString() ?? '',
     );
   }
 }
