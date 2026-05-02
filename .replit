@@ -27,3 +27,7 @@ args = "bash run.sh"
 
 [workflows.workflow.metadata]
 outputType = "vnc"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 120000
