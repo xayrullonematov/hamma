@@ -1,11 +1,23 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'ollama_client.dart';
 
-/// Three coarse health states the UI cares about.
+/// Coarse health states the UI cares about.
+///
+/// Note the distinction between [loading] (we are still establishing
+/// whether the engine is reachable) and [loadingModel] (the engine is
+/// reachable but no model is currently warm in RAM, so the next
+/// inference call will pay a cold-start cost).
 enum LocalEngineHealthStatus {
   /// We have not yet contacted the engine on this monitor instance.
   loading,
+
+  /// Engine answered but no model is currently loaded in RAM. The next
+  /// chat call will trigger a (potentially slow) model warmup. UI
+  /// should render this in an amber "warming up" style.
+  loadingModel,
 
   /// The most recent ping reached the engine and it answered successfully.
   online,
@@ -33,32 +45,49 @@ class LocalEngineHealth {
   bool get isOnline => status == LocalEngineHealthStatus.online;
   bool get isOffline => status == LocalEngineHealthStatus.offline;
   bool get isLoading => status == LocalEngineHealthStatus.loading;
+  bool get isLoadingModel => status == LocalEngineHealthStatus.loadingModel;
+
+  /// True when the engine is reachable in any form (model loaded or
+  /// warming). Convenience for callers that just want a "green light".
+  bool get isReachable => isOnline || isLoadingModel;
 }
 
-/// Periodically pings a local OpenAI-compatible engine and reports its
-/// health. Designed to back a "status pill" in the AI surfaces.
+/// Periodically pings a local AI engine and reports its health.
+/// Designed to back a "status pill" in the AI surfaces.
 ///
-/// Currently uses the native Ollama API (`/api/version` + `/api/ps`)
-/// because that is the only engine for which we have a typed client.
-/// Other OpenAI-compat engines (LM Studio, llama.cpp, Jan) still report
-/// as offline through this monitor — the pill UI degrades gracefully.
+/// The probe is two-tier:
+///   1. **Ollama native API** (`/api/version` + `/api/ps`) — gives us
+///      the engine version *and* the list of warm models, so the UI can
+///      show "Online · gemma3" or "Loading model…" when the engine is
+///      up but no model is in RAM yet.
+///   2. **OpenAI-compatible fallback** (`/v1/models`) — used for engines
+///      that don't speak Ollama (LM Studio, llama.cpp server, Jan,
+///      vLLM, etc.). When this succeeds we report `online`; we do not
+///      report `loadingModel` here because OpenAI-compat APIs don't
+///      expose a "warm vs cold" model list.
 ///
 /// Construction does **not** start ticking. Call [watch] to subscribe.
-/// All listeners share a single timer; the timer stops when no listeners
-/// remain (via stream controller `onCancel`).
+/// All listeners share a single timer; the timer stops when no
+/// listeners remain (via stream controller `onCancel`).
 class LocalEngineHealthMonitor {
   LocalEngineHealthMonitor({
     required this.endpoint,
     Duration interval = const Duration(seconds: 15),
+    Duration probeTimeout = const Duration(seconds: 3),
     OllamaClient? client,
+    HttpClient Function()? httpClientFactory,
   })  : _interval = interval,
-        _client = client ?? OllamaClient(endpoint: endpoint);
+        _probeTimeout = probeTimeout,
+        _client = client ?? OllamaClient(endpoint: endpoint),
+        _httpClientFactory = httpClientFactory ?? HttpClient.new;
 
-  /// Base URL of the engine, with no trailing slash. Used only for display
-  /// in error messages — the actual probes go through [_client].
+  /// Base URL of the engine, with no trailing slash. Used both to issue
+  /// the OpenAI-compat fallback probe and to label error messages.
   final String endpoint;
   final Duration _interval;
+  final Duration _probeTimeout;
   final OllamaClient _client;
+  final HttpClient Function() _httpClientFactory;
 
   Timer? _timer;
   StreamController<LocalEngineHealth>? _controller;
@@ -69,8 +98,8 @@ class LocalEngineHealthMonitor {
   LocalEngineHealth? get last => _last;
 
   /// Subscribe for periodic health snapshots. The first event is a
-  /// `loading` placeholder (so the pill can render immediately), followed
-  /// by an immediate probe and then one probe per [_interval].
+  /// `loading` placeholder (so the pill can render immediately),
+  /// followed by an immediate probe and then one probe per [_interval].
   Stream<LocalEngineHealth> watch() {
     _controller ??= StreamController<LocalEngineHealth>.broadcast(
       onListen: _onListen,
@@ -80,9 +109,6 @@ class LocalEngineHealthMonitor {
   }
 
   void _onListen() {
-    // Emit a loading event right away so the pill never renders blank,
-    // then run an initial probe immediately rather than waiting a full
-    // interval.
     final now = DateTime.now();
     final loading = LocalEngineHealth(
       status: LocalEngineHealthStatus.loading,
@@ -101,13 +127,11 @@ class LocalEngineHealthMonitor {
     _timer = null;
   }
 
-  /// Force an out-of-band probe. Useful for "Retry" buttons. Returns the
-  /// snapshot it produced. If a probe is already in flight (e.g. the
-  /// periodic timer just fired), the caller piggy-backs on that future
-  /// instead of stacking a second concurrent probe.
-  Future<LocalEngineHealth> probeNow() {
-    return _runProbe();
-  }
+  /// Force an out-of-band probe. Useful for "Retry" buttons. Returns
+  /// the snapshot it produced. If a probe is already in flight (e.g.
+  /// the periodic timer just fired), the caller piggy-backs on that
+  /// future instead of stacking a second concurrent probe.
+  Future<LocalEngineHealth> probeNow() => _runProbe();
 
   Future<LocalEngineHealth> _runProbe() {
     final existing = _inflight;
@@ -122,40 +146,113 @@ class LocalEngineHealthMonitor {
   Future<LocalEngineHealth> _doProbe() async {
     LocalEngineHealth result;
     try {
+      // Tier 1: native Ollama probe.
       final version = await _client.version();
       List<String> loaded = const [];
       try {
         final loadedModels = await _client.listLoadedModels();
         loaded = loadedModels.map((m) => m.name).toList(growable: false);
       } catch (_) {
-        // listLoadedModels can fail on engines that aren't Ollama; that's
-        // not a hard error — we still consider the engine "online" if
-        // /api/version responded.
+        // /api/ps can fail on stripped-down builds; not fatal — we
+        // still consider the engine "online" because /api/version
+        // responded. We just won't show a model name in the pill.
       }
+      // If the engine is up but no model is currently loaded, surface
+      // that as an explicit "warming up" state so the pill can render
+      // amber "Loading model…" instead of green "Online".
+      final status = loaded.isEmpty
+          ? LocalEngineHealthStatus.loadingModel
+          : LocalEngineHealthStatus.online;
       result = LocalEngineHealth(
-        status: LocalEngineHealthStatus.online,
+        status: status,
         version: version,
         loadedModels: loaded,
         checkedAt: DateTime.now(),
       );
     } on OllamaUnavailableException catch (e) {
-      result = LocalEngineHealth(
-        status: LocalEngineHealthStatus.offline,
-        error: e.message,
-        checkedAt: DateTime.now(),
-      );
+      // Tier 2: OpenAI-compatible fallback (LM Studio, llama.cpp, Jan).
+      final compat = await _probeOpenAiCompat();
+      if (compat != null) {
+        result = compat;
+      } else {
+        result = LocalEngineHealth(
+          status: LocalEngineHealthStatus.offline,
+          error: e.message,
+          checkedAt: DateTime.now(),
+        );
+      }
     } catch (e) {
-      result = LocalEngineHealth(
-        status: LocalEngineHealthStatus.offline,
-        error: e.toString(),
-        checkedAt: DateTime.now(),
-      );
+      final compat = await _probeOpenAiCompat();
+      if (compat != null) {
+        result = compat;
+      } else {
+        result = LocalEngineHealth(
+          status: LocalEngineHealthStatus.offline,
+          error: e.toString(),
+          checkedAt: DateTime.now(),
+        );
+      }
     }
     _last = result;
     if (!(_controller?.isClosed ?? true)) {
       _controller?.add(result);
     }
     return result;
+  }
+
+  /// Probe the OpenAI-compatible `/v1/models` endpoint. Returns a
+  /// snapshot when the engine answers, or `null` when nothing is
+  /// listening / the request times out.
+  ///
+  /// We only mark the engine `online` here; OpenAI-compat servers do
+  /// not expose a "warm models" list, so we cannot distinguish
+  /// `online` from `loadingModel`. We do try to surface the first
+  /// model id in [LocalEngineHealth.loadedModels] so the pill can
+  /// still render "Online · {model}" when that data is available.
+  Future<LocalEngineHealth?> _probeOpenAiCompat() async {
+    final client = _httpClientFactory();
+    client.connectionTimeout = _probeTimeout;
+    try {
+      final req = await client
+          .getUrl(Uri.parse('$endpoint/v1/models'))
+          .timeout(_probeTimeout);
+      final resp = await req.close().timeout(_probeTimeout);
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        await resp.drain<void>();
+        return null;
+      }
+      final body = await resp.transform(utf8.decoder).join();
+      List<String> models = const [];
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is Map<String, dynamic>) {
+          final data = decoded['data'];
+          if (data is List) {
+            models = data
+                .whereType<Map<String, dynamic>>()
+                .map((m) => (m['id'] as String?)?.trim() ?? '')
+                .where((id) => id.isNotEmpty)
+                .toList(growable: false);
+          }
+        }
+      } catch (_) {
+        // Body wasn't JSON / wasn't OpenAI-shaped — that's still proof
+        // the port is open and serving HTTP, so we treat it as online.
+      }
+      return LocalEngineHealth(
+        status: LocalEngineHealthStatus.online,
+        loadedModels: models,
+        checkedAt: DateTime.now(),
+      );
+    } on SocketException {
+      return null;
+    } on TimeoutException {
+      return null;
+    } catch (_) {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
   }
 
   /// Tear down the timer and close the broadcast stream. Safe to call

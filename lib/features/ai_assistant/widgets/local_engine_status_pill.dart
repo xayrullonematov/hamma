@@ -61,12 +61,13 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
         final color = switch (status) {
           LocalEngineHealthStatus.online => _zeroTrustGreen,
           LocalEngineHealthStatus.loading => _loadingAmber,
+          LocalEngineHealthStatus.loadingModel => _loadingAmber,
           LocalEngineHealthStatus.offline => AppColors.danger,
         };
 
         // Online label includes the first loaded-in-RAM model, mirroring
         // the spec ("Online · gemma3"). Falls back to plain ONLINE when
-        // the engine is up but no model is currently warm.
+        // the engine is up but the engine doesn't expose a model list.
         String label;
         switch (status) {
           case LocalEngineHealthStatus.online:
@@ -77,8 +78,10 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
             } else {
               label = 'LOCAL · ONLINE';
             }
+          case LocalEngineHealthStatus.loadingModel:
+            label = 'LOCAL · LOADING MODEL';
           case LocalEngineHealthStatus.loading:
-            label = 'LOCAL · LOADING…';
+            label = 'LOCAL · CONNECTING…';
           case LocalEngineHealthStatus.offline:
             label = 'LOCAL · OFFLINE';
         }
@@ -88,10 +91,9 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
             health?.version?.isNotEmpty ?? false
                 ? 'Local engine online · v${health!.version}'
                 : 'Local engine online',
-          LocalEngineHealthStatus.loading =>
-            health?.loadedModels.isNotEmpty ?? false
-                ? 'Loading model ${health!.loadedModels.first}…'
-                : 'Pinging local engine…',
+          LocalEngineHealthStatus.loadingModel =>
+            'Engine reachable — no model warm in RAM yet. The next request will trigger a model load.',
+          LocalEngineHealthStatus.loading => 'Pinging local engine…',
           LocalEngineHealthStatus.offline => health?.error ?? 'Engine offline',
         };
 
@@ -106,7 +108,8 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (status == LocalEngineHealthStatus.loading)
+              if (status == LocalEngineHealthStatus.loading ||
+                  status == LocalEngineHealthStatus.loadingModel)
                 SizedBox(
                   width: 10,
                   height: 10,
