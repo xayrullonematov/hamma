@@ -14,6 +14,17 @@ permissions:
 jobs:
   # ─────────────────────────────────────────────────────────────
   # Android — APK (split per ABI)
+  #
+  # Zero-cost now: APKs are debug-signed, fully installable via sideload.
+  # To release-sign, add these 4 secrets in GitHub → Settings → Secrets:
+  #   ANDROID_KEYSTORE_BASE64  — base64 of your .jks file
+  #                              generate: keytool -genkey -v -keystore hamma-release.jks \
+  #                                -alias hamma -keyalg RSA -keysize 2048 -validity 10000
+  #                              encode:   base64 -w 0 hamma-release.jks
+  #   ANDROID_KEY_STORE_PASSWORD  — password you chose for the keystore
+  #   ANDROID_KEY_ALIAS           — alias you chose (e.g. hamma)
+  #   ANDROID_KEY_PASSWORD        — password you chose for the key
+  # Once all 4 secrets are present, CI automatically produces release-signed APKs.
   # ─────────────────────────────────────────────────────────────
   build_android:
     name: Android APK
@@ -39,13 +50,11 @@ jobs:
 
       - name: Stamp version into pubspec.yaml
         run: |
-          # Derive semantic version from tag (v1.2.3 → 1.2.3) or keep current.
           if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9] ]]; then
             SEMVER="${GITHUB_REF_NAME#v}"
           else
             SEMVER=$(grep '^version:' pubspec.yaml | sed 's/version: //' | cut -d'+' -f1)
           fi
-          # Auto-incrementing build number from total commit count.
           BUILD=$(git rev-list --count HEAD)
           sed -i "s/^version: .*/version: ${SEMVER}+${BUILD}/" pubspec.yaml
           echo "Stamped version: ${SEMVER}+${BUILD}"
@@ -59,6 +68,25 @@ jobs:
 
       - name: Test
         run: flutter test
+
+      # Decodes the keystore from a base64 secret and writes key.properties.
+      # Skipped automatically (with a warning) when the secret is not set.
+      - name: Set up Android release signing
+        env:
+          KEYSTORE_B64:   ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+          KEY_ALIAS:      ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD:   ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 --decode > android/hamma-release.jks
+            printf 'storeFile=hamma-release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+              "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" \
+              > android/key.properties
+            echo "Release signing configured — APKs will be release-signed"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 not set — APKs will be debug-signed (sideload only)"
+          fi
 
       - name: Build APK
         run: flutter build apk --release --split-per-abi --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
@@ -78,6 +106,13 @@ jobs:
 
   # ─────────────────────────────────────────────────────────────
   # Linux — AppImage
+  #
+  # Zero-cost now: AppImage is unsigned.
+  # To GPG-sign (strongly recommended before listing on Flathub/Snap):
+  #   GPG_PRIVATE_KEY  — output of: gpg --export-secret-keys --armor YOUR_KEY_ID
+  #   GPG_PASSPHRASE   — passphrase for that key (use "" if the key has no passphrase)
+  # Once both secrets are present, CI signs the AppImage and uploads
+  # Hamma-x86_64.AppImage.asc alongside it.
   # ─────────────────────────────────────────────────────────────
   build_linux:
     name: Linux AppImage
@@ -132,9 +167,6 @@ jobs:
         run: |
           export CC=/usr/bin/clang
           export CXX=/usr/bin/clang++
-          # Use the crashpad backend in CI so released AppImages have proper
-          # out-of-process crash reporting. The inproc fallback is only used
-          # in the local dev build (see run.sh).
           export SENTRY_NATIVE_BACKEND=crashpad
           flutter build linux --release --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}
 
@@ -142,15 +174,12 @@ jobs:
         run: |
           BUNDLE=build/linux/x64/release/bundle
 
-          # ── Assemble AppDir with the same layout as the Flutter bundle ──
           mkdir -p Hamma.AppDir
           cp -r "$BUNDLE"/. Hamma.AppDir/
 
-          # Icon (required by appimagetool; name must match Icon= in .desktop)
           cp assets/images/logo.png Hamma.AppDir/hamma.png
           cp assets/images/logo.png Hamma.AppDir/.DirIcon
 
-          # Desktop entry
           cat > Hamma.AppDir/hamma.desktop << 'DESKTOP'
           [Desktop Entry]
           Type=Application
@@ -161,8 +190,6 @@ jobs:
           Categories=Network;System;
           DESKTOP
 
-          # Launcher: sets LD_LIBRARY_PATH so the binary finds its bundled .so files,
-          # and adds lib/ to PATH so the sentry crashpad_handler executable is found.
           cat > Hamma.AppDir/AppRun << 'APPRUN'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"
@@ -173,14 +200,28 @@ jobs:
           chmod +x Hamma.AppDir/AppRun
           chmod +x Hamma.AppDir/hamma
 
-          # ── Download and run appimagetool ──
           wget -q "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" \
                -O appimagetool
           chmod +x appimagetool
 
-          # APPIMAGE_EXTRACT_AND_RUN avoids the need for FUSE on the runner
           ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 \
             ./appimagetool --no-appstream Hamma.AppDir Hamma-x86_64.AppImage
+
+      # Signs the AppImage with your GPG key and produces a detached .asc file.
+      # Skipped automatically when GPG_PRIVATE_KEY secret is not set.
+      - name: GPG-sign AppImage
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE:  ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+            echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 \
+              --detach-sign --armor Hamma-x86_64.AppImage
+            echo "AppImage GPG-signed → Hamma-x86_64.AppImage.asc created"
+          else
+            echo "::warning::GPG_PRIVATE_KEY not set — AppImage will be unsigned"
+          fi
 
       - name: Upload Linux bundle artifact
         uses: actions/upload-artifact@v4
@@ -188,14 +229,24 @@ jobs:
           name: linux-bundle-${{ github.run_number }}
           path: build/linux/x64/release/bundle/
 
+      # Uploads both the AppImage and its .asc signature (if it was created).
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage-${{ github.run_number }}
-          path: Hamma-x86_64.AppImage
+          path: Hamma-x86_64.AppImage*
 
   # ─────────────────────────────────────────────────────────────
-  # Windows — NSIS / Inno Setup installer (.exe)
+  # Windows — Inno Setup installer (.exe)
+  #
+  # Zero-cost now: installer is unsigned (Windows SmartScreen will warn).
+  # To Authenticode-sign (removes SmartScreen warning):
+  #   WINDOWS_CERT_BASE64   — base64 of your .pfx file
+  #                           encode: certutil -encode cert.pfx cert.b64  (Windows)
+  #                           or:     base64 -w 0 cert.pfx               (Linux/macOS)
+  #   WINDOWS_CERT_PASSWORD — password for the .pfx
+  # Once both secrets are present, CI signs the installer before upload.
+  # Supported CAs: SSL.com, Sectigo, DigiCert, Certum (OSS free option).
   # ─────────────────────────────────────────────────────────────
   build_windows:
     name: Windows Installer
@@ -216,7 +267,6 @@ jobs:
       - name: Stamp version into pubspec.yaml
         shell: pwsh
         run: |
-          # Derive semantic version from tag (v1.2.3 → 1.2.3) or keep current.
           $ref = $env:GITHUB_REF_NAME
           if ($ref -match '^v(\d.+)') {
             $semver = $Matches[1]
@@ -225,7 +275,6 @@ jobs:
               -replace 'version: ', '' `
               -replace '\+.*', ''
           }
-          # Auto-incrementing build number from total commit count.
           $build = (git rev-list --count HEAD).Trim()
           (Get-Content pubspec.yaml) `
             -replace '^version: .*', "version: ${semver}+${build}" `
@@ -248,15 +297,39 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          # Read the stamped semver from pubspec.yaml so branch and
-          # workflow_dispatch builds use the same version as Android/Linux
-          # rather than diverging to a hardcoded 1.0.0.
           $line = (Select-String '^version:' pubspec.yaml).Line
           $version = ($line -replace 'version: ', '' -split '\+')[0]
           Write-Host "Building installer version $version"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
               "/DAppVersion=$version" `
               "installer\windows\hamma.iss"
+
+      # Signs the installer with your Authenticode (.pfx) certificate.
+      # Skipped automatically when WINDOWS_CERT_BASE64 secret is not set.
+      - name: Sign Windows installer
+        env:
+          CERT_B64:      ${{ secrets.WINDOWS_CERT_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          if ($env:CERT_B64) {
+            [IO.File]::WriteAllBytes("cert.pfx", [Convert]::FromBase64String($env:CERT_B64))
+            $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" `
+              -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue `
+              | Where-Object { $_.FullName -like '*x64*' } `
+              | Select-Object -First 1 -ExpandProperty FullName
+            if (-not $signtool) {
+              Write-Error "signtool.exe not found — install Windows SDK"
+              exit 1
+            }
+            & $signtool sign /f cert.pfx /p $env:CERT_PASSWORD `
+              /fd SHA256 /tr "http://timestamp.sectigo.com" /td SHA256 `
+              Hamma-Setup-Windows-x64.exe
+            Remove-Item cert.pfx -Force
+            Write-Host "::notice::Windows installer signed successfully"
+          } else {
+            Write-Warning "WINDOWS_CERT_BASE64 not set — installer unsigned (SmartScreen warning expected on first run)"
+          }
 
       - name: Upload Windows bundle artifact
         uses: actions/upload-artifact@v4
