@@ -10,6 +10,9 @@ import 'package:window_manager/window_manager.dart';
 import 'core/ai/ai_command_service.dart';
 import 'core/ai/ai_provider.dart';
 import 'core/background/background_keepalive.dart';
+import 'core/error/crash_screen.dart';
+import 'core/error/error_reporter.dart';
+import 'core/error/error_scrubber.dart';
 import 'core/models/server_profile.dart';
 import 'core/ssh/ssh_service.dart';
 import 'core/storage/api_key_storage.dart';
@@ -25,139 +28,190 @@ import 'features/servers/server_list_screen.dart';
 /// Production flag to disable debug-only features and logs.
 const bool kProduction = bool.fromEnvironment('dart.vm.product');
 
+/// Number of consecutive in-process restart attempts. Incremented every
+/// time the user taps **TRY RESTART** on the crash screen. When this
+/// exceeds [_maxRestartAttempts] the restart button is hidden so a
+/// deterministic startup failure can't trap the user in an infinite
+/// crash → restart → crash loop.
+int _restartAttempts = 0;
+const int _maxRestartAttempts = 3;
+
 void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    // Initialize desktop managers
-    if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
-      await windowManager.ensureInitialized();
-      await hotKeyManager.unregisterAll();
-      
-      const windowOptions = WindowOptions(
-        size: Size(1100, 750),
-        // Allow shrinking down to phone-class width so the responsive
-        // (mobile) layout can be tested directly on desktop.
-        minimumSize: Size(360, 600),
-        center: true,
-        titleBarStyle: TitleBarStyle.hidden,
-        skipTaskbar: false,
-      );
+    // Install our error hooks (FlutterError.onError, PlatformDispatcher
+    // .instance.onError, ErrorWidget.builder) BEFORE SentryFlutter.init
+    // so Sentry's own integrations layer on top and chain to ours
+    // rather than replacing them.
+    ErrorReporter.install();
 
-      await windowManager.waitUntilReadyToShow(windowOptions, () async {
-        await windowManager.show();
-        await windowManager.focus();
-      });
-
-      await windowManager.setPreventClose(true);
+    try {
+      await _bootstrapAndRun();
+      // Successful boot — reset the restart counter so a subsequent
+      // failure starts from a fresh budget rather than inheriting
+      // attempts from earlier in this session.
+      _restartAttempts = 0;
+    } catch (error, stack) {
+      // Fatal startup failure: report and fall back to the standalone
+      // crash screen so the user sees a friendly recovery UI instead
+      // of a black window. Suppress the restart button after enough
+      // consecutive failures so a deterministic crash can't loop.
+      await ErrorReporter.report(error, stack, hint: 'Startup failure');
+      final canRestart = _restartAttempts < _maxRestartAttempts;
+      runApp(CrashApp(
+        error: error,
+        stackTrace: stack,
+        hint: canRestart
+            ? 'Hamma failed to start.'
+            : 'Hamma failed to start, and automatic restart has been '
+                'disabled after $_restartAttempts attempts. Please quit '
+                'and relaunch.',
+        onRestart: canRestart
+            ? () {
+                _restartAttempts++;
+                main();
+              }
+            : null,
+      ));
     }
+  }, (exception, stackTrace) async {
+    // Async errors that escaped the zone — also funnel through the
+    // central reporter so they appear on the crash screen if fatal.
+    await ErrorReporter.report(exception, stackTrace,
+        hint: 'Uncaught async error');
+  });
+}
 
-    // Initialize notifications
-    final notifications = FlutterLocalNotificationsPlugin();
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosInit = DarwinInitializationSettings();
-    await notifications.initialize(
-      const InitializationSettings(android: androidInit, iOS: iosInit),
+/// Performs the full app startup sequence and calls `runApp` exactly
+/// once on success. Any exception escapes to the caller in `main` so
+/// the crash-screen fallback can be shown.
+Future<void> _bootstrapAndRun() async {
+  // Initialize desktop managers
+  if (Platform.isLinux || Platform.isWindows || Platform.isMacOS) {
+    await windowManager.ensureInitialized();
+    await hotKeyManager.unregisterAll();
+
+    const windowOptions = WindowOptions(
+      size: Size(1100, 750),
+      // Allow shrinking down to phone-class width so the responsive
+      // (mobile) layout can be tested directly on desktop.
+      minimumSize: Size(360, 600),
+      center: true,
+      titleBarStyle: TitleBarStyle.hidden,
+      skipTaskbar: false,
     );
 
-    // Initialize background sentinel
-    await BackgroundKeepalive.initialize();
+    await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
 
-    const apiKeyStorage = ApiKeyStorage();
-    const appLockStorage = AppLockStorage();
-    const appPrefsStorage = AppPrefsStorage();
+    await windowManager.setPreventClose(true);
+  }
 
-    var savedSettings = const AiSettings(
-      provider: AiProvider.openAi,
-      openRouterModel: null,
-    );
-    String? aiSettingsStartupWarning;
-    var hasAppPin = false;
-    var isOnboardingComplete = false;
+  // Initialize notifications
+  final notifications = FlutterLocalNotificationsPlugin();
+  const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const iosInit = DarwinInitializationSettings();
+  await notifications.initialize(
+    const InitializationSettings(android: androidInit, iOS: iosInit),
+  );
 
-    try {
-      savedSettings = await apiKeyStorage.loadSettings();
-    } catch (error) {
-      aiSettingsStartupWarning =
-          'Could not load the saved AI settings. You can continue and re-save them in Settings.\n$error';
+  // Initialize background sentinel
+  await BackgroundKeepalive.initialize();
+
+  const apiKeyStorage = ApiKeyStorage();
+  const appLockStorage = AppLockStorage();
+  const appPrefsStorage = AppPrefsStorage();
+
+  var savedSettings = const AiSettings(
+    provider: AiProvider.openAi,
+    openRouterModel: null,
+  );
+  String? aiSettingsStartupWarning;
+  var hasAppPin = false;
+  var isOnboardingComplete = false;
+
+  try {
+    savedSettings = await apiKeyStorage.loadSettings();
+  } catch (error) {
+    aiSettingsStartupWarning =
+        'Could not load the saved AI settings. You can continue and re-save them in Settings.\n$error';
+  }
+
+  try {
+    hasAppPin = await appLockStorage.hasPin();
+  } catch (_) {
+    hasAppPin = false;
+  }
+
+  try {
+    isOnboardingComplete = await appPrefsStorage.isOnboardingComplete();
+  } catch (_) {
+    isOnboardingComplete = false;
+  }
+
+  // Start health monitoring if enabled
+  try {
+    if (await appPrefsStorage.isHealthMonitoringEnabled()) {
+      final interval = await appPrefsStorage.getHealthCheckInterval();
+      await BackgroundKeepalive.enable(intervalMinutes: interval);
     }
+  } catch (_) {}
 
-    try {
-      hasAppPin = await appLockStorage.hasPin();
-    } catch (_) {
-      hasAppPin = false;
-    }
+  // Sentry DSN can be hardcoded for production or overridden by dev config
+  const productionDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
 
-    try {
-      isOnboardingComplete = await appPrefsStorage.isOnboardingComplete();
-    } catch (_) {
-      isOnboardingComplete = false;
-    }
+  final app = AiServerApp(
+    apiKeyStorage: apiKeyStorage,
+    appLockStorage: appLockStorage,
+    appPrefsStorage: appPrefsStorage,
+    initialSettings: savedSettings,
+    initialHasAppPin: hasAppPin,
+    initialIsOnboardingComplete: isOnboardingComplete,
+    initialAiSettingsLoadError: aiSettingsStartupWarning,
+  );
 
-    // Start health monitoring if enabled
-    try {
-      if (await appPrefsStorage.isHealthMonitoringEnabled()) {
-        final interval = await appPrefsStorage.getHealthCheckInterval();
-        await BackgroundKeepalive.enable(intervalMinutes: interval);
-      }
-    } catch (_) {}
+  if (productionDsn.isEmpty) {
+    runApp(app);
+    return;
+  }
 
-    // Sentry DSN can be hardcoded for production or overridden by dev config
-    const productionDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = kProduction ? productionDsn : '';
+      options.tracesSampleRate = 1.0;
+      options.attachStacktrace = true;
+      options.enableAutoSessionTracking = true;
 
-    final app = AiServerApp(
-      apiKeyStorage: apiKeyStorage,
-      appLockStorage: appLockStorage,
-      appPrefsStorage: appPrefsStorage,
-      initialSettings: savedSettings,
-      initialHasAppPin: hasAppPin,
-      initialIsOnboardingComplete: isOnboardingComplete,
-      initialAiSettingsLoadError: aiSettingsStartupWarning,
-    );
+      // Transport-side scrubbing: every event leaving the device
+      // passes through the same scrubber the in-app crash screen uses
+      // so the two views of an error stay consistent.
+      options.beforeSend = (SentryEvent event, Hint hint) {
+        if (event.message != null) {
+          event.message = SentryMessage(
+            ErrorScrubber.scrub(event.message!.formatted),
+          );
+        }
 
-    if (productionDsn.isEmpty) {
-      runApp(app);
-      return;
-    }
-
-    await SentryFlutter.init(
-      (options) {
-        options.dsn = kProduction ? productionDsn : '';
-        options.tracesSampleRate = 1.0;
-        options.attachStacktrace = true;
-        options.enableAutoSessionTracking = true;
-
-        // Scrub sensitive data before sending
-        options.beforeSend = (SentryEvent event, Hint hint) {
-          if (event.message != null) {
-            event.message = SentryMessage(
-              event.message!.formatted.replaceAll(
-                RegExp(r'password[:=]\s*\S+'),
-                'password=[SCRUBBED]',
-              ),
+        // Remove sensitive keys from contexts if they exist
+        for (final context in event.contexts.values) {
+          if (context is Map) {
+            context.removeWhere(
+              (key, value) =>
+                  key.toString().toLowerCase().contains('password') ||
+                  key.toString().toLowerCase().contains('key') ||
+                  key.toString().toLowerCase().contains('secret'),
             );
           }
+        }
 
-          // Remove sensitive keys from contexts if they exist
-          for (final context in event.contexts.values) {
-            if (context is Map) {
-              context.removeWhere(
-                (key, value) =>
-                    key.toString().toLowerCase().contains('password') ||
-                    key.toString().toLowerCase().contains('key') ||
-                    key.toString().toLowerCase().contains('secret'),
-              );
-            }
-          }
-
-          return event;
-        };
-      },
-      appRunner: () => runApp(app),
-    );
-  }, (exception, stackTrace) async {
-    await Sentry.captureException(exception, stackTrace: stackTrace);
-  });
+        return event;
+      };
+    },
+    appRunner: () => runApp(app),
+  );
 }
 
 class AiServerApp extends StatefulWidget {

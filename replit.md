@@ -124,6 +124,56 @@ contents — server profiles, AI keys, trusted host keys) live in
   (binary + JSON + text payloads), all failure modes, the legacy
   migration path, and lock in the exact Argon2id parameters.
 
+## Global Error Handling
+
+Top-level error capture is centralised in `lib/core/error/`:
+
+- `error_scrubber.dart` — pure-Dart `ErrorScrubber.scrub()` that
+  removes likely-sensitive substrings (`password=`, `pin=`, `token=`,
+  `apiKey=`, `secret=`, `Authorization: Bearer/Basic …`,
+  `sk-…` OpenAI keys, standalone JWTs (`eyJ.eyJ.<sig>` shape),
+  PEM `-----BEGIN … PRIVATE KEY-----` blocks) before any error
+  message is shown to the user or sent to Sentry.
+- `error_reporter.dart` — `ErrorReporter.install()` wires the three
+  Flutter error hooks (`FlutterError.onError`,
+  `PlatformDispatcher.instance.onError`, `ErrorWidget.builder`) and
+  **chains** to whatever was previously installed, so calling it
+  before `SentryFlutter.init` is safe — Sentry's own integrations
+  layer on top without losing ours. Captures the most recent fatal
+  error in `ErrorReporter.lastFatal` for the crash screen.
+- `in_widget_error_panel.dart` — brutalist replacement for Flutter's
+  default red-on-yellow `ErrorWidget`. Renders in place of any single
+  widget that throws during build/layout/paint. Compact, theme-free
+  (so it works even when the app theme is the failure cause), shows
+  scrubbed message, and adds file/line context only in debug mode.
+- `crash_screen.dart` — standalone full-screen `CrashApp` shown when
+  the bootstrap sequence in `main.dart` fails. Builds its own
+  `MaterialApp` to avoid depending on the broken main app. Actions:
+  **COPY DETAILS** (scrubbed message + stack to clipboard),
+  **TRY RESTART** (re-runs `main()`, capped at 3 consecutive
+  attempts to prevent infinite crash loops on deterministic
+  failures), **QUIT** (desktop only; hidden on iOS/Android per
+  platform guidelines). Stack details are collapsed by default in
+  release, expanded by default in debug.
+
+`main.dart` integration:
+1. `WidgetsFlutterBinding.ensureInitialized()`
+2. `ErrorReporter.install()` — handlers active before any other init
+3. `_bootstrapAndRun()` — wrapped in try/catch; on failure shows
+   `CrashApp(onRestart: main)` instead of the normal app
+4. `runZonedGuarded` outer handler funnels uncaught async errors
+   through `ErrorReporter.report()`
+5. Sentry `beforeSend` reuses the same `ErrorScrubber.scrub()` so
+   transport-side and in-app views of an error stay consistent
+
+48 unit tests across `test/error_scrubber_test.dart` (36) and
+`test/error_reporter_test.dart` (12) cover every scrubber pattern
+(including JWT positive + negative cases), no-op cases, robustness
+against control characters and 100k-char input, handler chaining,
+idempotent installation, scrubbed capture into `lastFatal`,
+`report()` never-throws guarantee, and the in-widget panel's render
+output.
+
 ## Key Modifications
 
 - Fixed `DropdownButtonFormField.initialValue` → `value` in settings_screen.dart (Flutter 3.32.0 API change)
