@@ -248,8 +248,11 @@ jobs:
       - name: Build installer
         shell: pwsh
         run: |
-          # Strip leading 'v' from tag (v1.2.3 → 1.2.3); fall back to 1.0.0
-          $version = if ($env:GITHUB_REF_NAME -match '^v(.+)') { $Matches[1] } else { '1.0.0' }
+          # Read the stamped semver from pubspec.yaml so branch and
+          # workflow_dispatch builds use the same version as Android/Linux
+          # rather than diverging to a hardcoded 1.0.0.
+          $line = (Select-String '^version:' pubspec.yaml).Line
+          $version = ($line -replace 'version: ', '' -split '\+')[0]
           Write-Host "Building installer version $version"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
               "/DAppVersion=$version" `

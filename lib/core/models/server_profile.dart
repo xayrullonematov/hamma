@@ -74,20 +74,44 @@ class ServerProfile {
   }
 
   factory ServerProfile.fromJson(Map<String, dynamic> json) {
+    // Type-checked accessors that don't crash on missing/wrong-type fields,
+    // but also don't silently coerce maps/lists/bools into strings (which
+    // would make a corrupted profile look superficially valid).
+    String str(String key) {
+      final v = json[key];
+      return v is String ? v : '';
+    }
+
+    String? strOrNull(String key) {
+      final v = json[key];
+      return v is String ? v : null;
+    }
+
+    // Port: accept int or string-encoded int (legitimate JSON variation).
+    // Default to 22 only when the field is absent or null. For malformed
+    // values, return 0 so `isValid` flags the profile rather than silently
+    // connecting to the SSH default port.
     final rawPort = json['port'];
-    final port = rawPort is int
-        ? rawPort
-        : int.tryParse(rawPort?.toString() ?? '') ?? 22;
+    final int port;
+    if (rawPort == null) {
+      port = 22;
+    } else if (rawPort is int) {
+      port = rawPort;
+    } else if (rawPort is String) {
+      port = int.tryParse(rawPort) ?? 0;
+    } else {
+      port = 0;
+    }
 
     return ServerProfile(
-      id: json['id']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
-      host: json['host']?.toString() ?? '',
+      id: str('id'),
+      name: str('name'),
+      host: str('host'),
       port: port,
-      username: json['username']?.toString() ?? '',
-      password: json['password']?.toString() ?? '',
-      privateKey: json['privateKey']?.toString(),
-      privateKeyPassword: json['privateKeyPassword']?.toString(),
+      username: str('username'),
+      password: str('password'),
+      privateKey: strOrNull('privateKey'),
+      privateKeyPassword: strOrNull('privateKeyPassword'),
     );
   }
 }

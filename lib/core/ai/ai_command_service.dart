@@ -171,15 +171,35 @@ class AiCommandService {
       } catch (_) {}
     }
 
-    // 3. Brace-depth scan — O(n), handles nested objects correctly.
+    // 3. Brace-depth scan — O(n), string-aware so braces inside JSON
+    //    strings (e.g. {"explanation":"literal } brace"}) don't prematurely
+    //    close the candidate. Tracks escape sequences inside strings.
     int depth = 0;
     int start = -1;
+    bool inString = false;
+    bool escape = false;
+
     for (int i = 0; i < trimmed.length; i++) {
       final ch = trimmed[i];
-      if (ch == '{') {
+
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (ch == r'\') {
+          escape = true;
+        } else if (ch == '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch == '"') {
+        inString = true;
+      } else if (ch == '{') {
         if (depth == 0) start = i;
         depth++;
       } else if (ch == '}') {
+        if (depth == 0) continue; // stray '}' in prose — ignore
         depth--;
         if (depth == 0 && start != -1) {
           try {
