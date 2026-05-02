@@ -1,61 +1,155 @@
+<!--
+  ╔══════════════════════════════════════════════════════════════════════╗
+  ║                                                                      ║
+  ║   H A M M A — AI-Powered SSH Client                                  ║
+  ║   Brutalist · Local-First · Zero-Trust                               ║
+  ║                                                                      ║
+  ╚══════════════════════════════════════════════════════════════════════╝
+-->
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ ANIMATED HEADER BANNER ━━━━━━━━━━━━━━━━━━━━ -->
+
 <div align="center">
 
-# 🛡️ HAMMA
-
-### **Manage your servers without writing commands.**
-
-*A brutalist, AI-powered SSH client for Linux, Windows, macOS, Android & iOS — built in Flutter.*
+<a href="#-hamma">
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:000000,50:00FF88,100:000000&height=240&section=header&text=HAMMA&fontSize=90&fontColor=FFFFFF&animation=fadeIn&fontAlignY=40&desc=Manage%20servers%20without%20writing%20commands&descAlignY=62&descSize=18&descColor=00FF88" alt="Hamma — AI Server Manager" width="100%"/>
+</a>
 
 <br/>
 
-[![Status](https://img.shields.io/badge/STATUS-BETA--RC-00FF88?style=for-the-badge&labelColor=000000)]()
-[![Stack](https://img.shields.io/badge/STACK-FLUTTER-02569B?style=for-the-badge&logo=flutter&labelColor=000000)]()
-[![License](https://img.shields.io/badge/LICENSE-PROPRIETARY-FF0000?style=for-the-badge&labelColor=000000)]()
-[![AI](https://img.shields.io/badge/AI-LOCAL%20%2B%20CLOUD-8E44AD?style=for-the-badge&labelColor=000000)]()
-[![Privacy](https://img.shields.io/badge/PRIVACY-ZERO--TRUST-FFFFFF?style=for-the-badge&labelColor=000000)]()
+<!-- ━━━━━━━━━━━━━━━━━━━━ LOGO + ANIMATED TAGLINE ━━━━━━━━━━━━━━━━━━━━ -->
+
+<img src="assets/images/logo.png" alt="Hamma logo" width="140" height="140" style="border-radius: 24px;"/>
+
+<br/><br/>
+
+<a href="#-quick-start">
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=22&pause=1200&color=00FF88&center=true&vCenter=true&width=720&height=50&lines=Local+AI.+Zero+trust.+Zero+telemetry.;SSH+%2B+SFTP+%2B+Docker+%2B+AI+in+one+pocket.;Streaming+local+models.+Brutalist+UI.;Built+for+engineers+who+refuse+to+compromise." alt="Animated tagline" />
+</a>
 
 <br/>
 
-```
-╔══════════════════════════════════════════════════════════════╗
-║   YOUR FLEET. YOUR KEYS. YOUR AI. NOTHING LEAVES YOUR DEVICE. ║
-╚══════════════════════════════════════════════════════════════╝
-```
+<!-- ━━━━━━━━━━━━━━━━━━━━ STATUS BADGES ROW ━━━━━━━━━━━━━━━━━━━━ -->
+
+<p>
+  <img src="https://img.shields.io/badge/STATUS-BETA--RC-00FF88?style=for-the-badge&labelColor=000000&logo=statuspage&logoColor=00FF88" alt="Status"/>
+  <img src="https://img.shields.io/badge/VERSION-1.0.0-FFFFFF?style=for-the-badge&labelColor=000000&logo=semver&logoColor=FFFFFF" alt="Version"/>
+  <img src="https://img.shields.io/badge/LICENSE-PROPRIETARY-FF0000?style=for-the-badge&labelColor=000000&logo=gnubash&logoColor=FF0000" alt="License"/>
+  <img src="https://img.shields.io/badge/TESTS-65%2F65-00FF88?style=for-the-badge&labelColor=000000&logo=vitest&logoColor=00FF88" alt="Tests"/>
+  <img src="https://img.shields.io/badge/PRIVACY-ZERO--TRUST-FFFFFF?style=for-the-badge&labelColor=000000&logo=tor&logoColor=FFFFFF" alt="Zero Trust"/>
+</p>
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ PLATFORM BADGES ROW ━━━━━━━━━━━━━━━━━━━━ -->
+
+<p>
+  <img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black"/>
+  <img src="https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white"/>
+  <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white"/>
+  <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white"/>
+  <img src="https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=ios&logoColor=white"/>
+</p>
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ CTA BUTTONS ━━━━━━━━━━━━━━━━━━━━ -->
+
+<p>
+  <a href="#-quick-start">
+    <img src="https://img.shields.io/badge/▶_GET_STARTED-00FF88?style=for-the-badge&labelColor=000000&color=00FF88" alt="Get Started"/>
+  </a>
+  &nbsp;
+  <a href="#%EF%B8%8F-architecture-at-a-glance">
+    <img src="https://img.shields.io/badge/📖_DOCUMENTATION-FFFFFF?style=for-the-badge&labelColor=000000&color=FFFFFF" alt="Documentation"/>
+  </a>
+  &nbsp;
+  <a href="#-first-class-local-ai">
+    <img src="https://img.shields.io/badge/🤖_LOCAL_AI-8E44AD?style=for-the-badge&labelColor=000000&color=8E44AD" alt="Local AI"/>
+  </a>
+  &nbsp;
+  <a href="#-roadmap">
+    <img src="https://img.shields.io/badge/🗺️_ROADMAP-FF0000?style=for-the-badge&labelColor=000000&color=FF0000" alt="Roadmap"/>
+  </a>
+</p>
 
 </div>
 
+<br/>
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ ELEVATOR PITCH ━━━━━━━━━━━━━━━━━━━━ -->
+
+<div align="center">
+
+> ### **The DevOps command center that fits in your pocket.**
+> SSH, SFTP, Docker, processes, services, and a streaming AI copilot — running fully **on-device**. Your fleet, your keys, your AI. **Nothing leaves your machine.**
+
+</div>
+
+<br/>
+
 ---
 
-## 🌟 What is Hamma?
+<!-- ━━━━━━━━━━━━━━━━━━━━ WHY HAMMA — 3 PILLARS ━━━━━━━━━━━━━━━━━━━━ -->
 
-**Hamma** is a comprehensive DevOps command center that fits in your pocket *and* on your desktop. It bridges raw terminal complexity and modern UX with a **safety-first AI layer** that explains logs, suggests fixes, and orchestrates your fleet — all while keeping every byte of your data local.
+## 🔥 Why Hamma?
 
-> **No proxy. No telemetry of your commands. No AI prompts shipped to a third party (unless *you* configure that).**
+<table align="center" width="100%">
+<tr>
+<td align="center" width="33%">
+<img src="https://img.shields.io/badge/01-LOCAL_FIRST_AI-00FF88?style=for-the-badge&labelColor=000000" />
+<br/><br/>
+<b>Streaming on-device LLMs.</b>
+<br/><br/>
+Pull, manage, and chat with Ollama / LM Studio / llama.cpp / Jan models — all from inside the app. Token-by-token streaming. No API key required.
+</td>
+<td align="center" width="33%">
+<img src="https://img.shields.io/badge/02-ZERO_TRUST-FF0000?style=for-the-badge&labelColor=000000" />
+<br/><br/>
+<b>Loopback or it doesn't ship.</b>
+<br/><br/>
+Local AI is hard-guarded at runtime to <code>127.0.0.0/8</code>, <code>::1</code>, and <code>localhost</code>. Your prompts physically cannot leave your device.
+</td>
+<td align="center" width="33%">
+<img src="https://img.shields.io/badge/03-MULTI_PLATFORM-FFFFFF?style=for-the-badge&labelColor=000000" />
+<br/><br/>
+<b>Five OSes. One codebase.</b>
+<br/><br/>
+Flutter-native on Linux, Windows, macOS, Android, and iOS. Brutalist UI tuned for both pocket and pixel-dense desktop.
+</td>
+</tr>
+</table>
+
+<br/>
 
 ---
 
-## ⚡ Feature Grid
+<!-- ━━━━━━━━━━━━━━━━━━━━ FEATURE SHOWCASE GRID ━━━━━━━━━━━━━━━━━━━━ -->
+
+## ⚡ Feature Matrix
 
 <table>
 <tr>
 <td width="50%" valign="top">
 
 ### 🧠 AI Copilot
-- **Local-first AI** via Ollama, LM Studio, llama.cpp & Jan
-- **Cloud AI** (OpenAI · Gemini · OpenRouter) optional
-- **Streaming** token-by-token replies
-- **Risk Assessor** flags destructive commands before run
-- **One-tap error analysis** on SSH failures
+```diff
++ Local-first  (Ollama · LM Studio · llama.cpp · Jan)
++ Cloud option (OpenAI · Gemini · OpenRouter)
++ Streaming token-by-token replies
++ Risk Assessor flags destructive commands
++ One-tap error analysis on SSH failures
++ Engine status pill — tap for live diagnostics
+```
 
 </td>
 <td width="50%" valign="top">
 
 ### 🔐 Security & Privacy
-- **Zero-Proxy:** direct encrypted SSH tunnels
-- **Zero-Trust Local AI:** loopback-only, runtime-enforced
-- **App PIN + Biometrics** unlock the encrypted vault
-- **Argon2id + AES-256-GCM** encrypted backups
-- **Trusted host-key pinning** out of the box
+```diff
++ Zero-Proxy: direct encrypted SSH tunnels
++ Zero-Trust Local AI: loopback only
++ App PIN + biometrics on every cold launch
++ Argon2id (m=19 MiB) + AES-256-GCM backups
++ Trusted host-key pinning
++ Sentry opt-in, prompts/secrets scrubbed
+```
 
 </td>
 </tr>
@@ -63,19 +157,25 @@
 <td width="50%" valign="top">
 
 ### 🖥️ Mobile-Optimized Terminal
-- `xterm.dart` powered, 256-color, Unicode-safe
-- Custom keyboard row (Ctrl, Tab, arrows, pipe, ~, …)
-- Full SSH agent + key auth
-- Reconnect-on-wake, persistent sessions
+```diff
++ xterm.dart · 256-color · Unicode-safe
++ Custom keyboard row (Ctrl, Tab, arrows, ~, |)
++ SSH agent + key auth + agent forwarding
++ Reconnect-on-wake, persistent sessions
++ Pinch-to-zoom, autocomplete, history search
+```
 
 </td>
 <td width="50%" valign="top">
 
 ### 📁 Visual SFTP
-- Browse, edit, upload, download, chmod
-- In-app editor with syntax highlighting
-- Automatic **`sudo` fallback** on permission denied
-- Drag-to-reorder, multi-select bulk ops
+```diff
++ Browse, edit, upload, download, chmod
++ In-app editor with syntax highlighting
++ Automatic sudo fallback on permission denied
++ Drag-to-reorder, multi-select bulk ops
++ Encrypted snippet library
+```
 
 </td>
 </tr>
@@ -83,25 +183,60 @@
 <td width="50%" valign="top">
 
 ### 🐳 Docker & Service Control
-- List / start / stop / restart containers
-- Live `docker logs -f` streaming
-- `systemd` service manager
-- Process viewer (CPU / RAM per PID)
+```diff
++ List / start / stop / restart containers
++ Live `docker logs -f` streaming
++ systemd service manager
++ Process viewer (CPU / RAM per PID)
++ Package manager (apt · dnf · pacman)
+```
 
 </td>
 <td width="50%" valign="top">
 
 ### 🌐 Fleet & Networking
-- Unified dashboard for every server
-- Live health metrics & uptime
-- SSH port forwarding from your phone
-- Encrypted backup sync (Local · SFTP · WebDAV · Syncthing)
+```diff
++ Unified dashboard for every server
++ Live health metrics & uptime monitoring
++ SSH port forwarding from your phone
++ Encrypted backup sync — Local · SFTP · WebDAV · Syncthing
++ Snippet sharing across devices
+```
 
 </td>
 </tr>
 </table>
 
+<br/>
+
 ---
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ COMPARISON TABLE ━━━━━━━━━━━━━━━━━━━━ -->
+
+## 📊 How Hamma Compares
+
+<div align="center">
+
+| Capability                           | **🛡️ Hamma**       | Termius          | OpenSSH + ChatGPT  | iSH / Blink        |
+| :----------------------------------- | :-----------------: | :--------------: | :----------------: | :----------------: |
+| **Streaming local LLMs in-app**      | ✅ **Yes**          | ❌                | ❌                 | ❌                 |
+| **Zero-trust loopback enforcement**  | ✅ **Runtime + tested** | ❌            | ❌                 | ❌                 |
+| **AI risk assessor (pre-execution)** | ✅ **Yes**          | ❌                | ❌                 | ❌                 |
+| **Multi-platform (5 OSes)**          | ✅ **All five**     | ✅ Most          | ⚠️ CLI only        | ⚠️ iOS only        |
+| **Visual SFTP with sudo fallback**   | ✅ **Yes**          | ✅                | ❌                 | ❌                 |
+| **Docker & systemd panel**           | ✅ **Yes**          | ⚠️ Partial       | ❌                 | ❌                 |
+| **Encrypted backups (Argon2id)**     | ✅ **Yes**          | ⚠️ Cloud-only    | ❌                 | ❌                 |
+| **Subscription required**            | ❌ **Free core**    | 💰 Yes (pro)     | Free (CLI)         | 💰 Mixed           |
+| **Cloud account required**           | ❌ **No**           | ✅ Yes           | ❌                 | ❌                 |
+| **Telemetry of your prompts**        | ❌ **Never**        | ⚠️ Some           | ⚠️ All to OpenAI   | n/a                |
+
+</div>
+
+<br/>
+
+---
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ ARCHITECTURE DIAGRAM ━━━━━━━━━━━━━━━━━━━━ -->
 
 ## 🏛️ Architecture at a Glance
 
@@ -115,7 +250,7 @@ flowchart LR
         UI --> LocalAI
     end
 
-    subgraph Cloud["☁️ OPTIONAL"]
+    subgraph Cloud["☁️ OPTIONAL CLOUD AI"]
         OpenAI[OpenAI]
         Gemini[Gemini]
         OR[OpenRouter]
@@ -130,42 +265,66 @@ flowchart LR
     style Cloud fill:#050505,stroke:#888888,color:#FFFFFF
     style LocalAI fill:#000000,stroke:#00FF88,color:#00FF88
     style Vault fill:#000000,stroke:#FF0000,color:#FFFFFF
+    style Servers fill:#0A0A0A,stroke:#FFFFFF,color:#FFFFFF
 ```
 
+<br/>
+
 ---
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ LOCAL AI DEEP-DIVE ━━━━━━━━━━━━━━━━━━━━ -->
 
 ## 🤖 First-Class Local AI
 
-Hamma treats **local inference as a first-class citizen** — not an afterthought.
+<div align="center">
 
-| Capability | Status |
-|---|---|
-| Auto-detect local engines on standard ports | ✅ Ollama · LM Studio · llama.cpp · Jan |
-| In-app model manager (pull / delete / set default) | ✅ Streaming progress, byte-accurate |
-| Streaming chat replies (token-by-token) | ✅ SSE + NDJSON |
-| Real-time engine health pill | ✅ `ONLINE · {model}` / `LOADING` / `OFFLINE` |
-| 3-step onboarding wizard with OS-aware snippets | ✅ macOS · Linux · Windows |
-| Loopback-only enforcement | ✅ Tested *and* hard-guarded at runtime |
+<img src="https://img.shields.io/badge/POWERED_BY-OLLAMA-000000?style=for-the-badge&logo=ollama&logoColor=white" />
+<img src="https://img.shields.io/badge/+-LM_STUDIO-4A4A4A?style=for-the-badge" />
+<img src="https://img.shields.io/badge/+-LLAMA.CPP-FF6B6B?style=for-the-badge" />
+<img src="https://img.shields.io/badge/+-JAN-3B82F6?style=for-the-badge" />
+
+</div>
+
+<br/>
+
+| Capability                                                | Status          |
+| :-------------------------------------------------------- | :-------------: |
+| Auto-detect engines on standard ports                     | ✅ All four     |
+| In-app model manager (pull / delete / set default)        | ✅ Streaming    |
+| Streaming chat replies (token-by-token)                   | ✅ SSE + NDJSON |
+| Real-time engine health pill (`ONLINE · {model}`)         | ✅ 15 s ping    |
+| 3-step onboarding (Install · Pull · Done)                 | ✅ OS-aware     |
+| Loopback-only enforcement                                 | ✅ Runtime + tests |
 
 **Quick start with Ollama:**
+
 ```bash
-ollama serve            # start the engine
-ollama pull gemma3      # download a model (~5 GB)
+# 1. Start the engine
+ollama serve
+
+# 2. Pull a model (~5 GB)
+ollama pull gemma3
+
+# 3. Open Hamma → Settings → AI → Local AI → FIRST-RUN SETUP
+#    You'll be chatting in under 60 seconds.
 ```
-Open Hamma → **Settings → AI → Local AI → FIRST-RUN SETUP** and you're talking to a local model in under 60 seconds.
+
+<br/>
 
 ---
 
-## 🚀 Getting Started
+<!-- ━━━━━━━━━━━━━━━━━━━━ QUICK START ━━━━━━━━━━━━━━━━━━━━ -->
+
+## 🚀 Quick Start
 
 ### 👤 For Users
 
 ```text
 1.  Launch Hamma
-2.  Set your App PIN  →  Settings → Security
-3.  Choose AI provider →  Settings → AI Configuration
-4.  Add a server      →  Servers tab → +
-5.  Connect           →  Tap server → Open Terminal
+2.  Set your App PIN     →  Settings → Security
+3.  Choose AI provider   →  Settings → AI Configuration
+4.  Add a server         →  Servers tab → +
+5.  Connect              →  Tap server → Open Terminal
 ```
 
 ### 🛠️ For Developers
@@ -179,8 +338,8 @@ cd hamma
 flutter pub get
 
 # Verify
-flutter analyze
-flutter test
+flutter analyze        # → No issues found
+flutter test           # → 65/65 passed
 
 # Run desktop / mobile
 flutter run
@@ -200,86 +359,167 @@ System deps via Nix: `flutter`, `libsecret`, `keybinder3`, `libappindicator`, `s
 
 </details>
 
+<br/>
+
 ---
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ SECURITY MODEL ━━━━━━━━━━━━━━━━━━━━ -->
 
 ## 🔒 Security Model
 
-| Layer | Protection |
-|---|---|
-| 🔑 **Credentials** | `flutter_secure_storage` → Keychain / Keystore / libsecret |
-| 💾 **Backups** | Argon2id (m=19 MiB, t=2, p=1) → AES-256-GCM (96-bit IV) |
-| 🌐 **SSH transport** | Direct TLS-grade tunnel — *never* proxied |
-| 🤖 **Local AI** | Loopback-only (`127.0.0.0/8`, `::1`, `localhost`) — runtime guarded |
-| 🛡️ **AI commands** | Risk-scored before display, **never** auto-executed |
-| 🔐 **App lock** | PIN + biometrics on every cold launch |
-
-> Every AI suggestion is **reviewed by you** before it touches a remote shell. The "Safety-First" rule is non-negotiable.
-
----
-
-## 🧰 Tech Stack
-
 <div align="center">
 
-| Layer | Tool |
-|:---:|:---:|
-| **Framework** | Flutter 3.32 (Dart) |
-| **SSH / SFTP** | `dartssh2` |
-| **Terminal** | `xterm.dart` |
-| **Secure Storage** | `flutter_secure_storage` |
-| **AI Streaming** | Native SSE + NDJSON (`HttpClient`) |
-| **Local AI** | Ollama / LM Studio / llama.cpp / Jan |
-| **Crypto** | Argon2id · AES-256-GCM |
-| **Monitoring** | Sentry (opt-in, scrubbed) |
+| Layer                    | Protection                                                     |
+| :----------------------- | :------------------------------------------------------------- |
+| 🔑 **Credentials**       | `flutter_secure_storage` → Keychain / Keystore / libsecret     |
+| 💾 **Backups**           | Argon2id (m=19 MiB, t=2, p=1) → AES-256-GCM (96-bit IV)        |
+| 🌐 **SSH transport**     | Direct TLS-grade tunnel — *never* proxied                      |
+| 🤖 **Local AI**          | Loopback only (`127.0.0.0/8`, `::1`, `localhost`) — runtime guarded |
+| 🛡️ **AI commands**       | Risk-scored before display, **never** auto-executed            |
+| 🔐 **App lock**          | PIN + biometrics on every cold launch                          |
+| 📡 **Telemetry**         | Sentry opt-in, prompts and secrets scrubbed before upload      |
 
 </div>
 
+> Every AI suggestion is **reviewed by you** before it touches a remote shell. The "Safety-First" rule is non-negotiable.
+
+<br/>
+
 ---
 
+<!-- ━━━━━━━━━━━━━━━━━━━━ TECH STACK ICONS ━━━━━━━━━━━━━━━━━━━━ -->
+
+## 🧰 Built With
+
+<div align="center">
+
+<a href="https://skillicons.dev">
+<img src="https://skillicons.dev/icons?i=flutter,dart,linux,windows,apple,android,ios,docker,bash,nix,sentry,github&perline=12" alt="Tech stack"/>
+</a>
+
+<br/><br/>
+
+| Layer                | Technology                                       |
+| :------------------- | :----------------------------------------------- |
+| **Framework**        | Flutter 3.32 · Dart 3.7                          |
+| **SSH / SFTP**       | `dartssh2`                                       |
+| **Terminal**         | `xterm.dart`                                     |
+| **Secure Storage**   | `flutter_secure_storage` (Keychain / libsecret)  |
+| **AI Streaming**     | Native SSE + NDJSON via `dart:io HttpClient`     |
+| **Local AI**         | Ollama · LM Studio · llama.cpp · Jan             |
+| **Crypto**           | Argon2id · AES-256-GCM · ECDSA host-key pinning  |
+| **Monitoring**       | Sentry (opt-in, scrubbed)                        |
+
+</div>
+
+<br/>
+
+---
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ ROADMAP ━━━━━━━━━━━━━━━━━━━━ -->
+
 ## 🗺️ Roadmap
+
+<div align="center">
+
+![Phase 1](https://img.shields.io/badge/PHASE_1-Core_SSH_%2B_AI_integration-00FF88?style=flat-square&labelColor=000000)
+![Phase 2](https://img.shields.io/badge/PHASE_2-UI_polish_%2B_security_hardening-00FF88?style=flat-square&labelColor=000000)
+![Phase 3](https://img.shields.io/badge/PHASE_3-SFTP_%2B_Docker_%2B_fleet-00FF88?style=flat-square&labelColor=000000)
+![Phase 4](https://img.shields.io/badge/PHASE_4-First--class_Local_AI-00FF88?style=flat-square&labelColor=000000)
+
+![Phase 5](https://img.shields.io/badge/PHASE_5-Encrypted_cloud_sync-FFAA00?style=flat-square&labelColor=000000)
+![Phase 6](https://img.shields.io/badge/PHASE_6-Multi--language_support-888888?style=flat-square&labelColor=000000)
+![Phase 7](https://img.shields.io/badge/PHASE_7-Plugin_%2F_extension_API-888888?style=flat-square&labelColor=000000)
 
 ```
 [██████████] PHASE 1   Core SSH + AI integration                ✅ DONE
 [██████████] PHASE 2   UI polish + security hardening           ✅ DONE
 [██████████] PHASE 3   SFTP, Docker, fleet management           ✅ DONE
 [██████████] PHASE 4   First-class Local AI (zero-trust)        ✅ DONE
-[░░░░░░░░░░] PHASE 5   Encrypted cloud sync (optional)          ⏳ NEXT
+[████░░░░░░] PHASE 5   Encrypted cloud sync (optional)          ⏳ NEXT
 [░░░░░░░░░░] PHASE 6   Multi-language support                   ⏳ PLANNED
 [░░░░░░░░░░] PHASE 7   Plugin / extension API                   ⏳ PLANNED
 ```
 
+</div>
+
+<br/>
+
 ---
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ PROJECT LAYOUT ━━━━━━━━━━━━━━━━━━━━ -->
 
 ## 📂 Project Layout
 
 ```
 hamma/
 ├── lib/
-│   ├── main.dart                  # entry point
+│   ├── main.dart                    # entry point
 │   ├── core/
-│   │   ├── ai/                    # providers, ollama_client, detector, health monitor
-│   │   ├── ssh/                   # dartssh2 wrappers, state machine
-│   │   ├── storage/               # secure storage, prefs, history
-│   │   ├── backup/                # Argon2id + AES-256-GCM crypto
-│   │   └── theme/                 # brutalist AppColors
+│   │   ├── ai/                      # providers, ollama_client, detector, health monitor
+│   │   ├── ssh/                     # dartssh2 wrappers, state machine
+│   │   ├── storage/                 # secure storage, prefs, history
+│   │   ├── backup/                  # Argon2id + AES-256-GCM crypto
+│   │   └── theme/                   # brutalist AppColors
 │   └── features/
-│       ├── ai_assistant/          # AI screen, copilot sheet, status pill
-│       ├── terminal/              # xterm.dart UI
-│       ├── sftp/                  # file manager + editor
-│       ├── docker/                # container manager
-│       ├── processes/             # process + service viewer
-│       └── settings/              # AI config, local models, onboarding
-├── test/                          # 65+ unit tests, zero-trust guards
-├── linux/  android/  ios/         # platform shells
-└── replit.md                      # architecture notes
+│       ├── ai_assistant/            # AI screen, copilot sheet, status pill
+│       ├── terminal/                # xterm.dart UI
+│       ├── sftp/                    # file manager + editor
+│       ├── docker/                  # container manager
+│       ├── processes/               # process + service viewer
+│       └── settings/                # AI config, local models, onboarding
+├── test/                            # 65+ unit tests, zero-trust guards
+├── assets/images/                   # logos, icons
+├── linux/  android/  ios/  macos/   # platform shells
+└── replit.md                        # architecture notes
 ```
+
+<br/>
 
 ---
 
+<!-- ━━━━━━━━━━━━━━━━━━━━ COMMUNITY CTA ━━━━━━━━━━━━━━━━━━━━ -->
+
+## 💬 Community
+
 <div align="center">
+
+<a href="#">
+  <img src="https://img.shields.io/badge/⭐_STAR_THE_REPO-FFD700?style=for-the-badge&labelColor=000000" alt="Star the repo"/>
+</a>
+&nbsp;
+<a href="#">
+  <img src="https://img.shields.io/badge/🐦_FOLLOW_ON_X-1DA1F2?style=for-the-badge&labelColor=000000&logo=x&logoColor=white" alt="Twitter"/>
+</a>
+&nbsp;
+<a href="#">
+  <img src="https://img.shields.io/badge/💬_JOIN_DISCORD-5865F2?style=for-the-badge&labelColor=000000&logo=discord&logoColor=white" alt="Discord"/>
+</a>
+&nbsp;
+<a href="#">
+  <img src="https://img.shields.io/badge/❤️_SPONSOR-EA4AAA?style=for-the-badge&labelColor=000000&logo=githubsponsors&logoColor=white" alt="Sponsor"/>
+</a>
+
+<br/><br/>
+
+<sub>Found a bug? Have a feature request? <b>Open an issue</b> — every report is read by a human.</sub>
+
+</div>
+
+<br/>
+
+---
+
+<!-- ━━━━━━━━━━━━━━━━━━━━ ANIMATED FOOTER WAVE ━━━━━━━━━━━━━━━━━━━━ -->
+
+<div align="center">
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:000000,50:00FF88,100:000000&height=140&section=footer&text=BUILT%20FOR%20ENGINEERS&fontSize=22&fontColor=FFFFFF&animation=fadeIn&fontAlignY=70" alt="Footer" width="100%"/>
+
+<br/>
 
 ### Built with ⚡ for engineers who refuse to choose between **power** and **privacy**.
 
-<sub>© Hamma — All rights reserved.</sub>
+<sub>© Hamma — All rights reserved · Crafted with Flutter</sub>
 
 </div>
