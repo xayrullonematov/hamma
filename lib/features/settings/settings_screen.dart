@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/ai/ai_provider.dart';
 import '../../core/ai/local_engine_detector.dart';
+import '../../core/ai/ollama_client.dart';
 import '../../core/background/background_keepalive.dart';
 import '../../core/backup/backup_service.dart';
 import '../../core/storage/api_key_storage.dart';
@@ -64,6 +65,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _localModelController;
   bool _isTestingLocalConnection = false;
   String? _localConnectionTestResult;
+
+  /// Validation error for the local endpoint TextFormField. Non-null
+  /// while the user has typed something that is not a loopback URL;
+  /// surfaced inline and used to gate Save / Test / Manage Models.
+  String? get _localEndpointError {
+    final raw = _localEndpointController.text.trim();
+    if (raw.isEmpty) return null;
+    if (OllamaClient.isLoopbackEndpoint(raw)) return null;
+    return 'Endpoint must be loopback (localhost, 127.0.0.1, or ::1).';
+  }
+
+  bool get _isLocalEndpointValid {
+    final raw = _localEndpointController.text.trim();
+    return raw.isEmpty || OllamaClient.isLoopbackEndpoint(raw);
+  }
   bool? _localConnectionTestSuccess;
   bool _isDetectingLocalEngines = false;
   List<DetectedEngine> _detectedLocalEngines = const [];
@@ -241,6 +257,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _save() async {
+    // Hard-stop on non-loopback Local AI endpoints. The button is gated
+    // by `_isLocalEndpointValid`, but a determined caller could still
+    // reach this code path — refuse and surface a snackbar.
+    if (_selectedProvider == AiProvider.local && !_isLocalEndpointValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Local AI endpoint must be loopback (localhost / 127.0.0.1 / ::1).',
+          ),
+        ),
+      );
+      return;
+    }
     final openAiKey = _openAiApiKeyController.text.trim();
     final geminiKey = _geminiApiKeyController.text.trim();
     final openRouterKey = _openRouterApiKeyController.text.trim();
@@ -973,12 +1002,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         TextFormField(
           controller: _localEndpointController,
           enabled: !_isBusy,
-          decoration: const InputDecoration(
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
             labelText: 'Engine Endpoint',
-            helperText: 'Base URL of your local AI server (no trailing slash).',
+            helperText:
+                'Base URL of your local AI server (loopback only — no LAN/internet).',
             hintText: 'http://localhost:11434',
+            errorText: _localEndpointError,
           ),
-          style: TextStyle(fontFamily: AppColors.monoFamily, fontSize: 13),
+          style: const TextStyle(
+            fontFamily: AppColors.monoFamily,
+            fontSize: 13,
+          ),
         ),
         const SizedBox(height: 16),
         TextFormField(
@@ -996,9 +1031,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: (_isBusy || _isTestingLocalConnection)
-                    ? null
-                    : _testLocalConnection,
+                onPressed:
+                    (_isBusy || _isTestingLocalConnection || !_isLocalEndpointValid)
+                        ? null
+                        : _testLocalConnection,
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: const RoundedRectangleBorder(
@@ -1092,7 +1128,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _isBusy ? null : _openLocalModelManager,
+                onPressed: (_isBusy || !_isLocalEndpointValid)
+                    ? null
+                    : _openLocalModelManager,
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: const RoundedRectangleBorder(

@@ -98,6 +98,9 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
         };
 
         final canRetry = status == LocalEngineHealthStatus.offline;
+        // Tap on any state opens a details sheet; offline state still
+        // gets the inline retry icon for one-tap recovery.
+        void openDetails() => _showEngineDetailsSheet(context, health);
 
         final pill = Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -163,19 +166,257 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
         return Tooltip(
           message: tooltip,
           child: InkWell(
-            onTap: canRetry
-                ? () {
-                    if (widget.onRetry != null) {
-                      widget.onRetry!();
-                    } else {
-                      widget.monitor.probeNow();
-                    }
-                  }
-                : null,
+            onTap: openDetails,
             child: pill,
           ),
         );
       },
+    );
+  }
+
+  /// Opens a brutalist bottom sheet with the engine endpoint, version,
+  /// status, loaded models, last checked time, and a "Retry now" button
+  /// that triggers an out-of-band probe. Used as the universal pill-tap
+  /// destination so users can inspect health from any state — not just
+  /// when offline.
+  void _showEngineDetailsSheet(
+    BuildContext context,
+    LocalEngineHealth? health,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      builder: (sheetContext) => _LocalEngineDetailsSheet(
+        endpoint: widget.monitor.endpoint,
+        initial: health,
+        monitor: widget.monitor,
+        onRetry: widget.onRetry,
+      ),
+    );
+  }
+}
+
+/// Bottom sheet body kept as a separate StatefulWidget so it can rebuild
+/// in response to fresh probe results without rebuilding the host pill.
+class _LocalEngineDetailsSheet extends StatefulWidget {
+  const _LocalEngineDetailsSheet({
+    required this.endpoint,
+    required this.monitor,
+    this.initial,
+    this.onRetry,
+  });
+
+  final String endpoint;
+  final LocalEngineHealthMonitor monitor;
+  final LocalEngineHealth? initial;
+  final VoidCallback? onRetry;
+
+  @override
+  State<_LocalEngineDetailsSheet> createState() =>
+      _LocalEngineDetailsSheetState();
+}
+
+class _LocalEngineDetailsSheetState extends State<_LocalEngineDetailsSheet> {
+  bool _retrying = false;
+
+  Future<void> _retry() async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    try {
+      if (widget.onRetry != null) {
+        widget.onRetry!();
+      }
+      await widget.monitor.probeNow();
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
+  }
+
+  String _formatStatus(LocalEngineHealthStatus s) {
+    switch (s) {
+      case LocalEngineHealthStatus.online:
+        return 'ONLINE';
+      case LocalEngineHealthStatus.loadingModel:
+        return 'LOADING MODEL';
+      case LocalEngineHealthStatus.loading:
+        return 'CONNECTING';
+      case LocalEngineHealthStatus.offline:
+        return 'OFFLINE';
+    }
+  }
+
+  String _formatTime(DateTime t) {
+    final now = DateTime.now();
+    final delta = now.difference(t);
+    if (delta.inSeconds < 5) return 'just now';
+    if (delta.inMinutes < 1) return '${delta.inSeconds}s ago';
+    if (delta.inHours < 1) return '${delta.inMinutes}m ago';
+    return '${delta.inHours}h ago';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<LocalEngineHealth>(
+      stream: widget.monitor.watch(),
+      initialData: widget.initial ?? widget.monitor.last,
+      builder: (context, snapshot) {
+        final h = snapshot.data;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'LOCAL AI ENGINE',
+                  style: TextStyle(
+                    fontFamily: AppColors.monoFamily,
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                    letterSpacing: 2,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _DetailRow(
+                  label: 'STATUS',
+                  value: h == null ? '—' : _formatStatus(h.status),
+                ),
+                _DetailRow(label: 'ENDPOINT', value: widget.endpoint),
+                _DetailRow(
+                  label: 'VERSION',
+                  value: (h?.version ?? '').isEmpty ? '—' : 'v${h!.version}',
+                ),
+                _DetailRow(
+                  label: 'LOADED',
+                  value: (h?.loadedModels.isEmpty ?? true)
+                      ? '— (no model warm)'
+                      : h!.loadedModels.join(', '),
+                ),
+                _DetailRow(
+                  label: 'CHECKED',
+                  value: h == null ? '—' : _formatTime(h.checkedAt),
+                ),
+                if ((h?.error ?? '').isNotEmpty)
+                  _DetailRow(
+                    label: 'ERROR',
+                    value: h!.error!,
+                    valueColor: AppColors.danger,
+                  ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _retrying ? null : _retry,
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          side: const BorderSide(color: Color(0xFF00FF88)),
+                          foregroundColor: const Color(0xFF00FF88),
+                        ),
+                        icon: _retrying
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF00FF88),
+                                ),
+                              )
+                            : const Icon(Icons.refresh_rounded, size: 16),
+                        label: Text(
+                          _retrying ? 'PROBING…' : 'RETRY NOW',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 12,
+                            letterSpacing: 1.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          side: BorderSide(color: AppColors.textMuted),
+                          foregroundColor: AppColors.textPrimary,
+                        ),
+                        child: Text(
+                          'CLOSE',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 12,
+                            letterSpacing: 1.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: AppColors.monoFamily,
+                fontSize: 10,
+                color: AppColors.textMuted,
+                letterSpacing: 1.5,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontFamily: AppColors.monoFamily,
+                fontSize: 12,
+                color: valueColor ?? AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

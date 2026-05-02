@@ -9,12 +9,56 @@ import 'dart:io';
 /// leaving the app. Pure Dart, no Flutter dependency, fully unit-testable
 /// via the [httpClientFactory] override.
 class OllamaClient {
+  /// Constructs a client and **enforces the zero-trust guarantee** that
+  /// the configured endpoint points at loopback. Any attempt to talk
+  /// to a non-loopback host (LAN IP, public DNS, etc.) throws an
+  /// [ArgumentError] at construction time so a misconfigured endpoint
+  /// can never accidentally exfiltrate prompts off-device.
   OllamaClient({
     required this.endpoint,
     HttpClient Function()? httpClientFactory,
     Duration? connectionTimeout,
   })  : _httpClientFactory = httpClientFactory ?? HttpClient.new,
-        _connectionTimeout = connectionTimeout ?? const Duration(seconds: 5);
+        _connectionTimeout = connectionTimeout ?? const Duration(seconds: 5) {
+    if (!isLoopbackEndpoint(endpoint)) {
+      throw ArgumentError.value(
+        endpoint,
+        'endpoint',
+        'Local AI endpoints must point at loopback (127.0.0.0/8, ::1, or '
+            'localhost). Refusing to send prompts to a non-loopback host.',
+      );
+    }
+  }
+
+  /// Returns `true` when [url] parses to a host that is unambiguously
+  /// loopback. Recognises `localhost`, IPv6 `::1` and any address in
+  /// the IPv4 `127.0.0.0/8` block. Anything else (LAN IPs, public
+  /// hostnames, malformed input) returns `false`.
+  ///
+  /// This is the central authority for the app's zero-trust guarantee
+  /// — Settings, the runtime client, and the loopback test all share
+  /// this implementation so they cannot drift apart.
+  static bool isLoopbackEndpoint(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return false;
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme) return false;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty) return false;
+    if (host == 'localhost') return true;
+    if (host == '::1' || host == '[::1]') return true;
+    final addr = InternetAddress.tryParse(host);
+    if (addr == null) return false;
+    if (addr.type == InternetAddressType.IPv4) {
+      // 127.0.0.0/8 is the entire loopback block.
+      return addr.rawAddress.isNotEmpty && addr.rawAddress[0] == 127;
+    }
+    if (addr.type == InternetAddressType.IPv6) {
+      return addr.isLoopback;
+    }
+    return false;
+  }
 
   /// Base URL of the Ollama daemon, e.g. `http://localhost:11434`.
   /// No trailing slash.
