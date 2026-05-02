@@ -1,0 +1,22 @@
+// Build settings for the bundled inference engine side-car.
+//
+// The Dart side (lib/core/ai/llama_cpp_bindings.dart) opens libllama
+// at runtime via dart:ffi. For the lookup to succeed in a notarised
+// .app bundle, libllama.dylib must live inside Runner.app/Contents/
+// Frameworks and be referenced with @rpath/.
+//
+// CI drops the universal-binary libllama.dylib into native/macos/
+// before invoking `flutter build macos`. The build script below copies
+// it into the .app bundle. When the file is absent, the FFI lookup
+// returns null and the app falls back to "Connect to existing engine"
+// — the .app still builds and runs.
+//
+// Apply this xcconfig from Runner.xcodeproj's Runner target via
+// "Configuration → Based on configuration file" so that the search
+// paths line up regardless of debug / release.
+//
+// See native/README.md for build instructions for libllama.dylib.
+
+LD_RUNPATH_SEARCH_PATHS = $(inherited) @executable_path/../Frameworks
+FRAMEWORK_SEARCH_PATHS = $(inherited) $(SRCROOT)/../native/macos
+LIBRARY_SEARCH_PATHS = $(inherited) $(SRCROOT)/../native/macos

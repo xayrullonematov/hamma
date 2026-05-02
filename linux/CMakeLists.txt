@@ -106,6 +106,27 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     COMPONENT Runtime)
 endforeach(bundled_library)
 
+# === Bundled inference engine (llama.cpp side-car) ===
+# Pick up the llama-server binary (and optional libllama shared
+# library, kept for the future FFI path) from native/linux/. CI /
+# release scripts drop these in; absent files mean the bundled
+# engine path is hidden in onboarding and the app falls back to
+# "Connect to existing engine". See native/README.md.
+set(BUNDLED_LLAMA_DIR "${CMAKE_SOURCE_DIR}/../native/linux")
+file(GLOB BUNDLED_LLAMA_LIBS "${BUNDLED_LLAMA_DIR}/libllama*.so*")
+foreach(llama_lib ${BUNDLED_LLAMA_LIBS})
+  message(STATUS "Bundling llama.cpp shared library: ${llama_lib}")
+  install(FILES "${llama_lib}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endforeach()
+if(EXISTS "${BUNDLED_LLAMA_DIR}/llama-server")
+  message(STATUS "Bundling llama-server binary")
+  install(PROGRAMS "${BUNDLED_LLAMA_DIR}/llama-server"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

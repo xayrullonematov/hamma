@@ -1,0 +1,2 @@
+# Drop llama-server (and optionally libllama.dylib) here, universal
+# arm64+x86_64. See ../README.md for build instructions.

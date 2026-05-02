@@ -46,6 +46,9 @@ dependencies:
   hotkey_manager: ^0.2.3
   tray_manager: ^0.5.2
   meta: ^1.15.0
+  # FFI helpers (Utf8, malloc) for the bundled inference engine
+  # bindings (lib/core/ai/llama_cpp_bindings.dart).
+  ffi: ^2.1.0
 
 dev_dependencies:
   flutter_test:

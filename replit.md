@@ -51,7 +51,19 @@ flutter build linux --debug
 
 ## Local AI Provider (Zero-Trust Mode)
 
-Hamma supports a fully offline, zero-trust AI mode via any OpenAI-compatible local inference engine (Ollama, LM Studio, llama.cpp, Jan). The integration is first-class: streaming, model management, engine auto-detection, health monitoring, and onboarding all live in-app.
+Hamma runs AI fully offline in two ways:
+
+1. **Built-in inference engine** (recommended, zero setup) — Hamma
+   ships an embedded llama.cpp `llama-server` side-car and downloads a curated GGUF
+   model on first run. No external daemon, no install steps. See
+   "Bundled inference engine" below.
+2. **Connect to existing engine** — point Hamma at any
+   OpenAI-compatible local inference server already running on the
+   machine (Ollama, LM Studio, llama.cpp, Jan).
+
+Both paths route through the same OpenAI-compatible `_chatWithOpenAi`
+plumbing in `AiCommandService`, so streaming, error handling, model
+management and the brutalist UI are identical.
 
 ### Architecture
 
@@ -68,16 +80,43 @@ UI layer:
 - `lib/features/ai_assistant/widgets/local_engine_status_pill.dart` — brutalist pill (`LOCAL · ONLINE/CHECKING/OFFLINE`) that subscribes to a health monitor; tap-to-retry when offline; `#00FF88` when online
 - `lib/features/ai_assistant/ai_assistant_screen.dart` & `ai_copilot_sheet.dart` — both use `streamChatResponse()` so local-provider replies type out token-by-token. A placeholder bubble is inserted on send and grown as deltas arrive; if the stream errors before any tokens, the placeholder is dropped and a system error is shown instead.
 - `lib/features/settings/local_models_screen.dart` — in-app model manager: lists installed models (`/api/tags`), highlights ones currently loaded in RAM (`/api/ps`), shows a curated catalog (Gemma, Llama, Mistral, Phi, Qwen-Coder, DeepSeek-Coder, TinyLlama), supports deletion with a confirm dialog, and a streaming pull bottom-sheet with live byte progress and cancel
-- `lib/features/settings/local_ai_onboarding_screen.dart` — 3-step wizard (Install · Pull · Done) with OS-aware install snippets (curl on Linux/macOS, winget on Windows); copies snippets to clipboard; final step runs `LocalEngineDetector.detect()` and returns the chosen endpoint to Settings
-- `lib/features/settings/settings_screen.dart` — Local AI section now exposes **DETECT ENGINES** (auto-fills endpoint), **MANAGE MODELS**, and **FIRST-RUN SETUP** buttons next to the existing **TEST CONNECTION** button. Detected engines render as selectable cards under the buttons.
+- `lib/features/settings/local_ai_onboarding_screen.dart` — two-path wizard. Step 0 picks **Built-in engine** (recommended, default selection on desktop) or **Connect to existing**. The built-in path then runs CHOOSE → DOWNLOAD → DONE; the external path runs the original INSTALL → PULL → DETECT flow with OS-aware install snippets.
+- `lib/features/settings/settings_screen.dart` — Local AI section exposes **DETECT ENGINES**, **MANAGE MODELS**, and **FIRST-RUN SETUP** buttons next to **TEST CONNECTION**. When the bundled engine is running, the endpoint field auto-fills with its loopback URL.
+
+### Bundled inference engine
+
+Architecture (`lib/core/ai/`):
+
+- `bundled_engine.dart` — `InferenceBackend` interface + implementations:
+  - `LlamaServerBackend` (in `llama_server_backend.dart`, **production default**) spawns the upstream `llama-server` binary as a child process bound to a loopback ephemeral port and proxies generation through it. A `LlamaServerLauncher` typedef makes the spawn injectable so unit tests run against a Dart-side fake (no real subprocess required); a separate gated integration test exercises the real binary when `LLAMA_SERVER_BIN` and `LLAMA_SERVER_MODEL` are set.
+  - `LlamaCppBackend` (FFI, **future / disabled**) — bindings in `llama_cpp_bindings.dart` cover the symbols a complete implementation would need but its `isAvailable` returns `false` until a generation loop is wired up. Kept as an escape hatch for future iOS / sandboxed-environment support where subprocess spawning isn't viable. The HTTP-API approach was chosen over FFI because llama.cpp's C struct ABI (`llama_batch`, `llama_*_params`) shifts across upstream releases while the HTTP API has been stable for a year+.
+  - `EchoBackend` is a pure-Dart fake used by tests and for "demo mode" without a model loaded.
+  Plus `BundledEngine`, which loads a model and starts a loopback `HttpServer` on an OS-assigned ephemeral port. The server speaks an OpenAI-compatible subset (`GET /v1/models`, `POST /v1/chat/completions` both streaming SSE and non-streaming) and an Ollama-compat `GET /api/version` so `LocalEngineHealthMonitor` works against it unchanged.
+- `bundled_model_catalog.dart` — curated GGUF list (Gemma 3 1B, Qwen2.5-Coder 3B, Llama 3.2 3B, Phi 3.5 Mini). All entries are HTTPS-only (validated programmatically). The "recommended" pick (Gemma 3 1B) is the smallest/fastest.
+- `bundled_model_downloader.dart` — streamed HTTPS-only download to `<appSupportDir>/bundled_models/<id>.gguf`. Writes to a `.partial` file and renames atomically on success; cancellation drops the partial. Refuses redirects that leave HTTPS.
+- `bundled_engine_controller.dart` — process-wide singleton (`BundledEngineController.instance`) so the AI assistant, copilot sheet and settings all share one warm-loaded model. `overrideForTesting` / `resetForTesting` swap in fakes.
+- `llama_cpp_bindings.dart` — minimal `dart:ffi` typedefs for `llama_backend_init`, `llama_load_model_from_file`, `llama_new_context_with_model` and friends. `LlamaCppLibrary.openOrNull()` returns `null` when no library is bundled — never throws. Currently used only by the disabled FFI backend.
+
+Build matrix (`native/`):
+
+The Dart side spawns `llama-server` (or `.exe` on Windows) at runtime; CI / release scripts build the side-car per OS and drop it into `native/<os>/`:
+
+- `linux/CMakeLists.txt` — `file(GLOB)`s `native/linux/libllama*.so*` and copies `llama-server` into `INSTALL_BUNDLE_LIB_DIR` (next to the existing plugin libs). RPATH already points at `$ORIGIN/lib`.
+- `windows/CMakeLists.txt` — `file(GLOB)`s `native/windows/llama*.dll` into the install prefix next to the `.exe`.
+- `macos/Runner/Configs/BundledEngine.xcconfig` + `copy_bundled_engine.sh` — copies `native/macos/llama-server` (and any optional `libllama*.dylib`) into `Runner.app/Contents/Frameworks/` during the Xcode build phase. `LD_RUNPATH_SEARCH_PATHS` includes `@executable_path/../Frameworks`.
+- `native/README.md` — per-OS `llama-server` build commands (Linux x86_64+arm64, macOS universal, Windows x64) with the required CMake flags. Pinned upstream tag `b4350`.
+
+When `native/<os>/` is empty (e.g. fresh contributor checkout), the Flutter build still succeeds, `LlamaServerBackend.isAvailable` returns `false`, and the onboarding wizard hides the "Built-in engine" path. Users get the original "Connect to existing engine" flow with no degradation.
 
 ### Zero-trust guarantees
 
-The `test/zero_trust_network_guard_test.dart` suite enforces — at the unit-test level — that every local-AI component (`OllamaClient`, `LocalEngineDetector`, `LocalEngineHealthMonitor`, `AiCommandService.streamChatResponse(local)`) only ever dials loopback (`127.0.0.0/8`, `localhost`, or `::1`). A recording `HttpClient` intercepts every URL and the test fails if any non-loopback host shows up.
+The `test/zero_trust_network_guard_test.dart` suite enforces — at the unit-test level — that every local-AI component (`OllamaClient`, `LocalEngineDetector`, `LocalEngineHealthMonitor`, `AiCommandService.streamChatResponse(local)`, **and `BundledEngine`**) only ever dials / binds loopback (`127.0.0.0/8`, `localhost`, or `::1`). A recording `HttpClient` intercepts every URL and the test fails if any non-loopback host shows up. `BundledEngine` additionally checks `request.connectionInfo.remoteAddress.isLoopback` on every incoming request as defence-in-depth.
 
 ### Usage
 
-**First-time:** Settings → AI Configuration → Local AI → tap **FIRST-RUN SETUP** for a guided 3-step install/pull/detect flow.
+**First-time (built-in engine, recommended):** Settings → AI Configuration → Local AI → **FIRST-RUN SETUP** → **BUILT-IN ENGINE** → pick a model → DOWNLOAD & START. The endpoint auto-fills with the loopback URL the bundled engine bound to. Total clicks: 4.
+
+**First-time (existing engine):** Same wizard, but pick **CONNECT TO EXISTING** on the first step → install / pull / detect flow.
 
 **Manual:**
 1. In Settings, select "Local AI" as the provider
@@ -86,7 +125,7 @@ The `test/zero_trust_network_guard_test.dart` suite enforces — at the unit-tes
 4. Tap **TEST CONNECTION** to verify
 5. Save — no API key needed
 
-### Quick start (Ollama)
+### Quick start (existing Ollama)
 ```bash
 ollama serve          # start the engine
 ollama pull gemma3    # download the model (~5 GB)

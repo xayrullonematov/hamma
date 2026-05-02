@@ -87,6 +87,26 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# === Bundled inference engine (llama.cpp side-car) ===
+# Pick up the llama-server.exe binary (and optional llama*.dll for
+# the future FFI path) from native/windows/. CI drops these in;
+# absent files mean the bundled engine path is hidden and the app
+# falls back to "Connect to existing engine". See native/README.md.
+set(BUNDLED_LLAMA_DIR "${CMAKE_SOURCE_DIR}/../native/windows")
+file(GLOB BUNDLED_LLAMA_LIBS "${BUNDLED_LLAMA_DIR}/llama*.dll")
+foreach(llama_lib ${BUNDLED_LLAMA_LIBS})
+  message(STATUS "Bundling llama.cpp DLL: ${llama_lib}")
+  install(FILES "${llama_lib}"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endforeach()
+if(EXISTS "${BUNDLED_LLAMA_DIR}/llama-server.exe")
+  message(STATUS "Bundling llama-server.exe binary")
+  install(PROGRAMS "${BUNDLED_LLAMA_DIR}/llama-server.exe"
+    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
