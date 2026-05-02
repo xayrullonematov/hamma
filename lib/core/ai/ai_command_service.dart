@@ -6,6 +6,7 @@ import 'package:meta/meta.dart';
 
 import 'ai_provider.dart';
 import 'command_risk_assessor.dart';
+import 'ollama_client.dart';
 
 class AiApiConfig {
   const AiApiConfig({
@@ -50,6 +51,21 @@ class AiApiConfig {
         final endpoint = (localEndpoint?.trim().isNotEmpty ?? false)
             ? localEndpoint!.trim()
             : 'http://localhost:11434';
+        // Zero-trust guarantee: the local provider may only ever talk to
+        // a loopback endpoint. We share OllamaClient.isLoopbackEndpoint as
+        // the single source of truth so Settings, the runtime client, and
+        // this config can never drift apart. Refusing here means a
+        // misconfigured value injected from persisted state or any other
+        // call path can never silently exfiltrate prompts off-device.
+        if (!OllamaClient.isLoopbackEndpoint(endpoint)) {
+          throw ArgumentError.value(
+            endpoint,
+            'localEndpoint',
+            'Local AI endpoints must point at loopback (127.0.0.0/8, ::1, '
+                'or localhost). Refusing to send prompts to a non-loopback '
+                'host.',
+          );
+        }
         return AiApiConfig(
           provider: provider,
           baseUrl: '$endpoint/v1',

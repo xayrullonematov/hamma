@@ -22,6 +22,7 @@ class AiAssistantScreen extends StatefulWidget {
     required this.apiKey,
     required this.serverId,
     this.localEndpoint,
+    this.localModel,
   });
 
   final SshService sshService;
@@ -31,8 +32,15 @@ class AiAssistantScreen extends StatefulWidget {
 
   /// Base URL of the configured local AI engine. Required for the
   /// status pill to render in the header when [provider] is
-  /// [AiProvider.local]; ignored otherwise.
+  /// [AiProvider.local]; also forwarded to [AiCommandService] so chat
+  /// requests reach the same engine the pill is monitoring (no
+  /// split-brain between header and chat).
   final String? localEndpoint;
+
+  /// Default local model to use for chat (e.g. `gemma3`). Forwarded to
+  /// [AiCommandService.forProvider]; ignored when [provider] is not
+  /// [AiProvider.local].
+  final String? localModel;
 
   @override
   State<AiAssistantScreen> createState() => _AiAssistantScreenState();
@@ -63,6 +71,8 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     _aiCommandService = AiCommandService.forProvider(
       provider: widget.provider,
       apiKey: widget.apiKey,
+      localEndpoint: widget.localEndpoint,
+      localModel: widget.localModel,
     );
     final endpoint = widget.localEndpoint?.trim();
     if (widget.provider == AiProvider.local &&
