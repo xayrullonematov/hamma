@@ -1,21 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:pointycastle/export.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../ssh/sftp_service.dart';
 import '../storage/app_lock_storage.dart';
 import '../storage/backup_storage.dart';
+import 'backup_crypto.dart';
 
 class BackupService {
   const BackupService({
@@ -156,6 +154,8 @@ class BackupService {
       }
 
       await _decryptAndRestore(password, fileToRestore);
+    } on BackupException {
+      rethrow;
     } catch (e) {
       throw BackupException('Restore failed: $e');
     }
@@ -165,78 +165,42 @@ class BackupService {
     // Collect ALL data from FlutterSecureStorage
     final allData = await _secureStorage.readAll();
     final encodedPayload = jsonEncode(allData);
+    final plaintext = Uint8List.fromList(utf8.encode(encodedPayload));
 
-    final salt = _randomBytes(16);
-    final keyBytes = _deriveKey(password, salt);
-    final ivBytes = _randomBytes(16);
-
-    final key = encrypt.Key(keyBytes);
-    final iv = encrypt.IV(ivBytes);
-    final encrypter = encrypt.Encrypter(
-      encrypt.AES(key, mode: encrypt.AESMode.gcm),
-    );
-
-    final encrypted = encrypter.encrypt(encodedPayload, iv: iv);
-
-    final outputBytes = Uint8List.fromList([
-      ...salt,
-      ...ivBytes,
-      ...encrypted.bytes,
-    ]);
+    final blob = BackupCrypto.encrypt(password, plaintext);
 
     final tempDir = await getTemporaryDirectory();
     final backupFile = File(p.join(tempDir.path, _backupFilename));
-    await backupFile.writeAsBytes(outputBytes, flush: true);
+    await backupFile.writeAsBytes(blob, flush: true);
 
     return backupFile;
   }
 
   Future<void> _decryptAndRestore(String password, File file) async {
-    final inputBytes = await file.readAsBytes();
-    if (inputBytes.length <= 32) {
-      throw const BackupException('Corrupted backup file.');
-    }
+    final blob = await file.readAsBytes();
 
-    final salt = Uint8List.fromList(inputBytes.sublist(0, 16));
-    final ivBytes = Uint8List.fromList(inputBytes.sublist(16, 32));
-    final encryptedBytes = Uint8List.fromList(inputBytes.sublist(32));
-
-    final keyBytes = _deriveKey(password, salt);
-    final key = encrypt.Key(keyBytes);
-    final iv = encrypt.IV(ivBytes);
-    final encrypter = encrypt.Encrypter(
-      encrypt.AES(key, mode: encrypt.AESMode.gcm),
-    );
-
+    final Uint8List plaintext;
     try {
-      final decryptedPayload = encrypter.decrypt(
-        encrypt.Encrypted(encryptedBytes),
-        iv: iv,
-      );
-      final decodedData = jsonDecode(decryptedPayload) as Map<String, dynamic>;
-
-      // Restore all keys to FlutterSecureStorage
-      // We clear first to ensure a clean state
-      await _secureStorage.deleteAll();
-      for (final entry in decodedData.entries) {
-        await _secureStorage.write(key: entry.key, value: entry.value);
-      }
-    } catch (e) {
-      throw const BackupException('Incorrect password or corrupted file.');
+      plaintext = BackupCrypto.decrypt(password, blob);
+    } on BackupCryptoException catch (e) {
+      throw BackupException(e.message);
     }
-  }
 
-  Uint8List _deriveKey(String password, Uint8List salt) {
-    final pbkdf2 = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-      ..init(Pbkdf2Parameters(salt, 10000, 32));
-    return pbkdf2.process(Uint8List.fromList(utf8.encode(password)));
-  }
+    final Map<String, dynamic> decodedData;
+    try {
+      decodedData = jsonDecode(utf8.decode(plaintext)) as Map<String, dynamic>;
+    } catch (_) {
+      throw const BackupException(
+        'Backup payload is not in the expected format.',
+      );
+    }
 
-  Uint8List _randomBytes(int length) {
-    final random = Random.secure();
-    return Uint8List.fromList(
-      List<int>.generate(length, (_) => random.nextInt(256)),
-    );
+    // Restore all keys to FlutterSecureStorage. Clear first so old keys
+    // that no longer exist on the source device don't linger.
+    await _secureStorage.deleteAll();
+    for (final entry in decodedData.entries) {
+      await _secureStorage.write(key: entry.key, value: entry.value);
+    }
   }
 
   // Transport Methods

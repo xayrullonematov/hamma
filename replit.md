@@ -74,6 +74,56 @@ ollama serve          # start the engine
 ollama pull gemma3    # download the model (~5 GB)
 ```
 
+## Backup Encryption
+
+Encrypted backups (PIN/password-protected, includes all secure-storage
+contents — server profiles, AI keys, trusted host keys) live in
+`lib/core/backup/`:
+
+- `backup_crypto.dart` — pure-Dart crypto layer (no Flutter deps,
+  fully unit-testable). Static methods: `encrypt(password, plaintext)`,
+  `decrypt(password, blob)`. Throws `BackupCryptoException` on failure.
+- `backup_service.dart` — handles file I/O, scheduling, and transport
+  (local share, SFTP, WebDAV, Syncthing). Delegates all crypto to
+  `BackupCrypto`.
+
+### File format v2 (current — written by all new backups)
+
+```
+[magic(4)='HMBK' | version(1)=0x02 | salt(16) | iv(12) | ciphertext+gcm-tag]
+```
+
+- **KDF**: Argon2id, m=19456 KiB (~19 MiB), t=2, p=1
+  (OWASP 2024 password-storage recommendation)
+- **Cipher**: AES-256-GCM with 96-bit IV (NIST SP 800-38D recommended)
+- **Key length**: 32 bytes (256-bit)
+
+### File format v1 (legacy — read-only, for migration)
+
+```
+[salt(16) | iv(16) | ciphertext+gcm-tag]
+```
+
+- **KDF**: PBKDF2-HMAC-SHA256, 10,000 iterations
+- **Cipher**: AES-256-GCM
+- Detected by the **absence** of the `HMBK` magic header — old backups
+  created before the Argon2id migration still restore correctly.
+- New backups are never written in v1 format.
+
+### Security properties
+
+- Wrong password and tampered ciphertext both produce the **same**
+  user-visible error (`"Incorrect password or corrupted file."`) — no
+  information leak about which one failed.
+- Forward-compat: unknown version bytes produce a clear "this file may
+  have been created by a newer version" error rather than silently
+  mis-decrypting.
+- Random salt + random IV per backup; cryptographically secure RNG
+  (`Random.secure()`).
+- 24 unit tests in `test/backup_crypto_test.dart` cover round-trip
+  (binary + JSON + text payloads), all failure modes, the legacy
+  migration path, and lock in the exact Argon2id parameters.
+
 ## Key Modifications
 
 - Fixed `DropdownButtonFormField.initialValue` → `value` in settings_screen.dart (Flutter 3.32.0 API change)
