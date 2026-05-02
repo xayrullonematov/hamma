@@ -764,20 +764,52 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     });
 
     try {
-      final response = await _aiCommandService.generateChatResponse(
+      // Streaming path: insert a placeholder assistant message and grow
+      // its content as deltas arrive. For non-local providers the stream
+      // yields once, so the behavior is functionally identical.
+      final placeholder = _ChatMessage(role: 'assistant', content: '');
+      setState(() {
+        _chatMessages = [..._chatMessages, placeholder];
+      });
+      final placeholderIndex = _chatMessages.length - 1;
+
+      final buffer = StringBuffer();
+      await for (final delta in _aiCommandService.streamChatResponse(
         _buildChatPrompt(prompt, historyMessages: existingChatMessages),
-      );
+      )) {
+        if (!mounted) return;
+        buffer.write(delta);
+        final updated = List<_ChatMessage>.from(_chatMessages);
+        updated[placeholderIndex] = _ChatMessage(
+          role: 'assistant',
+          content: buffer.toString(),
+        );
+        setState(() {
+          _chatMessages = updated;
+        });
+      }
+
       if (!mounted) {
         return;
       }
 
+      // Persist final message.
+      _saveChatHistory(_chatMessages);
       setState(() {
         _status = 'Response ready';
       });
-      _appendChatMessage(role: 'assistant', content: response);
     } catch (error) {
       if (!mounted) {
         return;
+      }
+
+      // Drop the placeholder bubble if no tokens streamed in.
+      if (_chatMessages.isNotEmpty &&
+          _chatMessages.last.role == 'assistant' &&
+          _chatMessages.last.content.isEmpty) {
+        setState(() {
+          _chatMessages = _chatMessages.sublist(0, _chatMessages.length - 1);
+        });
       }
 
       setState(() {

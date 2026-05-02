@@ -149,21 +149,40 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
               )
               .toList();
 
-      final response = await _aiCommandService.generateChatResponse(
-        text,
-        history: history,
-      );
-
-      final assistantMsg = {
+      // Streaming path: insert an empty assistant message and append
+      // tokens as they arrive. For non-local providers, the stream emits
+      // the full reply once, so the UX is identical (just no token-by-token
+      // animation). For local providers (Ollama / LM Studio / llama.cpp),
+      // the user sees a real typewriter effect.
+      final assistantMsg = <String, dynamic>{
         'role': 'assistant',
-        'content': response,
+        'content': '',
         'timestamp': DateTime.now().toIso8601String(),
         'outputs': <String, String>{},
       };
-
       if (mounted) {
         setState(() {
           _messages.add(assistantMsg);
+        });
+        _scrollToBottom();
+      }
+      final assistantIndex = _messages.length - 1;
+      final buffer = StringBuffer();
+
+      await for (final delta in _aiCommandService.streamChatResponse(
+        text,
+        history: history,
+      )) {
+        if (!mounted) return;
+        buffer.write(delta);
+        setState(() {
+          _messages[assistantIndex]['content'] = buffer.toString();
+        });
+        _scrollToBottom();
+      }
+
+      if (mounted) {
+        setState(() {
           _isLoading = false;
         });
         _scrollToBottom();
@@ -172,6 +191,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       }
     } catch (e) {
       if (mounted) {
+        // Drop the placeholder assistant bubble if it was inserted but
+        // never received any content; surface a system error instead.
+        if (_messages.isNotEmpty &&
+            _messages.last['role'] == 'assistant' &&
+            ((_messages.last['content'] as String?) ?? '').isEmpty) {
+          _messages.removeLast();
+        }
         setState(() {
           _messages.add({
             'role': 'system',

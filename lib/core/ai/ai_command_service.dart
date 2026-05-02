@@ -316,6 +316,55 @@ class AiCommandService {
     }
   }
 
+  /// Streamed counterpart of [generateChatResponse].
+  ///
+  /// For the **local** provider, the response is consumed as Server-Sent
+  /// Events from the OpenAI-compatible `/chat/completions` endpoint with
+  /// `stream: true` (Ollama, LM Studio and llama.cpp server all support
+  /// this). Tokens are yielded incrementally as `delta.content` chunks.
+  ///
+  /// For other providers, this currently degrades to a single-emit stream
+  /// that yields the full reply — the caller can treat both paths the
+  /// same. If the local stream fails partway through, it surfaces a
+  /// terminal error on the stream so UI code can react.
+  Stream<String> streamChatResponse(
+    String prompt, {
+    List<Map<String, String>> history = const [],
+  }) async* {
+    final trimmedPrompt = prompt.trim();
+    if (trimmedPrompt.isEmpty) {
+      throw const AiCommandServiceException('Prompt cannot be empty.');
+    }
+
+    if (!config.isConfigured) {
+      throw AiCommandServiceException(
+        '${config.provider.label} API key is not set.',
+      );
+    }
+
+    if (config.provider != AiProvider.local) {
+      // Non-local providers: fall back to the non-streaming path. Yielding
+      // once keeps the UI logic uniform.
+      final full = await generateChatResponse(prompt, history: history);
+      if (full.isNotEmpty) yield full;
+      return;
+    }
+
+    final client = HttpClient();
+    client.connectionTimeout = _connectionTimeout;
+    try {
+      yield* _streamWithOpenAi(client, trimmedPrompt, history);
+    } on TimeoutException {
+      throw const AiCommandServiceException(
+        'Local AI engine timed out. The model may still be loading — try again.',
+      );
+    } on SocketException {
+      throw AiCommandServiceException(_localUnavailableMessage());
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   Future<CommandAnalysis> generateCommand(String prompt, {String? contextOutput}) async {
     final trimmedPrompt = prompt.trim();
     if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
@@ -422,6 +471,102 @@ class AiCommandService {
     }
 
     return _extractOpenAiContent(responseBody) ?? '';
+  }
+
+  /// Open the OpenAI-compatible `/chat/completions` endpoint with
+  /// `stream: true` and yield each `delta.content` chunk.
+  ///
+  /// Tolerates the few format variations local engines emit:
+  ///   - SSE-prefixed lines (`data: {...}`) from OpenAI / Ollama compat layer
+  ///   - Raw NDJSON (one JSON object per line) emitted by some llama.cpp builds
+  ///   - The `[DONE]` sentinel from OpenAI-style streams
+  Stream<String> _streamWithOpenAi(
+    HttpClient client,
+    String prompt,
+    List<Map<String, String>> history, {
+    String? systemInstruction,
+  }) async* {
+    final request = await client
+        .postUrl(Uri.parse('${config.baseUrl}/chat/completions'))
+        .timeout(_connectionTimeout);
+    request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    if (config.provider != AiProvider.local) {
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${config.apiKey}',
+      );
+    }
+
+    final messages = [
+      {'role': 'system', 'content': systemInstruction ?? _chatInstruction},
+      ...history,
+      {'role': 'user', 'content': prompt},
+    ];
+
+    request.write(jsonEncode({
+      'model': config.model,
+      'temperature': 0.4,
+      'stream': true,
+      'messages': messages,
+    }));
+
+    final response = await request.close().timeout(_responseTimeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final errBody = await response.transform(utf8.decoder).join();
+      throw AiCommandServiceException(
+        _extractErrorMessage(errBody) ?? 'Status ${response.statusCode}',
+      );
+    }
+
+    final lines =
+        response.transform(utf8.decoder).transform(const LineSplitter());
+    yield* decodeOpenAiSseBody(lines);
+  }
+
+  /// Public for testing. Decodes OpenAI-compatible streaming chat output
+  /// (line-by-line). Yields each `choices[0].delta.content` chunk in order.
+  /// Stops when the stream emits `[DONE]` or `finish_reason != null`.
+  @visibleForTesting
+  static Stream<String> decodeOpenAiSseBody(Stream<String> lines) async* {
+    await for (final raw in lines) {
+      var line = raw.trim();
+      if (line.isEmpty) continue;
+      // Strip optional SSE `data: ` prefix.
+      if (line.startsWith('data:')) {
+        line = line.substring(5).trim();
+      }
+      if (line.isEmpty) continue;
+      if (line == '[DONE]') return;
+      try {
+        final decoded = jsonDecode(line);
+        if (decoded is! Map<String, dynamic>) continue;
+        final choices = decoded['choices'];
+        if (choices is! List || choices.isEmpty) continue;
+        final first = choices.first;
+        if (first is! Map) continue;
+        final delta = first['delta'];
+        if (delta is Map) {
+          final content = delta['content'];
+          if (content is String && content.isNotEmpty) {
+            yield content;
+          }
+        } else {
+          // Some compat layers emit `message.content` instead of `delta`.
+          final message = first['message'];
+          if (message is Map) {
+            final content = message['content'];
+            if (content is String && content.isNotEmpty) {
+              yield content;
+            }
+          }
+        }
+        if (first['finish_reason'] != null) return;
+      } on FormatException {
+        // Skip a malformed line; the stream continues.
+        continue;
+      }
+    }
   }
 
   Future<String> _chatWithGemini(
