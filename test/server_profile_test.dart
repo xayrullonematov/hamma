@@ -96,6 +96,132 @@ void main() {
     });
   });
 
+  // ── New: hardened fromJson behavior (regression coverage for the
+  //        null-guard fix that replaced hard `as String` casts) ──────────
+  group('ServerProfile.fromJson — defensive parsing', () {
+    test('does not throw when string fields are missing entirely', () {
+      // Old hard-cast version threw TypeError; new version returns empty
+      // strings so isValid (not the parser) flags the corrupted profile.
+      final restored = ServerProfile.fromJson({});
+
+      expect(restored.id, '');
+      expect(restored.name, '');
+      expect(restored.host, '');
+      expect(restored.port, 22); // default for absent port
+      expect(restored.username, '');
+      expect(restored.password, '');
+      expect(restored.privateKey, isNull);
+      expect(restored.privateKeyPassword, isNull);
+      expect(restored.isValid, isFalse);
+    });
+
+    test('does not throw when string fields are explicitly null', () {
+      final restored = ServerProfile.fromJson({
+        'id': null,
+        'name': null,
+        'host': null,
+        'port': null,
+        'username': null,
+        'password': null,
+        'privateKey': null,
+        'privateKeyPassword': null,
+      });
+
+      expect(restored.id, '');
+      expect(restored.host, '');
+      expect(restored.port, 22);
+      expect(restored.isValid, isFalse);
+    });
+
+    test('parses string-encoded port (legitimate JSON variation)', () {
+      final restored = ServerProfile.fromJson({
+        ..._base.toJson(),
+        'port': '2222',
+      });
+
+      expect(restored.port, 2222);
+      expect(restored.isValid, isTrue);
+    });
+
+    test('marks port as invalid (0) when stored value is malformed string', () {
+      // We want a corrupted port to fail isValid rather than silently
+      // defaulting to 22 and connecting somewhere unexpected.
+      final restored = ServerProfile.fromJson({
+        ..._base.toJson(),
+        'port': 'not-a-number',
+      });
+
+      expect(restored.port, 0);
+      expect(restored.isValid, isFalse);
+    });
+
+    test('marks port as invalid (0) when stored value is wrong type', () {
+      final restored = ServerProfile.fromJson({
+        ..._base.toJson(),
+        'port': true,
+      });
+
+      expect(restored.port, 0);
+      expect(restored.isValid, isFalse);
+    });
+
+    test('does not silently coerce maps/lists into string fields', () {
+      // Old `?.toString() ?? ''` would have coerced `{a: 1}` to a string,
+      // which could superficially pass isValid. Type-checked accessors
+      // return empty string instead so isValid catches the corruption.
+      final restored = ServerProfile.fromJson({
+        ..._base.toJson(),
+        'host': {'nested': 'object'},
+        'username': [1, 2, 3],
+      });
+
+      expect(restored.host, '');
+      expect(restored.username, '');
+      expect(restored.isValid, isFalse);
+    });
+
+    test('does not coerce non-string privateKey values to a string', () {
+      final restored = ServerProfile.fromJson({
+        ..._base.toJson(),
+        'privateKey': 12345,
+      });
+
+      // Wrong-typed optional fields should round-trip to null, not "12345".
+      expect(restored.privateKey, isNull);
+    });
+
+    test('does not coerce non-string privateKeyPassword values to a string', () {
+      // Symmetry with privateKey — both optional string fields must apply
+      // the same type-checking rules.
+      final restored = ServerProfile.fromJson({
+        ..._base.toJson(),
+        'privateKeyPassword': {'wrong': 'type'},
+      });
+
+      expect(restored.privateKeyPassword, isNull);
+    });
+
+    test('legacy JSON missing the port field stays valid (defaults to 22)', () {
+      // Backward-compat path: older saved profiles may not have a port
+      // key at all. They must still load as valid SSH profiles on port 22.
+      final json = _base.toJson()..remove('port');
+      final restored = ServerProfile.fromJson(json);
+
+      expect(restored.port, 22);
+      expect(restored.isValid, isTrue);
+    });
+
+    test('JSON with explicit null port stays valid (defaults to 22)', () {
+      final restored = ServerProfile.fromJson({
+        ..._base.toJson(),
+        'port': null,
+      });
+
+      expect(restored.port, 22);
+      expect(restored.isValid, isTrue);
+    });
+  });
+
   group('ServerProfile.copyWith', () {
     test('returns new instance with updated field', () {
       final updated = _base.copyWith(host: '192.168.1.1');

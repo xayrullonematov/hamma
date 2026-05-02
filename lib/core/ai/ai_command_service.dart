@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:meta/meta.dart';
+
 import 'ai_provider.dart';
 import 'command_risk_assessor.dart';
 
@@ -151,8 +153,12 @@ class AiCommandService {
   ///   1. Direct JSON parse (model returned pure JSON).
   ///   2. Extract from a ```json ... ``` or ``` ... ``` code fence.
   ///   3. Brace-depth scan — finds the first syntactically complete `{...}`
-  ///      block, ignoring any surrounding prose or markdown.
-  static Map<String, dynamic>? _parseJsonFromResponse(String text) {
+  ///      block, ignoring any surrounding prose or markdown. String-aware
+  ///      so braces inside JSON strings don't prematurely close the object.
+  ///
+  /// Public for testing only; do not call from outside this class.
+  @visibleForTesting
+  static Map<String, dynamic>? parseJsonFromResponse(String text) {
     final trimmed = text.trim();
 
     // 1. Direct parse.
@@ -249,7 +255,7 @@ class AiCommandService {
           break;
       }
 
-      final decoded = _parseJsonFromResponse(response);
+      final decoded = parseJsonFromResponse(response);
       if (decoded == null) {
         throw const AiCommandServiceException(
           'AI response did not contain a valid JSON object. '
@@ -348,7 +354,7 @@ class AiCommandService {
           break;
       }
 
-      final decoded = _parseJsonFromResponse(response);
+      final decoded = parseJsonFromResponse(response);
       if (decoded == null) {
         throw const AiCommandServiceException(
           'AI response did not contain a valid JSON object. '
