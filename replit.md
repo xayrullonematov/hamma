@@ -174,6 +174,86 @@ idempotent installation, scrubbed capture into `lastFatal`,
 `report()` never-throws guarantee, and the in-widget panel's render
 output.
 
+## SSH State Machine
+
+The connection lifecycle in `lib/core/ssh/ssh_service.dart` is a
+five-state machine (`disconnected → connecting → connected →
+reconnecting → failed`) with auto-reconnect, backoff, heartbeat,
+and host-key verification baked in. To make the whole machine
+unit-testable without a real network or running SSH server, the
+service was refactored around a thin transport seam:
+
+- `lib/core/ssh/ssh_transport.dart` — `SshTransport` interface over
+  the parts of dartssh2's `SSHClient` that the service uses
+  (`authenticated`, `done`, `ping()`, `close()`, plus the command
+  methods). `DartSsh2Transport` is the production pass-through
+  implementation; `SshConnector` is the typedef for the factory
+  function the service calls; `defaultSshConnector` holds the real
+  `SSHSocket.connect` + `SSHClient` handshake. The host-key
+  verification *closure* is owned by `SshService` (so the user-
+  prompt + storage logic stays in the state machine and is testable
+  through `connect()`); the connector receives it as
+  `onVerifyHostKey` and passes it straight through to dartssh2.
+- `SshService` constructor now accepts (all optional, all with
+  production defaults): `connector`, `enableBackgroundKeepalive`,
+  `disableBackgroundKeepalive`, `reconnectBackoffSeconds` (default
+  `[5, 10, 20, 30, 60]`), `maxReconnectAttempts` (default 5).
+  Existing call sites (`SshService.forServer(id)`,
+  `lib/main.dart`) pass nothing and get the original behaviour.
+- Three `@visibleForTesting` getters expose internal timer/counter
+  state (`debugReconnectAttempts`, `debugHasPendingReconnect`,
+  `debugHasHeartbeat`) plus `debugClearInstances()` for the
+  registry tests, so the test suite asserts on machine internals
+  without reflection or peeking at private fields.
+
+Production-grade integration coverage in
+`test/ssh_state_machine_test.dart` (38 tests) exercises:
+
+- **State transitions** — happy-path connect, `connecting →
+  connected`, `lastSuccessfulConnection` timestamp, heartbeat-arm,
+  and explicit-disconnect cleanup.
+- **Failure mapping** — `SocketException`, `TimeoutException`,
+  `authentication failed`, `access denied`, `handshake failed`,
+  `connection reset`, `SshHostKeyException` subtypes, falling
+  through to `SshUnknownException` for novel errors.
+- **Auto-reconnect** — clean and errored transport closures both
+  retry; disabled auto-reconnect leaves the machine `disconnected`;
+  five consecutive failures end at the terminal `failed` state with
+  the *Automatic reconnection failed* message; a successful retry
+  resets the attempt counter; `disableAutoReconnect()` cancels a
+  pending timer; `enableAutoReconnect()` re-arms when previously
+  disconnected with a known last host.
+- **Heartbeat lifecycle** — armed on connect, cancelled on
+  disconnect, cancelled on transport closure.
+- **Manual reconnect** — `StateError` when no prior connection,
+  reuses last credentials when called.
+- **Host-key flow** — first-connect with no callback raises
+  `SshUnknownHostKeyException`; callback returning `false` raises
+  `SshUnknownHostKeyRejectedException` and does **not** save;
+  callback returning `true` saves and reaches `connected`;
+  matching trusted key on subsequent connect skips the callback;
+  mismatched key raises `SshHostKeyMismatchException` and never
+  triggers auto-reconnect.
+- **Status stream + `ValueNotifier`** — broadcast semantics, both
+  paths emit the same events, and the legacy `connectionState`
+  bool stream tracks `isConnected`.
+- **`isHealthy()`** — false when no transport, true after connect.
+- **Forwards** — `activeForwardedPorts` empty by default, cleared
+  on disconnect.
+- **Server registry** — `forServer` returns same instance for same
+  id, different instances for different ids; `removeInstance`
+  allows a fresh instance.
+- **Command APIs** — `execute`, `streamCommand`, `startShell`,
+  `startLocalForwarding` all throw `StateError` when not connected.
+
+Tests use a hand-rolled `FakeSshConnector` (queues scripted
+success/failure responses; can drive the host-key callback with
+synthetic algorithm + fingerprint) and `FakeSshTransport` (in-
+memory `done` completer with `simulateClosure()` /
+`simulateError(error)` helpers). Backoff is set to
+`[0, 0, 0, 0, 0]` so the auto-reconnect loop runs in microseconds
+without sacrificing real timer wiring.
+
 ## Key Modifications
 
 - Fixed `DropdownButtonFormField.initialValue` → `value` in settings_screen.dart (Flutter 3.32.0 API change)
