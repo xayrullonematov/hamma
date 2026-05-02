@@ -50,6 +50,12 @@ class SshService {
   /// production wiring; tests inject fakes for the connector and the
   /// background-keepalive callbacks, and a zeroed backoff schedule
   /// to keep the auto-reconnect timer fast.
+  ///
+  /// Throws [ArgumentError] if [reconnectBackoffSeconds] is non-null
+  /// but empty (the auto-reconnect loop would index past the end on
+  /// the first retry), if any backoff entry is negative (Dart's
+  /// [Timer] does not accept negative durations), or if
+  /// [maxReconnectAttempts] is negative.
   SshService({
     TrustedHostKeyStorage? trustedHostKeyStorage,
     SshConnector? connector,
@@ -58,7 +64,7 @@ class SshService {
     List<int>? reconnectBackoffSeconds,
     int maxReconnectAttempts = kDefaultMaxReconnectAttempts,
   })  : _trustedHostKeyStorage =
-            trustedHostKeyStorage ?? const TrustedHostKeyStorage(),
+            trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage(),
         _connector = connector ?? defaultSshConnector,
         _enableBackgroundKeepalive =
             enableBackgroundKeepalive ?? BackgroundKeepalive.enable,
@@ -67,6 +73,30 @@ class SshService {
         _backoffSeconds =
             reconnectBackoffSeconds ?? kDefaultReconnectBackoffSeconds,
         _maxReconnectAttempts = maxReconnectAttempts {
+    if (reconnectBackoffSeconds != null && reconnectBackoffSeconds.isEmpty) {
+      throw ArgumentError.value(
+        reconnectBackoffSeconds,
+        'reconnectBackoffSeconds',
+        'must contain at least one entry; the auto-reconnect loop '
+            'reads index 0 on the first retry',
+      );
+    }
+    if (reconnectBackoffSeconds != null &&
+        reconnectBackoffSeconds.any((s) => s < 0)) {
+      throw ArgumentError.value(
+        reconnectBackoffSeconds,
+        'reconnectBackoffSeconds',
+        'all entries must be non-negative seconds',
+      );
+    }
+    if (maxReconnectAttempts < 0) {
+      throw ArgumentError.value(
+        maxReconnectAttempts,
+        'maxReconnectAttempts',
+        'must be non-negative (0 disables auto-reconnect retries '
+            'after the initial failure)',
+      );
+    }
     _statusNotifier = ValueNotifier<ConnectionStatus>(_currentStatus);
   }
 

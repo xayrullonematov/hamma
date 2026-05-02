@@ -9,7 +9,7 @@ void main() {
 
   setUp(() {
     FlutterSecureStorage.setMockInitialValues({});
-    storage = const TrustedHostKeyStorage();
+    storage = const SecureTrustedHostKeyStorage();
   });
 
   group('TrustedHostKeyRecord serialization', () {

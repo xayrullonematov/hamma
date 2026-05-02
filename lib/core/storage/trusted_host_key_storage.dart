@@ -2,6 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+/// A trusted host-key record persisted by [TrustedHostKeyStorage]
+/// during a TOFU (trust-on-first-use) host-key acceptance.
+///
+/// The fingerprint is the OpenSSH-style `SHA256:<base64>` string, and
+/// the algorithm is the SSH key algorithm name (`ssh-ed25519`,
+/// `ssh-rsa`, `ecdsa-sha2-nistp256`, …).
 class TrustedHostKeyRecord {
   const TrustedHostKeyRecord({
     required this.algorithm,
@@ -26,8 +32,47 @@ class TrustedHostKeyRecord {
   }
 }
 
-class TrustedHostKeyStorage {
-  const TrustedHostKeyStorage({
+/// Abstract storage interface for trusted SSH host keys.
+///
+/// The production implementation is [SecureTrustedHostKeyStorage],
+/// which persists records via `flutter_secure_storage`. Tests inject
+/// in-memory implementations so they do not require platform
+/// channels.
+///
+/// Implementations must:
+///
+/// - Return `null` from [loadTrustedHostKey] when no record exists for
+///   the given host+port.
+/// - Treat host+port pairs as independent (port `22` and port `2222`
+///   on the same host are distinct entries).
+/// - Throw a [TrustedHostKeyStorageException] (or a subclass) on
+///   storage I/O failures so the SSH state machine can surface a
+///   user-actionable error instead of an opaque platform exception.
+abstract class TrustedHostKeyStorage {
+  const TrustedHostKeyStorage();
+
+  /// Returns the trusted record for `host:port`, or `null` when no
+  /// record has ever been saved for that endpoint.
+  Future<TrustedHostKeyRecord?> loadTrustedHostKey({
+    required String host,
+    required int port,
+  });
+
+  /// Persists [record] as the trusted host key for `host:port`,
+  /// overwriting any existing entry.
+  Future<void> saveTrustedHostKey({
+    required String host,
+    required int port,
+    required TrustedHostKeyRecord record,
+  });
+}
+
+/// Production [TrustedHostKeyStorage] implementation backed by
+/// `flutter_secure_storage`. Each host+port pair gets its own key in
+/// the platform secure store (Keychain on iOS/macOS, Keystore on
+/// Android, libsecret on Linux, DPAPI on Windows).
+class SecureTrustedHostKeyStorage extends TrustedHostKeyStorage {
+  const SecureTrustedHostKeyStorage({
     FlutterSecureStorage? secureStorage,
   }) : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
@@ -35,6 +80,7 @@ class TrustedHostKeyStorage {
 
   final FlutterSecureStorage _secureStorage;
 
+  @override
   Future<TrustedHostKeyRecord?> loadTrustedHostKey({
     required String host,
     required int port,
@@ -66,6 +112,7 @@ class TrustedHostKeyStorage {
     }
   }
 
+  @override
   Future<void> saveTrustedHostKey({
     required String host,
     required int port,

@@ -1,8 +1,26 @@
+/// Production-grade integration tests for the SSH state machine in
+/// [SshService]. Driven entirely by hand-rolled fakes injected through
+/// the constructor seam — no real socket, no real timers (in the
+/// backoff-exhaustion test), no platform channels.
+///
+/// Synchronization in these tests is built on three primitives:
+///
+/// 1. [waitForState] — completion signal via the broadcast status
+///    stream's `firstWhere`. Replaces ad-hoc microtask polling.
+/// 2. [waitForCallCount] — completion signal via [FakeSshConnector]'s
+///    `callEvents` stream. Lets a test await "the auto-reconnect loop
+///    has just made its Nth attempt" without sleeping or guessing.
+/// 3. `package:fake_async` — used in the backoff-exhaustion test to
+///    advance the virtual clock past a real backoff schedule so we
+///    actually exercise [Timer]-based backoff with realistic values.
+library;
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hamma/core/ssh/connection_status.dart';
 import 'package:hamma/core/ssh/ssh_service.dart';
@@ -12,10 +30,9 @@ import 'package:hamma/core/storage/trusted_host_key_storage.dart';
 //  Test doubles
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// In-memory replacement for [TrustedHostKeyStorage] — extends the
-/// concrete class but overrides every public method so the
-/// flutter_secure_storage backend is never actually touched (which
-/// would require platform channels in unit tests).
+/// Pure in-memory [TrustedHostKeyStorage] for tests. Never touches
+/// `flutter_secure_storage` — the abstract interface lets us drop in
+/// this implementation without subclassing the secure backend.
 class InMemoryTrustedHostKeyStorage extends TrustedHostKeyStorage {
   InMemoryTrustedHostKeyStorage();
 
@@ -72,10 +89,18 @@ class _ConnectorResponse {
 
 /// Records every call into the connector and replays a scripted queue
 /// of responses (success / failure / success-after-host-key-check).
+///
+/// Emits each call onto [callEvents] so tests can await the *Nth*
+/// invocation as a completion signal instead of polling.
 class FakeSshConnector {
   final List<_ConnectorResponse> _queue = [];
+  final StreamController<int> _callsController =
+      StreamController<int>.broadcast();
   int callCount = 0;
   final List<({String host, int port, String username})> calls = [];
+
+  /// Broadcasts the new [callCount] after every connector invocation.
+  Stream<int> get callEvents => _callsController.stream;
 
   void enqueueSuccess(FakeSshTransport transport) {
     _queue.add(_ConnectorResponse.success(transport));
@@ -116,6 +141,7 @@ class FakeSshConnector {
       );
     }
     final response = _queue[callCount++];
+    _callsController.add(callCount);
 
     if (response.error != null) {
       throw response.error!;
@@ -133,6 +159,8 @@ class FakeSshConnector {
 
     return response.transport!;
   }
+
+  Future<void> dispose() => _callsController.close();
 }
 
 /// A minimal in-memory [SshTransport] for state-machine tests.
@@ -213,32 +241,75 @@ class FakeSshTransport implements SshTransport {
 //  Test helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
+/// Default safety net for completion-signal helpers. Generous enough
+/// that a healthy machine on a slow CI box will never trip it, tight
+/// enough that a hung test fails in seconds rather than minutes.
+const Duration _defaultWaitTimeout = Duration(seconds: 2);
+
 /// Build a service wired with no-op keepalive and zero-second backoff
 /// so `Timer(Duration(seconds:0), ...)` fires on the next event-loop
-/// turn instead of in 5+ seconds.
+/// turn instead of in 5+ seconds. Used by every test except the
+/// backoff-exhaustion test, which uses `fakeAsync` to drive a
+/// realistic backoff schedule under a virtual clock.
 SshService makeService({
   required FakeSshConnector connector,
   TrustedHostKeyStorage? storage,
   int maxReconnectAttempts = 5,
+  List<int> reconnectBackoffSeconds = const [0, 0, 0, 0, 0],
 }) {
   return SshService(
     connector: connector.call,
     trustedHostKeyStorage: storage ?? InMemoryTrustedHostKeyStorage(),
     enableBackgroundKeepalive: () async {},
     disableBackgroundKeepalive: () async {},
-    reconnectBackoffSeconds: const [0, 0, 0, 0, 0],
+    reconnectBackoffSeconds: reconnectBackoffSeconds,
     maxReconnectAttempts: maxReconnectAttempts,
   );
 }
 
-/// Run the event loop until all pending microtasks and zero-delay
-/// timers have fired. Repeated a few times to flush chained timers
-/// (the auto-reconnect loop schedules a timer that itself awaits a
-/// connect that may schedule another timer).
-Future<void> drain([int turns = 5]) async {
-  for (var i = 0; i < turns; i++) {
-    await Future<void>.delayed(Duration.zero);
+/// Completion signal: returns a Future that completes when [service]'s
+/// connection status reaches [target]. If the state has *already* been
+/// reached, the future completes synchronously.
+///
+/// Times out (failing the test with a clear diagnostic) if the target
+/// state is not reached within [timeout].
+Future<ConnectionStatus> waitForState(
+  SshService service,
+  SshConnectionState target, {
+  Duration timeout = _defaultWaitTimeout,
+}) {
+  if (service.currentStatus.state == target) {
+    return Future.value(service.currentStatus);
   }
+  return service.status
+      .firstWhere((s) => s.state == target)
+      .timeout(
+        timeout,
+        onTimeout: () => throw TimeoutException(
+          'waitForState($target) timed out after $timeout — '
+          'last state was ${service.currentStatus.state}',
+        ),
+      );
+}
+
+/// Completion signal: returns a Future that completes when [connector]
+/// has been invoked at least [n] times. If the connector has already
+/// been called that many times, the future completes synchronously.
+Future<void> waitForCallCount(
+  FakeSshConnector connector,
+  int n, {
+  Duration timeout = _defaultWaitTimeout,
+}) async {
+  if (connector.callCount >= n) return;
+  await connector.callEvents
+      .firstWhere((c) => c >= n)
+      .timeout(
+        timeout,
+        onTimeout: () => throw TimeoutException(
+          'waitForCallCount($n) timed out after $timeout — '
+          'connector observed only ${connector.callCount} calls',
+        ),
+      );
 }
 
 Future<void> connectDefault(SshService service) =>
@@ -260,6 +331,65 @@ void main() {
     SshService.debugClearInstances();
   });
 
+  group('Constructor guards', () {
+    test('throws ArgumentError when reconnectBackoffSeconds is empty', () {
+      expect(
+        () => SshService(reconnectBackoffSeconds: const []),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.name,
+            'name',
+            'reconnectBackoffSeconds',
+          ),
+        ),
+      );
+    });
+
+    test(
+        'throws ArgumentError when reconnectBackoffSeconds contains a '
+        'negative entry', () {
+      expect(
+        () => SshService(reconnectBackoffSeconds: const [5, -1, 10]),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.name,
+            'name',
+            'reconnectBackoffSeconds',
+          ),
+        ),
+      );
+    });
+
+    test('throws ArgumentError when maxReconnectAttempts is negative', () {
+      expect(
+        () => SshService(maxReconnectAttempts: -1),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.name,
+            'name',
+            'maxReconnectAttempts',
+          ),
+        ),
+      );
+    });
+
+    test('accepts zero backoff entries (instant retry)', () {
+      // [0] is a valid one-shot retry schedule and must not throw.
+      expect(
+        () => SshService(reconnectBackoffSeconds: const [0]),
+        returnsNormally,
+      );
+    });
+
+    test('accepts zero maxReconnectAttempts (no retries after first fail)',
+        () {
+      expect(
+        () => SshService(maxReconnectAttempts: 0),
+        returnsNormally,
+      );
+    });
+  });
+
   group('State transitions — happy path', () {
     test('disconnected → connecting → connected on successful connect',
         () async {
@@ -270,9 +400,7 @@ void main() {
       final sub = service.status.listen((s) => transitions.add(s.state));
 
       await connectDefault(service);
-
-      // Allow the listener microtask to drain.
-      await drain();
+      await waitForState(service, SshConnectionState.connected);
       await sub.cancel();
 
       expect(service.currentStatus.state, SshConnectionState.connected);
@@ -280,6 +408,7 @@ void main() {
       expect(transitions.last, SshConnectionState.connected);
       expect(connector.callCount, 1);
       expect(service.isConnected, isTrue);
+      await connector.dispose();
     });
 
     test('connect populates lastSuccessfulConnection timestamp', () async {
@@ -294,6 +423,7 @@ void main() {
       expect(ts, isNotNull);
       expect(ts!.isAfter(before.subtract(const Duration(seconds: 1))), isTrue);
       expect(ts.isBefore(after.add(const Duration(seconds: 1))), isTrue);
+      await connector.dispose();
     });
 
     test('connected → disconnected on explicit disconnect()', () async {
@@ -308,6 +438,7 @@ void main() {
       expect(transport.closeCount, greaterThanOrEqualTo(1));
       expect(service.debugHasHeartbeat, isFalse);
       expect(service.debugHasPendingReconnect, isFalse);
+      await connector.dispose();
     });
 
     test('successful connect arms the heartbeat timer', () async {
@@ -318,6 +449,7 @@ void main() {
 
       expect(service.debugHasHeartbeat, isTrue);
       await service.disconnect();
+      await connector.dispose();
     });
   });
 
@@ -334,6 +466,7 @@ void main() {
               'immediately moves the status to reconnecting');
       expect(service.debugHasPendingReconnect, isTrue);
       await service.disconnect();
+      await connector.dispose();
     });
 
     test(
@@ -350,6 +483,7 @@ void main() {
           isA<SshAuthenticationException>());
       expect(service.debugHasPendingReconnect, isFalse,
           reason: 'Auth failures must never trigger auto-reconnect');
+      await connector.dispose();
     });
 
     test('host-key rejection → failed → does NOT schedule auto-reconnect',
@@ -371,6 +505,7 @@ void main() {
       expect(service.currentStatus.state, SshConnectionState.failed);
       expect(service.debugHasPendingReconnect, isFalse,
           reason: 'Host-key issues must never trigger auto-reconnect');
+      await connector.dispose();
     });
 
     test('timeout error is mapped to SshTimeoutException', () async {
@@ -378,15 +513,21 @@ void main() {
         ..enqueueFailure(TimeoutException('connect timeout'));
       final service = makeService(connector: connector);
 
-      // Capture the stream because the post-failure auto-reconnect
-      // immediately overwrites the failed state with a reconnecting
-      // state (which has no exception field), so we have to look at
-      // the transition itself rather than the latest snapshot.
-      final exceptions = <SshException?>[];
-      final sub = service.status.listen((s) => exceptions.add(s.exception));
+      // Subscribe BEFORE the connect so we capture every transient
+      // status — the post-failure auto-reconnect immediately overwrites
+      // the failed state with reconnecting (which has no exception
+      // field), so we have to look at the transition itself rather
+      // than the latest snapshot.
+      final exceptions = <SshException>[];
+      final sub = service.status
+          .where((s) => s.exception != null)
+          .listen((s) => exceptions.add(s.exception!));
 
       await expectLater(connectDefault(service), throwsA(anything));
-      await drain();
+      // Completion signal: wait until the reconnecting status is
+      // scheduled (which only happens AFTER the failed status was
+      // emitted with the timeout exception).
+      await waitForState(service, SshConnectionState.reconnecting);
       await sub.cancel();
       await service.disconnect();
 
@@ -396,6 +537,7 @@ void main() {
         reason: 'TimeoutException must be mapped to SshTimeoutException '
             'in at least one emitted status before auto-reconnect kicks in',
       );
+      await connector.dispose();
     });
   });
 
@@ -413,13 +555,16 @@ void main() {
       expect(service.currentStatus.state, SshConnectionState.connected);
 
       t1.simulateClosure();
-      // Drain so the .then on done fires → _handleDisconnect →
-      // _triggerAutoReconnect → Timer(0) → reconnect → connect → success.
-      await drain(10);
+      // Completion signal: wait for the auto-reconnect to actually
+      // call the connector a second time, then for the resulting
+      // status to settle on `connected`.
+      await waitForCallCount(connector, 2);
+      await waitForState(service, SshConnectionState.connected);
 
       expect(connector.callCount, 2);
       expect(service.currentStatus.state, SshConnectionState.connected);
       await service.disconnect();
+      await connector.dispose();
     });
 
     test('errored transport closure triggers reconnect when auto enabled',
@@ -433,11 +578,13 @@ void main() {
 
       await connectDefault(service);
       t1.simulateError(const SocketException('reset by peer'));
-      await drain(10);
+      await waitForCallCount(connector, 2);
+      await waitForState(service, SshConnectionState.connected);
 
       expect(connector.callCount, 2);
       expect(service.currentStatus.state, SshConnectionState.connected);
       await service.disconnect();
+      await connector.dispose();
     });
 
     test('disabled auto-reconnect leaves state at disconnected after drop',
@@ -449,38 +596,64 @@ void main() {
       await connectDefault(service);
       service.disableAutoReconnect();
       t1.simulateClosure();
-      await drain();
+      await waitForState(service, SshConnectionState.disconnected);
 
       expect(service.currentStatus.state, SshConnectionState.disconnected);
       expect(service.debugHasPendingReconnect, isFalse);
+      await connector.dispose();
     });
 
     test(
         'consecutive failures up to maxReconnectAttempts → terminal failed',
-        () async {
-      // 1 manual failed + 5 retry attempts (cap = 5) all fail.
-      final connector = FakeSshConnector();
-      for (var i = 0; i < 6; i++) {
-        connector.enqueueFailure(const SocketException('still down'));
-      }
-      final service = makeService(connector: connector, maxReconnectAttempts: 5);
+        () {
+      // Run under fake_async so we can use a realistic backoff
+      // schedule and explicitly advance the virtual clock past every
+      // retry timer instead of relying on zero-second timers.
+      fakeAsync((async) {
+        final connector = FakeSshConnector();
+        for (var i = 0; i < 6; i++) {
+          connector.enqueueFailure(const SocketException('still down'));
+        }
+        final service = SshService(
+          connector: connector.call,
+          trustedHostKeyStorage: InMemoryTrustedHostKeyStorage(),
+          enableBackgroundKeepalive: () async {},
+          disableBackgroundKeepalive: () async {},
+          reconnectBackoffSeconds: const [1, 2, 4, 8, 16],
+          maxReconnectAttempts: 5,
+        );
 
-      await expectLater(connectDefault(service), throwsA(anything));
-      // Now drain repeatedly so each scheduled Timer(0) fires and the
-      // next reconnect fails again.
-      for (var i = 0; i < 10; i++) {
-        await drain();
-      }
+        Object? caught;
+        // Block-bodied onError returns void (matches Future<void>).
+        // Arrow form would return the assigned value and fail the
+        // type check inside Future.then.
+        connectDefault(service).then((_) {}, onError: (Object e) {
+          caught = e;
+        });
 
-      expect(connector.callCount, 6,
-          reason: '1 manual + 5 auto-reconnect attempts = 6 connector calls');
-      expect(service.currentStatus.state, SshConnectionState.failed);
-      expect(service.currentStatus.exception, isA<SshUnknownException>());
-      expect(
-        service.currentStatus.exception?.userMessage,
-        contains('Automatic reconnection failed'),
-      );
-      expect(service.debugHasPendingReconnect, isFalse);
+        async.flushMicrotasks();
+        expect(caught, isNotNull,
+            reason: 'Initial connect attempt must reject');
+        expect(connector.callCount, 1,
+            reason: 'Only the manual attempt has fired so far');
+
+        // Advance well past the cumulative backoff (1+2+4+8+16 = 31s).
+        async.elapse(const Duration(seconds: 60));
+
+        expect(connector.callCount, 6,
+            reason: '1 manual + 5 auto-reconnect attempts = 6 calls');
+        expect(service.currentStatus.state, SshConnectionState.failed);
+        expect(service.currentStatus.exception, isA<SshUnknownException>());
+        expect(
+          service.currentStatus.exception?.userMessage,
+          contains('Automatic reconnection failed'),
+        );
+        expect(service.debugHasPendingReconnect, isFalse);
+
+        // Drain any close()/disconnect() futures the test created.
+        connector.dispose();
+        async.flushMicrotasks();
+      });
     });
 
     test('successful reconnect resets the attempt counter', () async {
@@ -490,11 +663,13 @@ void main() {
       final service = makeService(connector: connector);
 
       await expectLater(connectDefault(service), throwsA(anything));
-      await drain(10);
+      await waitForCallCount(connector, 2);
+      await waitForState(service, SshConnectionState.connected);
 
       expect(service.currentStatus.state, SshConnectionState.connected);
       expect(service.debugReconnectAttempts, 0);
       await service.disconnect();
+      await connector.dispose();
     });
 
     test('disableAutoReconnect cancels a pending reconnect timer', () async {
@@ -509,6 +684,7 @@ void main() {
 
       expect(service.debugHasPendingReconnect, isFalse);
       expect(service.autoReconnectEnabled, isFalse);
+      await connector.dispose();
     });
 
     test('enableAutoReconnect re-arms after disconnect with prior host',
@@ -529,9 +705,10 @@ void main() {
           reason: 'enableAutoReconnect must re-arm a reconnect timer when '
               'we are disconnected and have a known last host');
 
-      await drain(10);
+      await waitForCallCount(connector, 2);
       expect(connector.callCount, 2);
       await service.disconnect();
+      await connector.dispose();
     });
   });
 
@@ -545,6 +722,7 @@ void main() {
 
       await service.disconnect();
       expect(service.debugHasHeartbeat, isFalse);
+      await connector.dispose();
     });
 
     test('heartbeat timer is cancelled on transport closure', () async {
@@ -552,16 +730,15 @@ void main() {
       final connector = FakeSshConnector()
         ..enqueueSuccess(t)
         ..enqueueFailure(const SocketException('still down'));
-      // Disable auto-reconnect path quickly by using a service with
-      // auto-reconnect disabled after first connect.
       final service = makeService(connector: connector);
 
       await connectDefault(service);
       service.disableAutoReconnect();
       t.simulateClosure();
-      await drain();
+      await waitForState(service, SshConnectionState.disconnected);
 
       expect(service.debugHasHeartbeat, isFalse);
+      await connector.dispose();
     });
   });
 
@@ -571,6 +748,7 @@ void main() {
       final service = makeService(connector: connector);
 
       await expectLater(service.reconnect(), throwsA(isA<StateError>()));
+      await connector.dispose();
     });
 
     test('reconnect() reuses last credentials and increments attempt counter',
@@ -581,8 +759,6 @@ void main() {
       final service = makeService(connector: connector);
 
       await connectDefault(service);
-      // Force the next reconnect to look like a retry by leaving the
-      // current state at "reconnecting".
       service.disableAutoReconnect();
       await service.reconnect();
 
@@ -590,6 +766,7 @@ void main() {
       expect(connector.calls[1].host, 'host.example');
       expect(connector.calls[1].username, 'alice');
       await service.disconnect();
+      await connector.dispose();
     });
   });
 
@@ -618,6 +795,7 @@ void main() {
       expect(storage.savedCount, 0);
       expect(service.currentStatus.exception, isA<SshHostKeyException>());
       expect(service.debugHasPendingReconnect, isFalse);
+      await connector.dispose();
     });
 
     test(
@@ -636,13 +814,20 @@ void main() {
           port: 22,
           username: 'alice',
           password: 'pw',
-          onTrustHostKey: ({required host, required port, required algorithm, required fingerprint}) async => false,
+          onTrustHostKey: ({
+            required host,
+            required port,
+            required algorithm,
+            required fingerprint,
+          }) async =>
+              false,
         ),
         throwsA(isA<SshUnknownHostKeyRejectedException>()),
       );
 
       expect(storage.savedCount, 0);
       expect(service.debugHasPendingReconnect, isFalse);
+      await connector.dispose();
     });
 
     test(
@@ -659,7 +844,12 @@ void main() {
         port: 22,
         username: 'alice',
         password: 'pw',
-        onTrustHostKey: ({required host, required port, required algorithm, required fingerprint}) async {
+        onTrustHostKey: ({
+          required host,
+          required port,
+          required algorithm,
+          required fingerprint,
+        }) async {
           callbackInvocations++;
           return true;
         },
@@ -669,6 +859,7 @@ void main() {
       expect(storage.savedCount, 1);
       expect(service.currentStatus.state, SshConnectionState.connected);
       await service.disconnect();
+      await connector.dispose();
     });
 
     test(
@@ -704,7 +895,12 @@ void main() {
         port: 22,
         username: 'alice',
         password: 'pw',
-        onTrustHostKey: ({required host, required port, required algorithm, required fingerprint}) async {
+        onTrustHostKey: ({
+          required host,
+          required port,
+          required algorithm,
+          required fingerprint,
+        }) async {
           callbackInvocations++;
           return true;
         },
@@ -714,6 +910,7 @@ void main() {
           reason: 'Callback must NOT fire when fingerprint matches storage');
       expect(service.currentStatus.state, SshConnectionState.connected);
       await service.disconnect();
+      await connector.dispose();
     });
 
     test(
@@ -742,13 +939,20 @@ void main() {
           port: 22,
           username: 'alice',
           password: 'pw',
-          onTrustHostKey: ({required host, required port, required algorithm, required fingerprint}) async => true,
+          onTrustHostKey: ({
+            required host,
+            required port,
+            required algorithm,
+            required fingerprint,
+          }) async =>
+              true,
         ),
         throwsA(isA<SshHostKeyMismatchException>()),
       );
 
       expect(service.debugHasPendingReconnect, isFalse,
           reason: 'Host-key mismatches must never trigger auto-reconnect');
+      await connector.dispose();
     });
   });
 
@@ -766,6 +970,7 @@ void main() {
       await service.disconnect();
       expect(service.statusNotifier.value.state,
           SshConnectionState.disconnected);
+      await connector.dispose();
     });
 
     test('status stream is broadcast — multiple listeners receive events',
@@ -779,7 +984,7 @@ void main() {
       final subB = service.status.listen((s) => bEvents.add(s.state));
 
       await connectDefault(service);
-      await drain();
+      await waitForState(service, SshConnectionState.connected);
 
       expect(aEvents, isNotEmpty);
       expect(bEvents, isNotEmpty);
@@ -788,6 +993,7 @@ void main() {
       await subA.cancel();
       await subB.cancel();
       await service.disconnect();
+      await connector.dispose();
     });
 
     test('connectionState stream emits booleans matching isConnected',
@@ -799,13 +1005,14 @@ void main() {
       final sub = service.connectionState.listen(bools.add);
 
       await connectDefault(service);
-      await drain();
+      await waitForState(service, SshConnectionState.connected);
       await service.disconnect();
-      await drain();
+      await waitForState(service, SshConnectionState.disconnected);
       await sub.cancel();
 
       expect(bools, contains(true));
       expect(bools.last, isFalse);
+      await connector.dispose();
     });
   });
 
@@ -822,6 +1029,7 @@ void main() {
       await connectDefault(service);
       expect(service.isHealthy(), isTrue);
       await service.disconnect();
+      await connector.dispose();
     });
   });
 
@@ -839,6 +1047,7 @@ void main() {
       expect(service.activeForwardedPorts, isEmpty);
       await service.disconnect();
       expect(service.activeForwardedPorts, isEmpty);
+      await connector.dispose();
     });
   });
 

@@ -18,7 +18,7 @@ class FleetService {
     Duration connectTimeout = const Duration(seconds: 5),
     Duration commandTimeout = const Duration(seconds: 8),
   }) : _trustedHostKeyStorage =
-           trustedHostKeyStorage ?? const TrustedHostKeyStorage(),
+           trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage(),
        _connectTimeout = connectTimeout,
        _commandTimeout = commandTimeout;
 

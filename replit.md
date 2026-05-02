@@ -200,6 +200,19 @@ service was refactored around a thin transport seam:
   `[5, 10, 20, 30, 60]`), `maxReconnectAttempts` (default 5).
   Existing call sites (`SshService.forServer(id)`,
   `lib/main.dart`) pass nothing and get the original behaviour.
+  The constructor body throws `ArgumentError` for invalid test
+  injections — empty or negative `reconnectBackoffSeconds`, and
+  negative `maxReconnectAttempts` — so a bad fake fails fast at
+  construction instead of producing a silent wedge later.
+- `lib/core/storage/trusted_host_key_storage.dart` exposes
+  `TrustedHostKeyStorage` as an **abstract interface** (two
+  methods: `loadTrustedHostKey`, `saveTrustedHostKey`).
+  `SecureTrustedHostKeyStorage` is the production implementation
+  backed by `flutter_secure_storage`; tests inject
+  `InMemoryTrustedHostKeyStorage`, a pure-Dart `Map`-backed impl
+  that never touches platform channels. All four production
+  defaults (`SshService`, `FleetService`, `SftpService`, and the
+  storage test) explicitly construct `SecureTrustedHostKeyStorage`.
 - Three `@visibleForTesting` getters expose internal timer/counter
   state (`debugReconnectAttempts`, `debugHasPendingReconnect`,
   `debugHasHeartbeat`) plus `debugClearInstances()` for the
@@ -207,7 +220,12 @@ service was refactored around a thin transport seam:
   without reflection or peeking at private fields.
 
 Production-grade integration coverage in
-`test/ssh_state_machine_test.dart` (38 tests) exercises:
+`test/ssh_state_machine_test.dart` (43 tests) exercises:
+
+- **Constructor guards** — empty backoff list, negative backoff
+  entries, and negative `maxReconnectAttempts` all throw
+  `ArgumentError`; `[0]` and `maxReconnectAttempts: 0` are
+  accepted as the legitimate "instant retry" / "no retries" cases.
 
 - **State transitions** — happy-path connect, `connecting →
   connected`, `lastSuccessfulConnection` timestamp, heartbeat-arm,
@@ -248,11 +266,24 @@ Production-grade integration coverage in
 
 Tests use a hand-rolled `FakeSshConnector` (queues scripted
 success/failure responses; can drive the host-key callback with
-synthetic algorithm + fingerprint) and `FakeSshTransport` (in-
-memory `done` completer with `simulateClosure()` /
-`simulateError(error)` helpers). Backoff is set to
-`[0, 0, 0, 0, 0]` so the auto-reconnect loop runs in microseconds
-without sacrificing real timer wiring.
+synthetic algorithm + fingerprint; broadcasts each invocation on
+a `callEvents` stream so tests can await the *Nth* call as a
+completion signal) and `FakeSshTransport` (in-memory `done`
+completer with `simulateClosure()` / `simulateError(error)`
+helpers).
+
+Synchronization is built on **completion signals** rather than
+microtask polling — `waitForState(service, target)` awaits the
+status stream's `firstWhere`, and `waitForCallCount(connector, n)`
+awaits the connector's call event stream, both with a 2-second
+diagnostic timeout. The old `drain()` helper has been removed
+entirely. For the auto-reconnect *backoff exhaustion* test the
+suite uses `package:fake_async` (added explicitly to
+`dev_dependencies`) to drive a realistic
+`[1, 2, 4, 8, 16]`-second schedule under a virtual clock,
+advancing the clock past every retry timer with `async.elapse(...)`
+instead of relying on zero-second sleeps. Every other test still
+uses the zeroed `[0, 0, 0, 0, 0]` schedule for instant retries.
 
 ## Key Modifications
 

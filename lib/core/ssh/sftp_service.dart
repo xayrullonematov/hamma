@@ -14,7 +14,7 @@ import 'ssh_service.dart'
 class SftpService {
   SftpService({TrustedHostKeyStorage? trustedHostKeyStorage})
     : _trustedHostKeyStorage =
-          trustedHostKeyStorage ?? const TrustedHostKeyStorage();
+          trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage();
 
   static const _tempEditPath = '/tmp/hamma_temp_edit';
 
