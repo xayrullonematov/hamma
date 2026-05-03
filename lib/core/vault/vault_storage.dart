@@ -67,6 +67,7 @@ class VaultStorage {
   static const _syncMetaKey = 'vault_sync_meta';
   static const _valuePrefix = 'vault_value_';
   static const _metaPrefix = 'vault_meta_';
+  static const _deviceIdKey = 'vault_device_id';
 
   final FlutterSecureStorage _secureStorage;
 
@@ -200,7 +201,11 @@ class VaultStorage {
   }
 
   /// Replace the entire vault contents (used by the sync merge path).
-  /// Does NOT fire the change bus — sync intentionally does not loop.
+  /// Fires [VaultChangeBus] on completion so the [GlobalVaultRedactor]
+  /// and any per-screen vault snapshot listeners (terminal, server
+  /// edit, vault settings) pick up the freshly synced values without
+  /// a restart. The sync service is responsible for suppressing its
+  /// own debounced re-push around this call to avoid an upload loop.
   Future<void> applyMergedState({
     required List<VaultSecret> secrets,
     required VaultSyncMeta meta,
@@ -229,6 +234,19 @@ class VaultStorage {
     }
     await _writeIndex(newIndex);
     await saveSyncMeta(meta);
+    VaultChangeBus.instance.notify();
+  }
+
+  /// Returns a stable per-install device id, creating one on first
+  /// call. Used by [VaultSyncService] so merge logic can tell its own
+  /// uploads apart from peer uploads. Stored in the same secure
+  /// keystore as the secrets themselves.
+  Future<String> getOrCreateDeviceId() async {
+    final existing = await _secureStorage.read(key: _deviceIdKey);
+    if (existing != null && existing.isNotEmpty) return existing;
+    final fresh = _generateId();
+    await _secureStorage.write(key: _deviceIdKey, value: fresh);
+    return fresh;
   }
 
   Future<VaultSyncMeta> loadSyncMeta() async {

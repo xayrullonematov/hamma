@@ -128,6 +128,12 @@ a value the user copied themselves between copy and timeout.
   today requires a manual sync push from one device before peers
   can decrypt the new blob. Auto re-encrypt on PIN rotation is a
   tracked follow-up.
+- Each install gets a stable per-device id stored in the secure
+  keystore (`vault_device_id`). Sync uses it to skip merging the
+  blob it just uploaded; if you wipe the keystore you'll get a new
+  id and the next sync round will treat your own previous blob as
+  a peer (which is harmless — newest-wins merging keeps the
+  identical state).
 - Secret rotation reminders, OS keychain export/import, sharing a
   single secret with a teammate, and HSM/Yubikey-derived vault keys
   are all out of scope for this version. They are tracked as v2

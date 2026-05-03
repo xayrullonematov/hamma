@@ -167,14 +167,14 @@ class VaultSyncService {
     AppLockStorage? appLockStorage,
     VaultAdapterBuilder? adapterBuilder,
     VaultPasswordResolver? passwordResolver,
-    String deviceId = 'device-default',
+    String? deviceId,
     Duration debounce = const Duration(seconds: 3),
   })  : _vaultStorage = vaultStorage ?? VaultStorage(),
         _backupStorage = backupStorage ?? const BackupStorage(),
         _appLockStorage = appLockStorage ?? AppLockStorage(),
         _adapterBuilder = adapterBuilder ?? _defaultAdapterBuilder,
         _passwordResolver = passwordResolver,
-        _deviceId = deviceId,
+        _explicitDeviceId = deviceId,
         _debounce = debounce;
 
   final VaultStorage _vaultStorage;
@@ -182,12 +182,27 @@ class VaultSyncService {
   final AppLockStorage _appLockStorage;
   final VaultAdapterBuilder _adapterBuilder;
   final VaultPasswordResolver? _passwordResolver;
-  final String _deviceId;
+  final String? _explicitDeviceId;
   final Duration _debounce;
 
   Timer? _debounceTimer;
   StreamSubscription<void>? _busSubscription;
   Future<void>? _inFlight;
+  String? _resolvedDeviceId;
+
+  /// Set during a sync-driven `applyMergedState` so the change-bus
+  /// listener (which normally schedules a debounced push on every
+  /// vault mutation) ignores the notification we just fired ourselves
+  /// — otherwise every successful pull would loop into a redundant
+  /// push.
+  bool _suppressNextBusEvent = false;
+
+  Future<String> _deviceId() async {
+    final explicit = _explicitDeviceId;
+    if (explicit != null && explicit.isNotEmpty) return explicit;
+    return _resolvedDeviceId ??=
+        await _vaultStorage.getOrCreateDeviceId();
+  }
 
   /// Cloud key the encrypted vault blob is written under. Sits next to
   /// (not inside) `snippets/snippets.aes` and the full backup keyspace
@@ -196,8 +211,13 @@ class VaultSyncService {
   static const String vaultObjectKey = 'vault/secrets.aes';
 
   void start() {
-    _busSubscription ??=
-        VaultChangeBus.instance.changes.listen((_) => _scheduleDebouncedPush());
+    _busSubscription ??= VaultChangeBus.instance.changes.listen((_) {
+      if (_suppressNextBusEvent) {
+        _suppressNextBusEvent = false;
+        return;
+      }
+      _scheduleDebouncedPush();
+    });
   }
 
   Future<void> dispose() async {
@@ -231,6 +251,7 @@ class VaultSyncService {
     final password = await _resolvePassword();
     if (password == null || password.isEmpty) return;
 
+    final deviceId = await _deviceId();
     final localSecrets = await _vaultStorage.loadAll();
     final localMeta = await _vaultStorage.loadSyncMeta();
 
@@ -242,13 +263,17 @@ class VaultSyncService {
       if (ciphertext != null) {
         final plaintext = BackupCrypto.decrypt(password, ciphertext);
         final remote = VaultSyncBlob.decode(plaintext);
-        if (remote.deviceId != _deviceId) {
+        if (remote.deviceId != deviceId) {
           final merged = mergeVaults(
             localSecrets: localSecrets,
             localMeta: localMeta,
             remoteSecrets: remote.secrets,
             remoteMeta: remote.meta,
           );
+          // Suppress the bus event we're about to trigger so the
+          // change listener doesn't schedule a redundant push that
+          // would just upload what we already have.
+          _suppressNextBusEvent = true;
           await _vaultStorage.applyMergedState(
             secrets: merged.secrets,
             meta: merged.meta,
@@ -261,7 +286,7 @@ class VaultSyncService {
       final blob = VaultSyncBlob(
         secrets: secretsToUpload,
         meta: metaToUpload,
-        deviceId: _deviceId,
+        deviceId: deviceId,
         generatedAt: DateTime.now().toUtc(),
       );
       final outCipher = BackupCrypto.encrypt(password, blob.encode());

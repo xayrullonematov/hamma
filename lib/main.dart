@@ -219,7 +219,10 @@ Future<void> _bootstrapAndRun() async {
         GlobalVaultRedactor.set(VaultRedactor.from(next));
       } catch (_) {/* best-effort */}
     });
-    final vaultSync = VaultSyncService(vaultStorage: vaultStorage)..start();
+    final vaultSync = VaultSyncService(
+      vaultStorage: vaultStorage,
+      deviceId: await vaultStorage.getOrCreateDeviceId(),
+    )..start();
     if (await const SnippetSyncStorage().isEnabled()) {
       unawaited(vaultSync.pullAndMerge());
     }
