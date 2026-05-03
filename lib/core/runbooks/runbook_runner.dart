@@ -513,12 +513,30 @@ class RunbookRunner {
       }
     }
 
+    // Per-command cancellation token. We chain it to the runner's
+    // global token so STOP still closes the in-flight session, but
+    // we ALSO fire it on timeout so the executor can tear down the
+    // SSH channel before the runner moves on. Without this, a
+    // timed-out command keeps running on the remote host while the
+    // UI shows it as failed and the next step starts — exactly the
+    // race condition flagged by the reviewer.
+    final commandCancel = RunbookCancellation();
+    cancellation.onCancel(commandCancel.cancel);
+
+    final timeout = step.timeoutSeconds != null
+        ? Duration(seconds: step.timeoutSeconds!)
+        : _defaultTimeout;
+
+    Future<String>? execFuture;
     try {
-      final timeout = step.timeoutSeconds != null
-          ? Duration(seconds: step.timeoutSeconds!)
-          : _defaultTimeout;
-      final stdout =
-          await executeCommand(rendered, cancellation).timeout(timeout);
+      execFuture = executeCommand(rendered, commandCancel);
+      final stdout = await execFuture.timeout(
+        timeout,
+        onTimeout: () {
+          commandCancel.cancel();
+          throw TimeoutException('Command exceeded timeout.');
+        },
+      );
       _stepStdout[step.id] = stdout;
       _events.add(StepStdout(step, stdout));
       return RunbookStepResult(
@@ -554,6 +572,15 @@ class RunbookRunner {
         error: e.toString(),
       );
     } on TimeoutException {
+      // Best-effort: wait for the executor to actually finish
+      // tearing down (the cancel listener should have closed the
+      // SSH session) before we move on. Swallow whatever it
+      // throws — we already know the step failed.
+      if (execFuture != null) {
+        try {
+          await execFuture;
+        } catch (_) {/* expected: cancelled or failed */}
+      }
       return RunbookStepResult(
         step: step,
         status: RunbookStepStatus.failed,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hamma/core/runbooks/runbook.dart';
 import 'package:hamma/core/runbooks/runbook_runner.dart';
@@ -366,6 +368,61 @@ void main() {
       cancel.onCancel(() => fired++);
       expect(fired, 3);
     });
+
+    test(
+      'per-step timeout fires the executor cancellation listener and stops follow-up steps',
+      () async {
+        var cancelFired = 0;
+        var bRan = false;
+        final rb = Runbook(
+          id: 'rb',
+          name: 'Timeout',
+          steps: const [
+            RunbookStep(
+              id: 'a',
+              label: 'long',
+              type: RunbookStepType.command,
+              command: 'sleep 999',
+              timeoutSeconds: 1,
+            ),
+            RunbookStep(
+              id: 'b',
+              label: 'next',
+              type: RunbookStepType.command,
+              command: 'echo b',
+            ),
+          ],
+        );
+        final runner = RunbookRunner(
+          runbook: rb,
+          params: const {},
+          executeCommand: (cmd, cancel) async {
+            if (cmd == 'echo b') {
+              bRan = true;
+              return 'b';
+            }
+            // Simulates a real SSH stream that only completes
+            // when the cancellation token closes the session.
+            final completer = Completer<String>();
+            cancel.onCancel(() {
+              cancelFired++;
+              completer.complete('partial-output');
+            });
+            return completer.future;
+          },
+        );
+        final result = await runner.run();
+        expect(cancelFired, 1,
+            reason: 'timeout MUST fire the executor onCancel '
+                'listener so the in-flight SSH session is closed');
+        expect(result.results[0].status, RunbookStepStatus.failed);
+        expect(result.results[0].error, contains('timeout'));
+        expect(result.results[1].status, RunbookStepStatus.cancelled);
+        expect(bRan, isFalse,
+            reason: 'next step must not start while the timed-out '
+                'command could still be running on the remote');
+      },
+    );
 
     test(
       'non-zero exit (RunbookCommandFailed) marks step failed, preserves stdout, stops the run',
