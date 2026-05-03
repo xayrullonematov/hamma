@@ -70,14 +70,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   int _activeTabIndex = 0;
 
   bool? _sidebarCollapsedPref;
-  // User-chosen expanded sidebar width. Persisted across launches in
-  // [AppPrefsStorage] alongside the collapsed flag. Loaded async on
-  // mount; null until the read finishes so the first frame renders
-  // with the sensible default.
+  // Persisted expanded sidebar width; null until loaded.
   double? _sidebarWidthPref;
-  // Live width while the user is dragging the resize handle. Decoupled
-  // from [_sidebarWidthPref] so the in-flight drag never triggers an
-  // unnecessary write to secure storage on every pointer event.
+  // Transient width during an active drag; persisted only on drag end.
   double? _draggingSidebarWidth;
   List<HammaPlugin> _enabledPlugins = const [];
   final Map<String, Future<HammaApi>> _pluginApis = {};
@@ -466,10 +461,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             ),
           ),
           const Divider(height: 1, color: AppColors.border),
-          // Desktop-only AI Copilot dock toggle. Lives in the sidebar
-          // footer so it sits next to settings instead of floating.
-          // On mobile/tablet the existing per-pane FAB / button still
-          // opens the modal sheet.
+          // Sidebar Copilot toggle (desktop dock; modal elsewhere).
           AnimatedBuilder(
             animation: _copilotDock,
             builder: (context, _) {
@@ -510,18 +502,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     );
   }
 
-  /// Opens the AI Copilot inside the docked right-hand pane with a
-  /// generic prompt. Per-surface entry points (terminal, log viewer)
-  /// install richer execution callbacks via the [CopilotDock] inherited
-  /// widget; this sidebar shortcut is the "I just want to ask the
-  /// copilot something" path that always works.
-  ///
-  /// On tablet widths (700–1099) the dashboard still shows this
-  /// sidebar (it's a non-mobile layout), but the docked pane only
-  /// renders at desktop widths (≥1100) — otherwise it would crowd the
-  /// content pane. So at tablet widths we fall back to the existing
-  /// modal bottom sheet, matching what the terminal and log triage
-  /// surfaces already do at the same breakpoint.
+  /// Opens the Copilot from the sidebar — docks at desktop widths,
+  /// falls back to a modal sheet on tablet/mobile.
   Future<void> _openDockedCopilotForActiveTab() async {
     Widget buildBody(BuildContext _) => _DockedCopilotShell(
           server: _server,
@@ -619,157 +601,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     );
   }
 
-  /// Mobile bottom nav with overflow handling. The phone viewport
-  /// can only fit ~5 destinations comfortably, but the dashboard has
-  /// 8 built-ins plus an arbitrary number of plugin tabs. Beyond the
-  /// limit we collapse the tail into a "More" destination that opens
-  /// a bottom sheet listing the remaining tabs — driving the same
-  /// `_activeTabIndex` so the active selection stays in sync.
-  static const int _mobileVisibleNavLimit = 5;
-
   Widget _buildMobileBottomNav(ConnectionStatus status) {
-    final isConnected = status.isConnected;
-    final totalCount = _totalNavCount;
-    final overflowing = totalCount > _mobileVisibleNavLimit;
-    // When overflowing we reserve the last slot for "More" — so only
-    // (limit - 1) real destinations are visible inline.
-    final visibleCount =
-        overflowing ? _mobileVisibleNavLimit - 1 : totalCount;
-    // If the active tab landed in the overflow set, we still want the
-    // bottom bar to highlight the "More" slot so the user can see
-    // which surface is showing above. Otherwise highlight the actual
-    // tab.
-    final selectedSlot = _activeTabIndex < visibleCount
-        ? _activeTabIndex
-        : (overflowing ? visibleCount : _activeTabIndex)
-            .clamp(0, visibleCount);
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.panel,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: NavigationBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          height: 64,
-          labelBehavior:
-              NavigationDestinationLabelBehavior.onlyShowSelected,
-          selectedIndex: selectedSlot,
-          onDestinationSelected: (i) {
-            if (overflowing && i == visibleCount) {
-              _showPluginOverflowSheet(
-                visibleCount: visibleCount,
-                isConnected: isConnected,
-              );
-              return;
-            }
-            if (i != 0 && !isConnected) return;
-            setState(() => _activeTabIndex = i);
-          },
-          destinations: [
-            for (var i = 0; i < visibleCount; i++)
-              NavigationDestination(
-                icon: Icon(
-                  _navItemAt(i).icon,
-                  size: 20,
-                  color: (i == 0 || isConnected)
-                      ? AppColors.textMuted
-                      : AppColors.textFaint,
-                ),
-                selectedIcon: Icon(
-                  _navItemAt(i).icon,
-                  size: 20,
-                  color: AppColors.textPrimary,
-                ),
-                label: _navItemAt(i).label,
-              ),
-            if (overflowing)
-              const NavigationDestination(
-                key: ValueKey('mobile_nav_more_destination'),
-                icon: Icon(
-                  Icons.more_horiz,
-                  size: 20,
-                  color: AppColors.textMuted,
-                ),
-                selectedIcon: Icon(
-                  Icons.more_horiz,
-                  size: 20,
-                  color: AppColors.textPrimary,
-                ),
-                label: 'More',
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showPluginOverflowSheet({
-    required int visibleCount,
-    required bool isConnected,
-  }) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.panel,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
-        side: BorderSide(color: AppColors.borderStrong, width: 1),
-      ),
-      builder: (sheetContext) {
-        return SafeArea(
-          top: false,
-          child: ListView(
-            key: const ValueKey('mobile_plugin_overflow_sheet'),
-            shrinkWrap: true,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text(
-                  'MORE',
-                  style: TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                    letterSpacing: 1.6,
-                    fontFamily: AppColors.monoFamily,
-                    fontFamilyFallback: AppColors.monoFallback,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              for (var i = visibleCount; i < _totalNavCount; i++)
-                ListTile(
-                  leading: Icon(_navItemAt(i).icon,
-                      size: 20,
-                      color: isConnected
-                          ? AppColors.textPrimary
-                          : AppColors.textFaint),
-                  title: Text(
-                    _navItemAt(i).label.toUpperCase(),
-                    style: TextStyle(
-                      color: isConnected
-                          ? AppColors.textPrimary
-                          : AppColors.textFaint,
-                      fontSize: 12,
-                      letterSpacing: 1.4,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: AppColors.monoFamily,
-                      fontFamilyFallback: AppColors.monoFallback,
-                    ),
-                  ),
-                  enabled: isConnected,
-                  selected: _activeTabIndex == i,
-                  onTap: () {
-                    Navigator.of(sheetContext).pop();
-                    setState(() => _activeTabIndex = i);
-                  },
-                ),
-            ],
-          ),
-        );
-      },
+    return MobileDashboardBottomNav(
+      items: [
+        for (var i = 0; i < _totalNavCount; i++) _navItemAt(i),
+      ],
+      activeIndex: _activeTabIndex,
+      isConnected: status.isConnected,
+      onSelect: (i) => setState(() => _activeTabIndex = i),
     );
   }
 
@@ -1017,7 +856,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                   children: [
                     _buildSidebar(status, collapsed: collapsed),
                     if (!collapsed)
-                      _SidebarResizeHandle(
+                      SidebarResizeHandle(
                         key: const ValueKey('sidebar_resize_handle'),
                         currentWidth: _expandedSidebarWidth,
                         onDragUpdate: (width) {
@@ -1043,10 +882,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                       animation: _copilotDock,
                       builder: (context, _) {
                         final req = _copilotDock.request;
-                        // Only render the dock at desktop widths
-                        // (≥1100). The Breakpoints check guards the
-                        // tablet edge case where the modal sheet is
-                        // still the right presentation.
+                        // Dock pane is desktop-only.
                         if (req == null ||
                             !Breakpoints.isDesktop(context)) {
                           return const SizedBox.shrink();
@@ -1071,10 +907,168 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   }
 }
 
-class _NavItem {
-  const _NavItem({required this.icon, required this.label});
+class DashboardNavItem {
+  const DashboardNavItem({required this.icon, required this.label});
   final IconData icon;
   final String label;
+}
+
+typedef _NavItem = DashboardNavItem;
+
+/// Stateless bottom-nav for the mobile dashboard shell. Extracted so
+/// the overflow ("More") behavior can be widget-tested without
+/// constructing the full dashboard (and its SSH service).
+class MobileDashboardBottomNav extends StatelessWidget {
+  const MobileDashboardBottomNav({
+    super.key,
+    required this.items,
+    required this.activeIndex,
+    required this.isConnected,
+    required this.onSelect,
+    this.visibleNavLimit = 5,
+  });
+
+  final List<DashboardNavItem> items;
+  final int activeIndex;
+  final bool isConnected;
+  final ValueChanged<int> onSelect;
+  final int visibleNavLimit;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalCount = items.length;
+    final overflowing = totalCount > visibleNavLimit;
+    final visibleCount =
+        overflowing ? visibleNavLimit - 1 : totalCount;
+    final selectedSlot = activeIndex < visibleCount
+        ? activeIndex
+        : (overflowing ? visibleCount : activeIndex).clamp(0, visibleCount);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.panel,
+        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: NavigationBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          height: 64,
+          labelBehavior:
+              NavigationDestinationLabelBehavior.onlyShowSelected,
+          selectedIndex: selectedSlot,
+          onDestinationSelected: (i) {
+            if (overflowing && i == visibleCount) {
+              _showOverflowSheet(context, visibleCount: visibleCount);
+              return;
+            }
+            if (i != 0 && !isConnected) return;
+            onSelect(i);
+          },
+          destinations: [
+            for (var i = 0; i < visibleCount; i++)
+              NavigationDestination(
+                icon: Icon(
+                  items[i].icon,
+                  size: 20,
+                  color: (i == 0 || isConnected)
+                      ? AppColors.textMuted
+                      : AppColors.textFaint,
+                ),
+                selectedIcon: Icon(
+                  items[i].icon,
+                  size: 20,
+                  color: AppColors.textPrimary,
+                ),
+                label: items[i].label,
+              ),
+            if (overflowing)
+              const NavigationDestination(
+                key: ValueKey('mobile_nav_more_destination'),
+                icon: Icon(
+                  Icons.more_horiz,
+                  size: 20,
+                  color: AppColors.textMuted,
+                ),
+                selectedIcon: Icon(
+                  Icons.more_horiz,
+                  size: 20,
+                  color: AppColors.textPrimary,
+                ),
+                label: 'More',
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showOverflowSheet(
+    BuildContext context, {
+    required int visibleCount,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: BorderSide(color: AppColors.borderStrong, width: 1),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          top: false,
+          child: ListView(
+            key: const ValueKey('mobile_plugin_overflow_sheet'),
+            shrinkWrap: true,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'MORE',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                    letterSpacing: 1.6,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              for (var i = visibleCount; i < items.length; i++)
+                ListTile(
+                  leading: Icon(items[i].icon,
+                      size: 20,
+                      color: isConnected
+                          ? AppColors.textPrimary
+                          : AppColors.textFaint),
+                  title: Text(
+                    items[i].label.toUpperCase(),
+                    style: TextStyle(
+                      color: isConnected
+                          ? AppColors.textPrimary
+                          : AppColors.textFaint,
+                      fontSize: 12,
+                      letterSpacing: 1.4,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                    ),
+                  ),
+                  enabled: isConnected,
+                  selected: activeIndex == i,
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    onSelect(i);
+                  },
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 
 /// Hosts a plugin's [Widget] panel inside the dashboard.
@@ -1292,8 +1286,8 @@ enum ConnectionTestState { idle, connected, failed }
 /// sidebar between [AppPrefsStorage.sidebarMinWidth] and
 /// [AppPrefsStorage.sidebarMaxWidth]. The handle itself is 6px wide;
 /// MouseRegion shows the resize cursor on desktop.
-class _SidebarResizeHandle extends StatelessWidget {
-  const _SidebarResizeHandle({
+class SidebarResizeHandle extends StatelessWidget {
+  const SidebarResizeHandle({
     super.key,
     required this.currentWidth,
     required this.onDragUpdate,

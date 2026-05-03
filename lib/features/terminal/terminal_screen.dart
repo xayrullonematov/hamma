@@ -305,11 +305,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
               'Commands can only be run when the terminal is connected.',
         );
 
-    // Desktop dashboards install a CopilotDock above the terminal. When
-    // present and the viewport is wide enough, dock the copilot as a
-    // right-hand pane instead of pushing a modal sheet over the
-    // terminal output. On every other form factor we fall back to the
-    // existing modal behavior — same call site, two presentations.
+    // Dock at desktop widths when a CopilotDock is installed; else modal.
     final dock = CopilotDock.maybeOf(context);
     if (dock != null && Breakpoints.isDesktop(context)) {
       dock.open(

@@ -49,8 +49,9 @@ void main() {
       final saveBar = find.byKey(const ValueKey('settings_sticky_save_bar'));
       expect(saveBar, findsNothing);
 
-      // Type into the OpenAI API key field.
-      final apiKeyField = find.widgetWithText(TextField, '').first;
+      // Type into the OpenAI API key field (by its label).
+      final apiKeyField =
+          find.widgetWithText(TextFormField, 'OpenAI Key').first;
       await tester.enterText(apiKeyField, 'sk-test-12345');
       await tester.pump();
 
@@ -115,7 +116,8 @@ void main() {
       await tester.pumpWidget(buildSubject(saveCounter: () => saves++));
       await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
-      final apiKeyField = find.widgetWithText(TextField, '').first;
+      final apiKeyField =
+          find.widgetWithText(TextFormField, 'OpenAI Key').first;
       await tester.enterText(apiKeyField, 'sk-test-12345');
       await tester.pump();
 

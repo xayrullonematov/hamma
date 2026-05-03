@@ -123,6 +123,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDirty = false;
   bool _loadingFromStorage = true;
 
+  final TextEditingController _settingsSearchController =
+      TextEditingController();
+  String _settingsSearchQuery = '';
+  String? _activeCategoryId;
+  final ScrollController _settingsScrollController = ScrollController();
+  final Map<String, GlobalKey> _categoryKeys = {
+    'ai': GlobalKey(),
+    'triage': GlobalKey(),
+    'health': GlobalKey(),
+    'security': GlobalKey(),
+    'backup': GlobalKey(),
+    'support': GlobalKey(),
+  };
+
   void _markDirty() {
     if (_loadingFromStorage || _isDirty || !mounted) return;
     setState(() => _isDirty = true);
@@ -264,6 +278,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _webdavUsernameController.dispose();
     _webdavPasswordController.dispose();
     _syncthingPathController.dispose();
+    _settingsSearchController.dispose();
+    _settingsScrollController.dispose();
     super.dispose();
   }
 
@@ -1386,14 +1402,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 800),
-            child: ListView(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final showRail = constraints.maxWidth >= 1100;
+            final list = ListView(
+              key: const ValueKey('settings_sections_list'),
+              controller: _settingsScrollController,
               padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
               children: [
-                SettingsSectionCard(
-                  title: 'AI Configuration',
+                _buildSettingsSearchField(theme),
+                const SizedBox(height: 16),
+                _wrapCategorySection(
+                  'ai',
+                  SettingsSectionCard(
+                    title: 'AI Configuration',
                   subtitle:
                       'Choose your default AI provider and manage the saved keys used by the copilot.',
                   icon: Icons.smart_toy_outlined,
@@ -1487,9 +1509,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ],
                   ),
+                  ),
                 ),
-                const SizedBox(height: 20),
-                SettingsSectionCard(
+                _wrapCategorySection(
+                  'triage',
+                  SettingsSectionCard(
                   title: 'AI Log Triage Cadence',
                   subtitle:
                       'How many log lines accumulate before "Watch with AI" sends a batch to the local model. Smaller = more frequent insights and more model calls. Local AI only.',
@@ -1540,9 +1564,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                  ),
                 ),
-                const SizedBox(height: 20),
-                SettingsSectionCard(
+                _wrapCategorySection(
+                  'health',
+                  SettingsSectionCard(
                   title: 'Health Monitoring',
                   subtitle:
                       'Monitor server health in the background and receive alerts for downtime or high resource usage.',
@@ -1592,9 +1618,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ],
                   ),
+                  ),
                 ),
-                const SizedBox(height: 20),
-                SettingsSectionCard(
+                _wrapCategorySection(
+                  'security',
+                  SettingsSectionCard(
                   title: 'Security',
                   subtitle:
                       'Protect local app access with a custom 4-digit PIN and optional biometric unlock.',
@@ -1641,9 +1669,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                  ),
                 ),
-                const SizedBox(height: 20),
-                SettingsSectionCard(
+                _wrapCategorySection(
+                  'backup',
+                  SettingsSectionCard(
                   title: 'Backup & Restore',
                   subtitle:
                       'Securely backup your servers, AI keys, and chat history to your own server or local storage.',
@@ -1871,9 +1901,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                  ),
                 ),
-                const SizedBox(height: 20),
-                SettingsSectionCard(
+                _wrapCategorySection(
+                  'support',
+                  SettingsSectionCard(
                   title: 'Support',
                   subtitle: 'Access the help center and documentation.',
                   icon: Icons.support_agent_outlined,
@@ -1932,8 +1964,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                  ),
                 ),
-                const SizedBox(height: 20),
                 Text(
                   'Hamma v1.0.0',
                   textAlign: TextAlign.center,
@@ -1943,10 +1975,186 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
               ],
-            ),
-          ),
+            );
+            if (!showRail) {
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: list,
+                ),
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildCategoriesRail(theme),
+                const VerticalDivider(width: 1, color: AppColors.border),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 800),
+                      child: list,
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  static const Map<String, ({String title, IconData icon, String search})>
+      _categoryMeta = {
+    'ai': (
+      title: 'AI Configuration',
+      icon: Icons.smart_toy_outlined,
+      search:
+          'ai configuration provider openai gemini openrouter local model copilot key',
+    ),
+    'triage': (
+      title: 'AI Log Triage',
+      icon: Icons.tune,
+      search: 'ai log triage cadence batch lines watch local',
+    ),
+    'health': (
+      title: 'Health Monitoring',
+      icon: Icons.health_and_safety_outlined,
+      search: 'health monitoring background check interval uptime servers',
+    ),
+    'security': (
+      title: 'Security',
+      icon: Icons.lock_outline,
+      search: 'security app pin biometric lock vault master password',
+    ),
+    'backup': (
+      title: 'Backup & Restore',
+      icon: Icons.cloud_sync_outlined,
+      search:
+          'backup restore sftp webdav syncthing snippet cloud sync export import daily',
+    ),
+    'support': (
+      title: 'Support',
+      icon: Icons.support_agent_outlined,
+      search: 'support help center extensions vault contact feedback',
+    ),
+  };
+
+  bool _categoryMatchesQuery(String id) {
+    final q = _settingsSearchQuery.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    final meta = _categoryMeta[id];
+    if (meta == null) return true;
+    return meta.title.toLowerCase().contains(q) ||
+        meta.search.contains(q);
+  }
+
+  Widget _wrapCategorySection(String id, Widget card) {
+    return KeyedSubtree(
+      key: _categoryKeys[id],
+      child: Visibility(
+        visible: _categoryMatchesQuery(id),
+        maintainState: true,
+        maintainAnimation: true,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 20),
+          child: card,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsSearchField(ThemeData theme) {
+    return TextField(
+      key: const ValueKey('settings_search_field'),
+      controller: _settingsSearchController,
+      onChanged: (value) {
+        setState(() => _settingsSearchQuery = value);
+      },
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search, size: 18),
+        hintText: 'Search settings…',
+        isDense: true,
+        suffixIcon: _settingsSearchQuery.isEmpty
+            ? null
+            : IconButton(
+                key: const ValueKey('settings_search_clear'),
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: () {
+                  _settingsSearchController.clear();
+                  setState(() => _settingsSearchQuery = '');
+                },
+              ),
+      ),
+    );
+  }
+
+  Widget _buildCategoriesRail(ThemeData theme) {
+    return Container(
+      key: const ValueKey('settings_categories_rail'),
+      width: 220,
+      color: AppColors.panel,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      child: ListView(
+        children: _categoryMeta.entries.map((entry) {
+          final id = entry.key;
+          final meta = entry.value;
+          final selected = _activeCategoryId == id;
+          final dim = !_categoryMatchesQuery(id);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Material(
+              color: selected ? AppColors.overlayHover : Colors.transparent,
+              child: InkWell(
+                key: ValueKey('settings_category_$id'),
+                onTap: dim ? null : () => _scrollToCategory(id),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        meta.icon,
+                        size: 16,
+                        color: dim ? AppColors.textMuted : null,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          meta.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: dim ? AppColors.textMuted : null,
+                            fontWeight: selected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Future<void> _scrollToCategory(String id) async {
+    final key = _categoryKeys[id];
+    final ctx = key?.currentContext;
+    if (ctx == null) return;
+    setState(() => _activeCategoryId = id);
+    await Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 250),
+      alignment: 0,
     );
   }
 }

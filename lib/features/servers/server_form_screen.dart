@@ -41,18 +41,12 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   late final TextEditingController _privateKeyPasswordController;
   late AuthMethod _authMethod;
 
-  // ── Sticky save-bar state ────────────────────────────────────────
-  // Mirrors the dirty-tracking pattern Task #44 introduced in the
-  // settings screen so the brand-new form save bar feels identical
-  // (appears only when there are unsaved changes, double-tap is
-  // de-duped, surface failures via snackbar).
+  // Sticky save-bar state.
   bool _dirty = false;
   bool _isBusy = false;
 
-  // Snapshot of the controllers' values at mount so we can decide
-  // whether the form is genuinely dirty after each keystroke. If the
-  // user types and then types back the original value, we hide the
-  // save bar again — same UX guarantee the settings screen makes.
+  // Initial controller values; the form is "dirty" iff any current
+  // value differs from this snapshot.
   late String _initialName;
   late String _initialHost;
   late String _initialPort;
@@ -140,9 +134,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   }
 
   Future<void> _save() async {
-    // Re-entry guard — the sticky save bar's tap target is large enough
-    // that a fast double-tap on touch devices reliably fires twice. We
-    // never want to enqueue two saves of the same form.
+    // Dedup re-entry from rapid double-taps on the save bar.
     if (_isBusy) return;
 
     if (!_formKey.currentState!.validate()) {
@@ -571,8 +563,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall?.copyWith(color: _mutedColor),
                   ),
-                  // Reserve room so the sticky save bar never covers
-                  // the last form field on short viewports.
+                  // Reserve room for the sticky save bar.
                   const SizedBox(height: 96),
                 ],
               ),
@@ -592,8 +583,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   }
 }
 
-/// Sticky save bar shown only when [_dirty] is true. Mirrors the
-/// settings screen's bar so the two surfaces feel like one product.
+/// Sticky save bar shown only when the form is dirty.
 class _ServerFormStickySaveBar extends StatelessWidget {
   const _ServerFormStickySaveBar({
     super.key,

@@ -313,10 +313,7 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
               'Open the terminal to run commands; this view only inspects logs.',
         );
 
-    // When a CopilotDock is installed (desktop dashboard ≥1100px),
-    // dock the triage copilot in the right-hand pane instead of the
-    // modal sheet so the log stream stays visible while the user
-    // chats with the AI. Mobile/tablet still get the bottom sheet.
+    // Dock at desktop widths when a CopilotDock is installed; else modal.
     final dock = CopilotDock.maybeOf(context);
     if (dock != null && Breakpoints.isDesktop(context)) {
       dock.open(
