@@ -69,7 +69,7 @@ It is wired into:
 | In-process error capture | `ErrorReporter._capture` → `ErrorScrubber.scrub` |
 | In-widget error panel & crash screen | both call `ErrorScrubber.scrub` |
 | AI Assistant prompt builder | `AiCommandService._chatWith*` redacts both the user message and prepended history before the request body is built |
-| Terminal stdout / stderr | `TerminalScreen._openShell` redacts every chunk before `_terminal.write` and before it lands in the AI-context scrollback buffer |
+| Terminal stdout / stderr | `TerminalScreen._openShell` pipes every chunk through a `StreamingVaultRedactor` (carry-buffered) before `_terminal.write` and before it lands in the AI-context scrollback buffer. The streaming wrapper holds back the trailing `(maxSecretLength - 1)` code units of each chunk so a secret split across two SSH chunks is still caught. `flush()` runs on session close so a trailing secret at EOF is also scrubbed. |
 | Server edit screen | "Linked Secrets" card lets the user flip a secret between global and `scope == server.id`; values are never shown here. |
 | AI Copilot "Run" button | Goes through `SshService.execute(cmd, vaultSecrets: …)` (non-interactive), NOT through the interactive TTY. The local terminal pane shows the placeholder form of the command and the (vault-redacted) output; the resolved secret value never enters the TTY echo stream and never lands in remote shell history. |
 
@@ -174,6 +174,13 @@ a value the user copied themselves between copy and timeout.
   id and the next sync round will treat your own previous blob as
   a peer (which is harmless — newest-wins merging keeps the
   identical state).
+- **No screenshot / share-sheet / export interception.** This
+  version only redacts text the app itself writes (terminal panes,
+  AI prompts, error reports, breadcrumbs). It does NOT hook the OS
+  share sheet, screenshot APIs, or any "export logs" pipeline; if
+  such pipelines are added later they need to call `GlobalVault
+  Redactor.current.redact(...)` explicitly. The relevant follow-up
+  is tracked as future work.
 - Secret rotation reminders, OS keychain export/import, sharing a
   single secret with a teammate, and HSM/Yubikey-derived vault keys
   are all out of scope for this version. They are tracked as v2

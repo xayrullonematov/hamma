@@ -516,11 +516,8 @@ class SshService {
 
     final injector = VaultInjector(vaultSecrets.toList(growable: false));
     final hasPlaceholders = injector.hasPlaceholders(command);
-    // Use env-var injection (not literal substitution) so the secret
-    // value never appears inside the command body that travels over
-    // the wire — only `"${NAME}"` does. The env block itself is
-    // single-quoted so secret values containing $, \, `, " or
-    // newlines cannot break out into shell expansion.
+    // Env-var injection: see VaultInjector.buildEnvCommand and
+    // docs/secrets-vault.md for the rewrite shape and trade-offs.
     final wrapped =
         hasPlaceholders ? injector.buildEnvCommand(command) : null;
     final commandToRun = wrapped?.wrappedCommand ?? command;

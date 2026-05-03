@@ -74,6 +74,14 @@ class _TerminalScreenState extends State<TerminalScreen> {
   // Refreshed whenever VaultChangeBus fires.
   List<VaultSecret> _vaultSecrets = const [];
   VaultRedactor _vaultRedactor = VaultRedactor.empty;
+  // Carry-buffered redactors for the SSH stdout/stderr streams. SSH
+  // chunks are arbitrary, so a secret can straddle two of them; a
+  // per-chunk redact() would emit the leading half before the second
+  // chunk arrived. See StreamingVaultRedactor.
+  final StreamingVaultRedactor _stdoutRedactor =
+      StreamingVaultRedactor(VaultRedactor.empty);
+  final StreamingVaultRedactor _stderrRedactor =
+      StreamingVaultRedactor(VaultRedactor.empty);
   StreamSubscription<void>? _vaultSub;
 
   bool get _isDesktop => !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
@@ -125,6 +133,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
       if (!mounted) return;
       _vaultSecrets = List.unmodifiable(loaded);
       _vaultRedactor = VaultRedactor.from(_vaultSecrets);
+      _stdoutRedactor.updateRedactor(_vaultRedactor);
+      _stderrRedactor.updateRedactor(_vaultRedactor);
     } catch (_) {
       // Vault unavailable (e.g. test harness with no secure-storage
       // plugin). Leave the empty redactor in place and carry on —
@@ -169,27 +179,41 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
       _stdoutSubscription?.cancel();
       _stdoutSubscription = session.stdout.listen((data) {
-        final raw = utf8.decode(data, allowMalformed: true);
-        // Redact BEFORE the bytes touch xterm or the AI-context
-        // scrollback. If the remote shell echoes a known vault value
-        // (e.g. via `echo $DB_PASS`), the user sees the marker, not
-        // the literal secret, and screenshots/copies of the terminal
-        // pane are safe by construction.
-        final text = _vaultRedactor.redact(raw);
+        // Stream through a carry-buffered redactor so a secret split
+        // across SSH chunks is still caught before either half is
+        // emitted to xterm or the AI-context buffer.
+        final text = _stdoutRedactor.feed(
+          utf8.decode(data, allowMalformed: true),
+        );
+        if (text.isEmpty) return;
         _terminal.write(text);
         _trackOutput(text);
       });
 
       _stderrSubscription?.cancel();
       _stderrSubscription = session.stderr.listen((data) {
-        final raw = utf8.decode(data, allowMalformed: true);
-        final text = _vaultRedactor.redact(raw);
+        final text = _stderrRedactor.feed(
+          utf8.decode(data, allowMalformed: true),
+        );
+        if (text.isEmpty) return;
         _terminal.write(text);
         _trackOutput(text);
       });
 
       session.done.then((_) {
         if (!mounted) return;
+        // Flush any held-back carry so a trailing secret at EOF is
+        // still scrubbed before the closing banner.
+        final tailOut = _stdoutRedactor.flush();
+        final tailErr = _stderrRedactor.flush();
+        if (tailOut.isNotEmpty) {
+          _terminal.write(tailOut);
+          _trackOutput(tailOut);
+        }
+        if (tailErr.isNotEmpty) {
+          _terminal.write(tailErr);
+          _trackOutput(tailErr);
+        }
         setState(() {
           _session = null;
         });
@@ -259,18 +283,10 @@ class _TerminalScreenState extends State<TerminalScreen> {
           canRunCommands: () => _session != null && widget.sshService.isConnected,
           getContext: () => _recentTerminalOutput,
           onRunCommand: (cmd) async {
-            // Run AI / command-bar commands through the non-interactive
-            // SSH exec path with env-var injection — NOT by typing the
-            // resolved bytes into the interactive TTY. Reasons:
-            //  * The interactive shell would echo the resolved command
-            //    back, putting the raw secret in the local terminal
-            //    pane and the remote shell history.
-            //  * SshService.execute uses VaultInjector.buildEnvCommand,
-            //    so the wire-side command body only contains
-            //    "${NAME}" references — not the literal value.
-            // The local scrollback shows the placeholder form of the
-            // command and the (vault-redacted) output, which is what
-            // the user wants to see and what is safe to share.
+            // Route through the non-interactive exec path so the
+            // resolved command bytes never enter the TTY echo stream
+            // or the remote shell history. The pane shows the
+            // placeholder form + redacted output.
             _terminal.write('\r\n\$ $cmd\r\n');
             try {
               final out = await widget.sshService.execute(
