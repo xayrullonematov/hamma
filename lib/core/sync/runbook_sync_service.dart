@@ -237,6 +237,36 @@ class RunbookSyncService {
       // tombstone can never delete a teammate's team runbook.
       final localTeam = localAll.where((r) => r.team).toList();
       final localTeamIds = localTeam.map((r) => r.id).toSet();
+
+      // Load the persistent record of every id this device has ever
+      // shared as team. This is what lets us propagate deletes and
+      // "untag team" demotions: without it, the id falls out of
+      // localTeamIds and the tombstone would be filtered out, so
+      // peers would silently resurrect the deleted entry.
+      final previouslyShared =
+          await _syncStorage.loadSharedTeamRunbookIds();
+      final eligibleIds = {...previouslyShared, ...localTeamIds};
+
+      // Synthesise tombstones for ids that were previously shared
+      // as team but are no longer team-tagged AND still exist
+      // locally (i.e. the user flipped `team` from true → false).
+      // We use the runbook's last updatedAt (or "now" as a floor)
+      // so newer-wins merging deletes the team copy on peers
+      // without clobbering a more recent legitimate update.
+      final now = DateTime.now().toUtc();
+      final liveIdsById = {for (final r in localAll) r.id: r};
+      final synthesizedTombstones = <String, DateTime>{};
+      for (final id in previouslyShared) {
+        final stillTeam = localTeamIds.contains(id);
+        final hasTombstone = localMeta.tombstones.containsKey(id);
+        final stillExistsAsNonTeam =
+            liveIdsById[id] != null && !stillTeam;
+        if (stillExistsAsNonTeam && !hasTombstone) {
+          final ts = localMeta.updatedAt[id] ?? now;
+          synthesizedTombstones[id] = ts;
+        }
+      }
+
       final teamMeta = RunbookSyncMeta(
         updatedAt: {
           for (final e in localMeta.updatedAt.entries)
@@ -244,7 +274,8 @@ class RunbookSyncService {
         },
         tombstones: {
           for (final e in localMeta.tombstones.entries)
-            if (localTeamIds.contains(e.key)) e.key: e.value,
+            if (eligibleIds.contains(e.key)) e.key: e.value,
+          ...synthesizedTombstones,
         },
       );
 
@@ -287,6 +318,18 @@ class RunbookSyncService {
       );
       final outCipher = BackupCrypto.encrypt(password, blob.encode());
       await adapter.put(runbooksObjectKey, outCipher);
+
+      // Record everything that just rode the wire as team. This
+      // includes live team runbooks AND any tombstone we just
+      // uploaded — the latter must keep being uploaded until the
+      // tombstone ages out so a peer that's been offline for a
+      // long time still observes the delete on its next pull.
+      final newShared = <String>{
+        ...previouslyShared,
+        ...localTeamIds,
+        ...metaToUpload.tombstones.keys,
+      };
+      await _syncStorage.saveSharedTeamRunbookIds(newShared);
     } catch (_) {
       // Swallow — failures are reported via `SnippetSyncService`'s
       // history feed; runbook sync runs as a sidecar.

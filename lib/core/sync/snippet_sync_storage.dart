@@ -114,6 +114,7 @@ class SnippetSyncStorage {
   static const _deviceIdKey = 'snippet_sync_device_id';
   static const _lastSyncKey = 'snippet_sync_last_at';
   static const _historyKey = 'snippet_sync_history';
+  static const _sharedTeamRunbookIdsKey = 'runbook_sync_shared_team_ids';
   static const _maxHistoryEntries = 10;
 
   final FlutterSecureStorage _secureStorage;
@@ -180,11 +181,37 @@ class SnippetSyncStorage {
     );
   }
 
+  /// Stable record of every runbook id this device has ever uploaded
+  /// as `team:true`. Needed by `RunbookSyncService` so a deletion or
+  /// "untag team" of a previously-shared runbook still emits a
+  /// tombstone on the team channel — without this set, the id would
+  /// vanish from the live team-id list and other devices would
+  /// silently resurrect the deleted entry on the next merge.
+  Future<Set<String>> loadSharedTeamRunbookIds() async {
+    final raw = await _secureStorage.read(key: _sharedTeamRunbookIdsKey);
+    if (raw == null || raw.trim().isEmpty) return <String>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return <String>{};
+      return decoded.map((e) => e.toString()).toSet();
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
+  Future<void> saveSharedTeamRunbookIds(Set<String> ids) async {
+    await _secureStorage.write(
+      key: _sharedTeamRunbookIdsKey,
+      value: jsonEncode(ids.toList()),
+    );
+  }
+
   Future<void> clearAll() async {
     await _secureStorage.delete(key: _enabledKey);
     await _secureStorage.delete(key: _deviceIdKey);
     await _secureStorage.delete(key: _lastSyncKey);
     await _secureStorage.delete(key: _historyKey);
+    await _secureStorage.delete(key: _sharedTeamRunbookIdsKey);
   }
 
   String _generateDeviceId() {
