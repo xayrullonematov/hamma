@@ -123,12 +123,15 @@ Future<PluginCommandResult> runCommand(String command);
 ```
 
 * Requires `needsSshSession: true`.
-* The command is screened by `CommandRiskAssessor.assessFast`. `critical`
-  results are refused with `HammaApiException` and never reach the
-  transport.
-* `PluginCommandResult.riskLevel` may be `low` / `moderate` / `high`
-  for non-critical risky commands; the plugin can choose to confirm
-  with the user before showing output.
+* Every command is graded by the full `CommandRiskAssessor`.
+  Plugins may only execute commands graded `low`. Anything
+  `moderate` / `high` / `critical` is refused with
+  `HammaApiException` before it reaches the SSH transport — if a
+  plugin needs to invoke a privileged command, the user must run
+  it themselves from the AI Assistant where the safety queue can
+  confirm interactively.
+* `PluginCommandResult.riskLevel` is therefore always `low` for
+  results that reach the caller.
 * The plugin is responsible for shell-quoting any user-supplied
   substrings; Hamma intentionally does not escape because plugins
   frequently need pipes / redirects of their own.
@@ -191,7 +194,8 @@ runtime, even if a future Hamma release exposes the underlying API.
 1. **No direct `package:http`, no raw `dart:io` sockets, no
    `flutter_secure_storage` imports.** Use `HammaApi` instead.
 2. **No bypassing the risk assessor.** Every command goes through
-   `runCommand` and therefore through `CommandRiskAssessor.assessFast`.
+   `runCommand` and therefore through the full `CommandRiskAssessor`;
+   only `low`-graded commands are executed.
 3. **No cross-plugin storage access.** Per-plugin namespacing is
    enforced by the registry — there is no API to look up another
    plugin's keys.

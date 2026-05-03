@@ -15,28 +15,18 @@ import 'plugin_config_store.dart';
 
 /// Sandboxed handle a [HammaPlugin] receives at runtime.
 ///
-/// This is intentionally narrower than the underlying services:
+/// Narrower than the underlying services. In particular:
 ///
-///   * Plugins cannot reach `flutter_secure_storage` directly. They get
-///     a per-plugin namespaced [readConfig] / [writeConfig] that lives
-///     inside the same encrypted backing store but is keyed by the
-///     plugin id, so one plugin can never read another's secrets.
-///   * Plugins cannot call `package:http` or open arbitrary sockets.
-///     [httpGet] / [httpPostJson] route through a `dart:io` HttpClient
-///     with the per-plugin allow-list enforced *before* the request
-///     is dispatched.
-///   * Plugins cannot bypass the risk assessor. [runCommand] always
-///     calls [CommandRiskAssessor.assessFast] first; commands that
-///     come back as `critical` are refused with [HammaApiException]
-///     and never reach the SSH transport.
-///   * Plugins cannot call cloud AI. [callLocalAi] hard-fails unless
-///     [AiSettings.provider] is [AiProvider.local], so a misconfigured
-///     plugin can never silently exfiltrate a prompt off-device.
+///   * Per-plugin namespaced config (no cross-plugin reads).
+///   * `httpGet` / `httpPostJson` are gated by an allow-list.
+///   * `runCommand` is gated by [CommandRiskAssessor]; anything
+///     above LOW is refused.
+///   * `callLocalAi` only works when the active provider is
+///     [AiProvider.local].
 ///
-/// Capability flags from [PluginCapabilities] are checked on every
+/// Every capability flag in [PluginCapabilities] is checked on every
 /// gated method, so a plugin that didn't declare a permission at
-/// install time can never use it at runtime even if a future API
-/// change unlocks the underlying service.
+/// install time can never use it at runtime.
 class HammaApi {
   /// Constructed by the [PluginRegistry] (and by tests directly).
   /// Not part of the public plugin API — plugins receive a built
@@ -50,12 +40,12 @@ class HammaApi {
     SshService? sshService,
     AiSettings? aiSettings,
     HttpClient Function()? httpClientFactory,
-    Future<void> Function()? onInvalidate,
+    Future<List<String>> Function()? dynamicHostsResolver,
   })  : _configStore = configStore,
         _sshService = sshService,
         _aiSettings = aiSettings,
         _httpClientFactory = httpClientFactory ?? HttpClient.new,
-        _onInvalidate = onInvalidate;
+        _dynamicHostsResolver = dynamicHostsResolver;
 
   /// Plugin id this handle belongs to. Used as the storage namespace
   /// and as the breadcrumb tag for any logged failure.
@@ -76,21 +66,28 @@ class HammaApi {
   final AiSettings? _aiSettings;
   final HttpClient Function() _httpClientFactory;
 
-  /// Hook the registry installs so the plugin can ask the dashboard
-  /// to rebuild its [HammaApi] handle. Used after the plugin mutates
-  /// config that feeds [HammaPlugin.resolveDynamicAllowedHosts] —
-  /// without this, the cached handle would keep its stale allow-list
-  /// for the rest of the server session.
-  final Future<void> Function()? _onInvalidate;
+  /// Resolver that re-reads the plugin's user-facing config and
+  /// returns any allow-list hosts that should be merged on top of
+  /// [PluginCapabilities.allowedHosts]. Installed by the registry
+  /// once at construction time. Kept as a field (not just resolved
+  /// once) so plugins can call [refreshAllowedHosts] after writing
+  /// new config — see the Proxmox plugin's `_configure` flow.
+  final Future<List<String>> Function()? _dynamicHostsResolver;
 
-  /// Ask the host (the dashboard) to drop its cached [HammaApi] for
-  /// this plugin and rebuild a fresh one on the next panel mount.
-  /// Plugins call this after they write config that affects their
-  /// dynamic allow-list — the next call resolves the merged hosts
-  /// against the freshly-written config.
-  Future<void> requestApiRebuild() async {
-    final hook = _onInvalidate;
-    if (hook != null) await hook();
+  /// Allow-list hosts contributed by [HammaPlugin.resolveDynamicAllowedHosts].
+  /// Mutated by [refreshAllowedHosts]; checked alongside the static
+  /// [PluginCapabilities.allowedHosts] in [_isHostAllowed].
+  List<String> _dynamicAllowedHosts = const <String>[];
+
+  /// Re-run the plugin's dynamic-host resolver and update the
+  /// in-memory allow-list. Plugins call this immediately after
+  /// writing config that contributes to their allow-list (e.g. a
+  /// cluster host) so the very next request sees the new whitelist
+  /// — no API rebuild and no remount needed.
+  Future<void> refreshAllowedHosts() async {
+    final resolver = _dynamicHostsResolver;
+    if (resolver == null) return;
+    _dynamicAllowedHosts = await resolver();
   }
 
   // ---------------------------------------------------------------------------
@@ -98,11 +95,13 @@ class HammaApi {
   // ---------------------------------------------------------------------------
 
   /// Run [command] on the active SSH session and return the captured
-  /// stdout. The command is first scored by [CommandRiskAssessor];
-  /// `critical` results are refused. The plugin is responsible for
-  /// quoting any user-supplied substrings — the API does not attempt
-  /// to escape shell metacharacters because plugins frequently need
-  /// pipelines, redirects and substitutions of their own.
+  /// stdout. The command is scored by the full [CommandRiskAssessor]
+  /// — not just the fast-path quick-deny list — and anything graded
+  /// `moderate` or worse is refused. Plugins are intended for
+  /// read-only inspection workloads; if a plugin genuinely needs to
+  /// invoke a privileged command, the user must run it themselves
+  /// from the regular AI Assistant flow where the safety queue can
+  /// confirm interactively.
   Future<PluginCommandResult> runCommand(String command) async {
     if (!capabilities.needsSshSession) {
       throw HammaApiException(
@@ -114,17 +113,14 @@ class HammaApi {
       throw HammaApiException('No active SSH session for plugin "$pluginId".');
     }
 
-    // Risk gate. `assessFast` returns null for benign commands and a
-    // [CommandRiskLevel] for anything matched by its quick-deny list.
-    // We surface non-critical levels via the result so the plugin
-    // can choose to confirm with the user before showing output.
-    final risk = CommandRiskAssessor.assessFast(command);
-    if (risk == CommandRiskLevel.critical) {
+    final analysis = const CommandRiskAssessor().assess(command);
+    if (analysis.riskLevel != CommandRiskLevel.low) {
       throw HammaApiException(
         'Refused to run command for plugin "$pluginId": '
-        'CommandRiskAssessor flagged it as CRITICAL. Plugins cannot '
-        'bypass the risk gate.',
-        riskLevel: risk,
+        'risk level ${analysis.riskLevel.name.toUpperCase()} '
+        '(${analysis.explanation}). Plugins may only execute '
+        'commands graded LOW.',
+        riskLevel: analysis.riskLevel,
       );
     }
 
@@ -132,7 +128,7 @@ class HammaApi {
     return PluginCommandResult(
       command: command,
       stdout: stdout,
-      riskLevel: risk,
+      riskLevel: analysis.riskLevel,
     );
   }
 
@@ -251,10 +247,16 @@ class HammaApi {
   /// purpose of the allow-list.
   bool _isHostAllowed(String host) {
     final normalized = host.toLowerCase();
-    for (final raw in capabilities.allowedHosts) {
+    bool match(String raw) {
       final entry = raw.toLowerCase();
-      if (normalized == entry) return true;
-      if (normalized.endsWith('.$entry')) return true;
+      return normalized == entry || normalized.endsWith('.$entry');
+    }
+
+    for (final raw in capabilities.allowedHosts) {
+      if (match(raw)) return true;
+    }
+    for (final raw in _dynamicAllowedHosts) {
+      if (match(raw)) return true;
     }
     return false;
   }
@@ -312,11 +314,10 @@ class PluginServerInfo {
   final String username;
 }
 
-/// Result of [HammaApi.runCommand]. [riskLevel] is whatever
-/// [CommandRiskAssessor.assessFast] returned for the command — `null`
-/// for benign commands, `low/moderate/high` when the assessor matched
-/// a heuristic but did not refuse outright. (`critical` never reaches
-/// the result because [HammaApi.runCommand] throws before executing.)
+/// Result of [HammaApi.runCommand]. [riskLevel] is the grade the
+/// full [CommandRiskAssessor] returned — always `low` for results
+/// that reached the caller, since [HammaApi.runCommand] refuses
+/// anything `moderate` or worse before hitting SSH.
 @immutable
 class PluginCommandResult {
   const PluginCommandResult({

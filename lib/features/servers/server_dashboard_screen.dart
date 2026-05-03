@@ -127,18 +127,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     if (!mounted) return;
     final next = _pluginRegistry.enabled;
     final stillEnabled = next.map((p) => p.manifest.id).toSet();
-    // Drop any plugin that just left the enabled set...
     _pluginApis.removeWhere((id, _) => !stillEnabled.contains(id));
-    // ...and any plugin that explicitly asked to be rebuilt
-    // (typically because its dynamic allow-list / config changed).
-    final invalidated = _pluginRegistry.consumePendingInvalidations();
-    for (final id in invalidated) {
-      _pluginApis.remove(id);
-    }
     setState(() {
       _enabledPlugins = next;
-      // Clamp the active tab so toggling a plugin off doesn't leave
-      // us pointing at an out-of-bounds index.
       final maxIndex = _NavItems.items.length + _enabledPlugins.length - 1;
       if (_activeTabIndex > maxIndex) _activeTabIndex = 0;
     });

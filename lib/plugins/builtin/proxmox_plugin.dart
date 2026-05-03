@@ -15,20 +15,12 @@ import '../hamma_plugin.dart';
 /// the same encrypted backing store as the rest of the user's
 /// secrets, namespaced to this plugin's id.
 ///
-/// Permissions: `needsNetworkPort` with no static [allowedHosts] — the
-/// host comes from the user's config and is added to the allow-list at
-/// [_configure] time. (We rebuild the [HammaApi] handle implicitly by
-/// remembering the host on this state object, then let
-/// [HammaApi._isHostAllowed] do the gating; we accomplish that by
-/// dynamically extending capabilities at registration. See
-/// [_PROXMOX_HOSTS_CONFIG_KEY] for how the manifest lists no static
-/// hosts but the runtime registers each configured host as a
-/// per-instance override at startup.)
-///
-/// (For v1, to keep the contract simple, we cheat a tiny bit: the
-/// plugin's declared [allowedHosts] is `<dynamic>` — i.e. any host the
-/// user has explicitly typed into config. The Extensions screen makes
-/// this clear in the permissions summary.)
+/// The cluster host is allow-listed dynamically: the manifest declares
+/// no static [PluginCapabilities.allowedHosts]; at API construction
+/// time the registry calls [resolveDynamicAllowedHosts] to read the
+/// configured host from secure storage and merge it into the allow
+/// list. After the user updates the host in `_configure`, the panel
+/// calls [HammaApi.refreshAllowedHosts] before the next request.
 class ProxmoxPlugin extends HammaPlugin {
   ProxmoxPlugin();
 
@@ -51,15 +43,11 @@ class ProxmoxPlugin extends HammaPlugin {
       );
 
   @override
-  PluginCapabilities get capabilities => PluginCapabilities(
+  PluginCapabilities get capabilities => const PluginCapabilities(
         needsNetworkPort: true,
-        // The user types the cluster host into the plugin config
-        // screen; we allow it on a per-instance basis by registering
-        // it through the registry.buildApi call at runtime. The list
-        // here covers a sensible default range; instance-level hosts
-        // are merged on top by the dashboard wiring before the API
-        // handle is built.
-        allowedHosts: const <String>[],
+        // No static hosts; the configured cluster host is merged in
+        // via [resolveDynamicAllowedHosts] at runtime.
+        allowedHosts: <String>[],
         permissionsSummary:
             'Reaches your Proxmox VE host on HTTPS (default port 8006). '
             'The host you configure is the only destination this plugin '
@@ -208,10 +196,9 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
     await widget.api.writeConfig(ProxmoxPlugin._portKey, updated.port.toString());
     await widget.api.writeConfig(ProxmoxPlugin._tokenIdKey, updated.tokenId);
     await widget.api.writeConfig(ProxmoxPlugin._tokenSecretKey, updated.tokenSecret);
-    // The cluster host is part of the dynamic allow-list; ask the
-    // dashboard to rebuild the API handle so the next refresh sees
-    // the new host whitelisted instead of the old one (or none).
-    await widget.api.requestApiRebuild();
+    // The configured host feeds the dynamic allow-list; refresh it
+    // in place so the very next request sees the new whitelist.
+    await widget.api.refreshAllowedHosts();
     if (!mounted) return;
     setState(() => _config = updated);
     await _refresh();

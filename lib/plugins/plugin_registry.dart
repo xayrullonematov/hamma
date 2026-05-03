@@ -70,28 +70,7 @@ class PluginRegistry extends ChangeNotifier {
 
   final List<HammaPlugin> _plugins = [];
   final Set<String> _enabledIds = <String>{};
-  final Set<String> _pendingInvalidations = <String>{};
   bool _isLoaded = false;
-
-  /// Plugin ids whose cached [HammaApi] handles the dashboard should
-  /// drop and rebuild before the next panel mount. The dashboard
-  /// listener calls [consumePendingInvalidations] inside its
-  /// [ChangeNotifier] callback to drain this set.
-  Set<String> consumePendingInvalidations() {
-    if (_pendingInvalidations.isEmpty) return const <String>{};
-    final out = Set<String>.from(_pendingInvalidations);
-    _pendingInvalidations.clear();
-    return out;
-  }
-
-  /// Mark [pluginId]'s API handle as stale. Called via the
-  /// `onInvalidate` callback we install on every [HammaApi]; plugins
-  /// reach this from [HammaApi.requestApiRebuild] after they write
-  /// config that feeds [HammaPlugin.resolveDynamicAllowedHosts].
-  void invalidateApi(String pluginId) {
-    _pendingInvalidations.add(pluginId);
-    notifyListeners();
-  }
 
   /// All registered plugins, in registration order. The dashboard nav
   /// renders enabled plugins in this order so the user sees a stable
@@ -198,27 +177,17 @@ class PluginRegistry extends ChangeNotifier {
       configStore: _configStore,
       pluginId: plugin.manifest.id,
     );
-    final dynamicHosts = await plugin.resolveDynamicAllowedHosts(reader);
-    final mergedHosts = <String>[
-      ...plugin.capabilities.allowedHosts,
-      ...dynamicHosts,
-    ];
-    final caps = PluginCapabilities(
-      needsSshSession: plugin.capabilities.needsSshSession,
-      needsLocalAi: plugin.capabilities.needsLocalAi,
-      needsNetworkPort: plugin.capabilities.needsNetworkPort,
-      allowedHosts: mergedHosts,
-      permissionsSummary: plugin.capabilities.permissionsSummary,
-    );
-    return HammaApi(
+    final api = HammaApi(
       pluginId: plugin.manifest.id,
-      capabilities: caps,
+      capabilities: plugin.capabilities,
       serverInfo: PluginServerInfo.fromProfile(server),
       configStore: _configStore,
       sshService: sshService,
       aiSettings: aiSettings,
-      onInvalidate: () async => invalidateApi(plugin.manifest.id),
+      dynamicHostsResolver: () => plugin.resolveDynamicAllowedHosts(reader),
     );
+    await api.refreshAllowedHosts();
+    return api;
   }
 }
 
