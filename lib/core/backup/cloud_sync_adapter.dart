@@ -142,3 +142,15 @@ class CloudSyncException implements Exception {
   @override
   String toString() => 'CloudSyncException: $message';
 }
+
+/// Thrown by adapter `get` when the requested key does not exist
+/// (S3 404 / Dropbox 409 path/not_found / iCloud nil result). Lets
+/// callers like the snippet-sync service distinguish "no remote blob
+/// yet" — a benign first-run state — from real transport errors that
+/// must abort the sync rather than silently push local state over a
+/// possibly-newer remote.
+class CloudNotFoundException extends CloudSyncException {
+  const CloudNotFoundException(super.message);
+  @override
+  String toString() => 'CloudNotFoundException: $message';
+}

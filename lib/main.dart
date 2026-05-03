@@ -19,6 +19,8 @@ import 'core/storage/api_key_storage.dart';
 import 'core/storage/app_lock_storage.dart';
 import 'core/storage/app_prefs_storage.dart';
 import 'core/storage/saved_servers_storage.dart';
+import 'core/sync/snippet_sync_service.dart';
+import 'core/sync/snippet_sync_storage.dart';
 import 'core/theme/app_colors.dart';
 import 'features/ai_assistant/global_command_palette.dart';
 import 'features/onboarding/onboarding_screen.dart';
@@ -159,6 +161,24 @@ Future<void> _bootstrapAndRun() async {
       await BackgroundKeepalive.enable(intervalMinutes: interval);
     }
   } catch (_) {}
+
+  // Cross-device snippet sync (Phase 5.1) — opt-in. Bind a single,
+  // long-lived service to the snippet change-bus so debounced pushes
+  // fire on every local edit even before the user opens the settings
+  // screen. The instance is intentionally retained for the lifetime
+  // of the process; both push() and pull() runtime-gate on the
+  // `isEnabled` flag so flipping the toggle takes effect without
+  // restarting it. Pull-and-merge runs once on launch (best-effort)
+  // so snippets edited on another device are visible immediately.
+  try {
+    final snippetSync = SnippetSyncService()..start();
+    if (await const SnippetSyncStorage().isEnabled()) {
+      // Fire-and-forget; never blocks startup.
+      unawaited(snippetSync.pullAndMerge());
+    }
+  } catch (_) {
+    // Snippet sync is non-critical; never block app launch on it.
+  }
 
   // Sentry DSN can be hardcoded for production or overridden by dev config
   const productionDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');

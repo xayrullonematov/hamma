@@ -101,6 +101,9 @@ class S3CompatAdapter implements CloudSyncAdapter {
       uri: uri,
       body: const [],
     );
+    if (res.statusCode == 404) {
+      throw CloudNotFoundException('S3 GET $key: not found.');
+    }
     if (res.statusCode != 200) {
       throw CloudSyncException(
         'S3 GET $key failed: ${res.statusCode} ${res.body}',

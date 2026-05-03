@@ -111,6 +111,10 @@ class DropboxAdapter implements CloudSyncAdapter {
         'Dropbox-API-Arg': jsonEncode({'path': _path(key)}),
       },
     );
+    if (res.statusCode == 409 &&
+        res.body.contains('path/not_found')) {
+      throw CloudNotFoundException('Dropbox download $key: not found.');
+    }
     if (res.statusCode != 200) {
       throw CloudSyncException(
         'Dropbox download $key failed: ${res.statusCode} ${res.body}',

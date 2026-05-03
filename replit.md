@@ -213,6 +213,18 @@ Three new opt-in destinations sit on top of the existing BackupCrypto v2 (HMBK /
 - `lib/features/settings/cloud_restore_screen.dart` — guarded restore-on-new-device flow with master-password prompt and red warning banner.
 - Entry point added under "Backup & Restore" in `settings_screen.dart` ("Cloud Sync (Encrypted)"). Cloud destinations are filtered out of the legacy destination dropdown so they always go through the dedicated screen.
 
+## Cross-Device Snippet Sharing (Phase 5.1 — opt-in)
+
+Custom quick-action snippets ride on top of the same encrypted cloud-sync transport, but as a separate, smaller blob keyed `snippets/snippets.aes`. Off by default; gated on a configured cloud destination.
+
+- `lib/core/sync/snippet_sync_storage.dart` — feature flag, stable per-device id, last-sync timestamp, rolling 10-entry sync history.
+- `lib/core/sync/snippet_change_bus.dart` — process-wide broadcast that `CustomActionsStorage` fires after every save/clear.
+- `lib/core/sync/snippet_sync_service.dart` — subscribes to the bus, debounces uploads (3s), encrypts via `BackupCrypto.encrypt(masterPin, …)`, uploads through `BackupService.buildCloudAdapter`. `pullAndMerge()` runs newest-wins merge over snippet ids + tombstones (`mergeSnippets()` is a pure function with full test coverage).
+- `lib/core/storage/custom_actions_storage.dart` — now also persists per-id `updatedAt` + tombstones in `custom_quick_actions_meta`. `applyMergedState()` writes the merged state without refiring the bus to avoid push/pull loops.
+- `lib/features/settings/snippet_sync_screen.dart` — brutalist toggle + status + "PUSH NOW" / "PULL & MERGE" + history feed.
+
+Zero-trust guarantee inherits from Cloud Sync: the snippets blob is HMBK-encrypted before it reaches any adapter — the cloud provider never sees plaintext.
+
 ## Global Error Handling
 
 Top-level error capture is centralised in `lib/core/error/`:

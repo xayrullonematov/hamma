@@ -90,7 +90,7 @@ class ICloudAdapter implements CloudSyncAdapter {
       'key': key,
     });
     if (res == null) {
-      throw CloudSyncException('iCloud object not found: $key');
+      throw CloudNotFoundException('iCloud object not found: $key');
     }
     return res;
   }
