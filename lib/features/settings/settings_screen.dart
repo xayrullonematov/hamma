@@ -60,7 +60,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  // ignore: unused_field
   static const _mutedColor = AppColors.textMuted;
   static const _openRouterModelsUrl = 'https://openrouter.ai/api/v1/models';
 
@@ -77,8 +76,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final raw = _localEndpointController.text.trim();
     return raw.isEmpty || OllamaClient.isLoopbackEndpoint(raw);
   }
-  // ignore: unused_field
-  bool? _localConnectionTestSuccess;
   bool _isDetectingLocalEngines = false;
   List<DetectedEngine> _detectedLocalEngines = const [];
   String? _detectError;
@@ -107,8 +104,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool? _hasAppPin;
   bool _isLoadingOpenRouterModels = false;
   bool _hasLoadedOpenRouterModels = false;
-  // ignore: unused_field
-  String? _openRouterModelsError;
   List<String> _openRouterModels = const [];
 
   bool _healthMonitoringEnabled = false;
@@ -143,13 +138,95 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _bumpSaveBar();
   }
 
-  /// Returns true if a row with the given label + keywords matches the
-  /// currently active settings search query. Empty query matches all.
-  bool _rowMatches(String label, [String keywords = '']) {
+  /// Single source of truth for row search metadata. Both
+  /// [_rowMatches] (which gates row visibility) and
+  /// [_categoryMatchesQuery] (which gates category visibility) read
+  /// from this map, so a search query for any registered row keyword
+  /// is guaranteed to keep the parent category on screen. Adding a
+  /// row in the UI without registering it here will assert in debug
+  /// mode via [_rowMatches].
+  ///
+  /// Inner key is a row identifier (usually equal to the row label,
+  /// disambiguated with a `(group)` suffix when the same label is
+  /// reused inside a category — e.g. SFTP / WebDAV "Username").
+  static const Map<String, Map<String, String>> _categoryRowKeywords = {
+    'ai': {
+      'Default Provider':
+          'ai provider openai gemini openrouter local default',
+      'OpenAI Key': 'openai key api',
+      'Gemini Key': 'gemini key api',
+      'OpenRouter Key': 'openrouter key api',
+      'OpenRouter Model': 'openrouter model gpt claude llama',
+      'Engine Endpoint':
+          'local endpoint loopback ollama llamacpp lmstudio url',
+      'Local Model': 'local model ollama tag pull',
+      'Test Connection': 'test ping connection probe',
+      'Detect Engines': 'detect scan engines local',
+      'Manage Models': 'manage pull models tags',
+      'First-Run Setup':
+          'first run setup wizard onboarding install local engine',
+    },
+    'triage': {
+      'Batch Size':
+          'log triage cadence batch lines analyse every watch',
+    },
+    'health': {
+      'Enable Background Monitoring':
+          'health monitor background uptime servers enable',
+      'Check Interval': 'check interval minutes frequency every',
+    },
+    'security': {
+      'App PIN':
+          'security app pin biometric lock unlock vault master password',
+    },
+    'backup': {
+      'Backup Destination':
+          'destination sftp webdav webdav url syncthing local host '
+              'port username password url path token nextcloud',
+      'SFTP Host': 'sftp host server hostname',
+      'SFTP Username': 'sftp username user',
+      'SFTP Port': 'sftp port',
+      'SFTP Password': 'sftp password ssh',
+      'SFTP Backup Directory': 'sftp path directory backup folder',
+      'WebDAV URL': 'webdav url nextcloud server',
+      'WebDAV Username': 'webdav username user',
+      'WebDAV Password': 'webdav password app token',
+      'Syncthing Local Path': 'syncthing path folder local',
+      'Daily Automatic Backup':
+          'daily automatic auto backup schedule wifi background',
+      'Backup Now': 'backup now export run',
+      'Restore': 'restore import backup',
+      'Cloud Sync (Encrypted)':
+          'cloud sync encrypted end to end device e2e',
+      'Snippet Sync (Cross-Device)':
+          'snippet sync cross device share command',
+    },
+    'support': {
+      'Help Center':
+          'help center guides faqs troubleshooting documentation',
+      'Extensions': 'extensions plugins manage installed',
+      'Vault': 'vault secrets encrypted credentials',
+      'Contact Support':
+          'contact support feedback email hamma team',
+    },
+  };
+
+  /// Returns true if the registered row in [categoryId] keyed by
+  /// [rowKey] matches the active search query. Empty query matches
+  /// all. Asserts in debug if a callsite passes an unregistered
+  /// (categoryId, rowKey) — preventing silent search drift.
+  bool _rowMatches(String categoryId, String rowKey) {
+    final keywords = _categoryRowKeywords[categoryId]?[rowKey];
+    assert(
+      keywords != null,
+      'Settings row "$rowKey" in category "$categoryId" is missing '
+      'from _categoryRowKeywords. Register it so search keeps the '
+      'category visible when the row matches.',
+    );
     final q = _settingsSearchQuery.trim().toLowerCase();
     if (q.isEmpty) return true;
-    return label.toLowerCase().contains(q) ||
-        keywords.toLowerCase().contains(q);
+    return rowKey.toLowerCase().contains(q) ||
+        (keywords ?? '').toLowerCase().contains(q);
   }
 
   /// Renders the "current value" for any secret chevron row. We never
@@ -931,7 +1008,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() {
       _isLoadingOpenRouterModels = true;
-      _openRouterModelsError = null;
     });
 
     try {
@@ -974,7 +1050,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       setState(() {
         _openRouterModels = models;
-        _openRouterModelsError = null;
         _hasLoadedOpenRouterModels = true;
       });
       _openRouterModelController.text = _openRouterModel ?? '';
@@ -984,8 +1059,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       setState(() {
-        _openRouterModelsError =
-            'OpenRouter model list request timed out. Try again.';
       });
     } catch (error) {
       if (!mounted) {
@@ -993,7 +1066,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       setState(() {
-        _openRouterModelsError = error.toString();
       });
     } finally {
       if (mounted) {
@@ -1012,7 +1084,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _openRouterModelController.text,
       );
       _localConnectionTestResult = null;
-      _localConnectionTestSuccess = null;
       if (changed) {
         _isDirty = true;
         _bumpSaveBar();
@@ -1135,7 +1206,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _isTestingLocalConnection = true;
       _localConnectionTestResult = null;
-      _localConnectionTestSuccess = null;
     });
 
     try {
@@ -1155,7 +1225,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         } catch (_) {}
         setState(() {
           _isTestingLocalConnection = false;
-          _localConnectionTestSuccess = true;
           _localConnectionTestResult = modelCount > 0
               ? 'ENGINE ONLINE — $modelCount model${modelCount == 1 ? "" : "s"} available'
               : 'ENGINE ONLINE — connected (no models loaded yet)';
@@ -1163,7 +1232,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       } else {
         setState(() {
           _isTestingLocalConnection = false;
-          _localConnectionTestSuccess = false;
           _localConnectionTestResult = 'ENGINE UNREACHABLE — HTTP ${response.statusCode}';
         });
       }
@@ -1171,14 +1239,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _isTestingLocalConnection = false;
-        _localConnectionTestSuccess = false;
         _localConnectionTestResult = 'CONNECTION TIMED OUT — is Ollama running?';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isTestingLocalConnection = false;
-        _localConnectionTestSuccess = false;
         _localConnectionTestResult = 'CONNECTION FAILED — is Ollama running?';
       });
     }
@@ -1290,8 +1356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'PROVIDER',
                         children: [
-                          if (_rowMatches('Default Provider',
-                              'ai provider openai gemini openrouter local'))
+                          if (_rowMatches('ai', 'Default Provider'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_ai_provider'),
                               icon: Icons.bolt_rounded,
@@ -1306,7 +1371,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'API KEYS',
                         children: [
-                          if (_rowMatches('OpenAI Key', 'openai key api'))
+                          if (_rowMatches('ai', 'OpenAI Key'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_openai_key'),
                               icon: Icons.vpn_key_rounded,
@@ -1323,7 +1388,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                             'Leave blank to clear the saved OpenAI key.',
                                       ),
                             ),
-                          if (_rowMatches('Gemini Key', 'gemini key api'))
+                          if (_rowMatches('ai', 'Gemini Key'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_gemini_key'),
                               icon: Icons.vpn_key_rounded,
@@ -1340,8 +1405,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                             'Leave blank to clear the saved Gemini key.',
                                       ),
                             ),
-                          if (_rowMatches(
-                              'OpenRouter Key', 'openrouter key api'))
+                          if (_rowMatches('ai', 'OpenRouter Key'))
                             SettingsRow.chevron(
                               key: const ValueKey(
                                   'settings_row_openrouter_key'),
@@ -1367,8 +1431,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SettingsRowGroup(
                           header: 'OPENROUTER',
                           children: [
-                            if (_rowMatches('OpenRouter Model',
-                                'openrouter model gpt claude'))
+                            if (_rowMatches('ai', 'OpenRouter Model'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_openrouter_model'),
@@ -1387,8 +1450,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SettingsRowGroup(
                           header: 'LOCAL ENGINE',
                           children: [
-                            if (_rowMatches('Engine Endpoint',
-                                'local endpoint loopback ollama'))
+                            if (_rowMatches('ai', 'Engine Endpoint'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_local_endpoint'),
@@ -1400,8 +1462,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 enabled: !_isBusy,
                                 onTap: _isBusy ? null : _editLocalEndpointRow,
                               ),
-                            if (_rowMatches(
-                                'Local Model', 'local model ollama'))
+                            if (_rowMatches('ai', 'Local Model'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_local_model'),
@@ -1413,7 +1474,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 enabled: !_isBusy,
                                 onTap: _isBusy ? null : _editLocalModelRow,
                               ),
-                            if (_rowMatches('Test Connection', 'test ping'))
+                            if (_rowMatches('ai', 'Test Connection'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_test_local_connection'),
@@ -1426,7 +1487,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     _isLocalEndpointValid,
                                 onTap: _testLocalConnection,
                               ),
-                            if (_rowMatches('Detect Engines', 'detect scan'))
+                            if (_rowMatches('ai', 'Detect Engines'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_detect_engines'),
@@ -1439,8 +1500,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 enabled: !_isBusy && !_isDetectingLocalEngines,
                                 onTap: _detectLocalEngines,
                               ),
-                            if (_rowMatches(
-                                'Manage Models', 'manage pull models'))
+                            if (_rowMatches('ai', 'Manage Models'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_manage_models'),
@@ -1450,8 +1510,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 enabled: !_isBusy && _isLocalEndpointValid,
                                 onTap: _openLocalModelManager,
                               ),
-                            if (_rowMatches(
-                                'First-Run Setup', 'wizard onboarding'))
+                            if (_rowMatches('ai', 'First-Run Setup'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_first_run_setup'),
@@ -1482,8 +1541,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'BATCH CADENCE',
                         children: [
-                          if (_rowMatches('Batch Size',
-                              'log triage cadence batch lines analyse'))
+                          if (_rowMatches('triage', 'Batch Size'))
                             SettingsRow.chevron(
                               key: const ValueKey(
                                   'settings_row_triage_batch_size'),
@@ -1516,8 +1574,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'BACKGROUND MONITORING',
                         children: [
-                          if (_rowMatches('Enable Background Monitoring',
-                              'health monitor background uptime'))
+                          if (_rowMatches('health', 'Enable Background Monitoring'))
                             SettingsRow.toggle(
                               key: const ValueKey(
                                   'settings_row_health_enabled'),
@@ -1532,8 +1589,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   : _setHealthMonitoringEnabled,
                             ),
                           if (_healthMonitoringEnabled &&
-                              _rowMatches('Check Interval',
-                                  'interval minutes frequency'))
+                              _rowMatches('health', 'Check Interval'))
                             SettingsRow.chevron(
                               key: const ValueKey(
                                   'settings_row_health_interval'),
@@ -1563,8 +1619,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'APP LOCK',
                         children: [
-                          if (_rowMatches('App PIN',
-                              'security pin biometric lock unlock'))
+                          if (_rowMatches('security', 'App PIN'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_app_pin'),
                               icon: _hasAppPin == true
@@ -1601,11 +1656,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'DESTINATION',
                         children: [
-                          if (_rowMatches(
-                              'Backup Destination',
-                              'destination sftp webdav webdav url syncthing '
-                                  'local host port username password url '
-                                  'path token nextcloud'))
+                          if (_rowMatches('backup', 'Backup Destination'))
                             SettingsRow.chevron(
                               key: const ValueKey(
                                   'settings_row_backup_destination'),
@@ -1625,7 +1676,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SettingsRowGroup(
                           header: 'SFTP',
                           children: [
-                            if (_rowMatches('SFTP Host', 'sftp host server'))
+                            if (_rowMatches('backup', 'SFTP Host'))
                               SettingsRow.chevron(
                                 key: const ValueKey('settings_row_sftp_host'),
                                 icon: Icons.dns_rounded,
@@ -1640,7 +1691,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   helperText: 'Hostname or IP of your server',
                                 ),
                               ),
-                            if (_rowMatches('Username', 'sftp username user'))
+                            if (_rowMatches('backup', 'SFTP Username'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_sftp_username'),
@@ -1655,7 +1706,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   title: 'SFTP Username',
                                 ),
                               ),
-                            if (_rowMatches('Port', 'sftp port'))
+                            if (_rowMatches('backup', 'SFTP Port'))
                               SettingsRow.chevron(
                                 key: const ValueKey('settings_row_sftp_port'),
                                 icon: Icons.numbers_rounded,
@@ -1670,7 +1721,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   keyboardType: TextInputType.number,
                                 ),
                               ),
-                            if (_rowMatches('Password', 'sftp password ssh'))
+                            if (_rowMatches('backup', 'SFTP Password'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_sftp_password'),
@@ -1686,8 +1737,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   obscure: true,
                                 ),
                               ),
-                            if (_rowMatches('Backup Directory',
-                                'sftp path directory'))
+                            if (_rowMatches('backup', 'SFTP Backup Directory'))
                               SettingsRow.chevron(
                                 key: const ValueKey('settings_row_sftp_path'),
                                 icon: Icons.folder_outlined,
@@ -1712,7 +1762,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SettingsRowGroup(
                           header: 'WEBDAV',
                           children: [
-                            if (_rowMatches('WebDAV URL', 'webdav url'))
+                            if (_rowMatches('backup', 'WebDAV URL'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_webdav_url'),
@@ -1730,7 +1780,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   monospace: true,
                                 ),
                               ),
-                            if (_rowMatches('Username', 'webdav username'))
+                            if (_rowMatches('backup', 'WebDAV Username'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_webdav_username'),
@@ -1745,8 +1795,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   title: 'WebDAV Username',
                                 ),
                               ),
-                            if (_rowMatches('Password / App Token',
-                                'webdav password token'))
+                            if (_rowMatches('backup', 'WebDAV Password'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_webdav_password'),
@@ -1770,8 +1819,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SettingsRowGroup(
                           header: 'SYNCTHING',
                           children: [
-                            if (_rowMatches('Syncthing Local Path',
-                                'syncthing path folder'))
+                            if (_rowMatches('backup', 'Syncthing Local Path'))
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_syncthing_path'),
@@ -1796,8 +1844,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'AUTOMATION',
                         children: [
-                          if (_rowMatches('Daily Automatic Backup',
-                              'auto backup daily wifi background'))
+                          if (_rowMatches('backup', 'Daily Automatic Backup'))
                             SettingsRow.toggle(
                               key: const ValueKey(
                                   'settings_row_daily_auto_backup'),
@@ -1814,7 +1861,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'ACTIONS',
                         children: [
-                          if (_rowMatches('Backup Now', 'backup now export'))
+                          if (_rowMatches('backup', 'Backup Now'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_backup_now'),
                               icon: Icons.backup_outlined,
@@ -1826,7 +1873,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               enabled: !_isBusy && !_isExportingBackup,
                               onTap: _exportBackup,
                             ),
-                          if (_rowMatches('Restore', 'restore import'))
+                          if (_rowMatches('backup', 'Restore'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_restore'),
                               icon: Icons.restore_outlined,
@@ -1841,9 +1888,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'SYNC',
                         children: [
-                          if (_rowMatches(
-                              'Cloud Sync (Encrypted)',
-                              'cloud sync encrypted end to end device'))
+                          if (_rowMatches('backup', 'Cloud Sync (Encrypted)'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_cloud_sync'),
                               icon: Icons.cloud_outlined,
@@ -1861,9 +1906,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       );
                                     },
                             ),
-                          if (_rowMatches(
-                              'Snippet Sync (Cross-Device)',
-                              'snippet sync cross device share command'))
+                          if (_rowMatches('backup', 'Snippet Sync (Cross-Device)'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_snippet_sync'),
                               icon: Icons.sync_alt_outlined,
@@ -1899,8 +1942,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'RESOURCES',
                         children: [
-                          if (_rowMatches('Help Center',
-                              'help center guides faqs troubleshooting documentation'))
+                          if (_rowMatches('support', 'Help Center'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_help_center'),
                               icon: Icons.help_center_outlined,
@@ -1914,8 +1956,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 );
                               },
                             ),
-                          if (_rowMatches('Extensions',
-                              'extensions plugins manage installed'))
+                          if (_rowMatches('support', 'Extensions'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_extensions'),
                               icon: Icons.extension_outlined,
@@ -1929,8 +1970,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 );
                               },
                             ),
-                          if (_rowMatches('Vault',
-                              'vault secrets encrypted credentials'))
+                          if (_rowMatches('support', 'Vault'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_vault'),
                               icon: Icons.lock_outline,
@@ -1950,8 +1990,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'FEEDBACK',
                         children: [
-                          if (_rowMatches('Contact Support',
-                              'contact support feedback email hamma team'))
+                          if (_rowMatches('support', 'Contact Support'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_contact'),
                               icon: Icons.mail_outline,
@@ -2137,62 +2176,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
         .whenComplete(() => ctrl.dispose());
   }
 
-  static const Map<String, ({String title, IconData icon, String search})>
-      _categoryMeta = {
-    'ai': (
-      title: 'AI Configuration',
-      icon: Icons.smart_toy_outlined,
-      // Search keywords cover both the category and every field label
-      // inside it, so search hits surface the matching category card.
-      search:
-          'ai configuration provider openai gemini openrouter local model '
-          'copilot key default provider openai key gemini key openrouter key '
-          'local endpoint local model',
-    ),
-    'triage': (
-      title: 'AI Log Triage',
-      icon: Icons.tune,
-      search:
-          'ai log triage cadence batch lines watch local analyse every',
-    ),
-    'health': (
-      title: 'Health Monitoring',
-      icon: Icons.health_and_safety_outlined,
-      search:
-          'health monitoring background check interval uptime servers '
-          'enable background monitoring check interval minutes',
-    ),
-    'security': (
-      title: 'Security',
-      icon: Icons.lock_outline,
-      search:
-          'security app pin biometric lock vault master password '
-          'set app pin remove app pin',
-    ),
-    'backup': (
-      title: 'Backup & Restore',
-      icon: Icons.cloud_sync_outlined,
-      search:
-          'backup restore sftp webdav syncthing snippet cloud sync export '
-          'import daily backup destination sftp host username port password '
-          'backup directory webdav url syncthing local path daily automatic '
-          'backup backup now restore cloud sync',
-    ),
-    'support': (
-      title: 'Support',
-      icon: Icons.support_agent_outlined,
-      search:
-          'support help center extensions vault contact feedback',
-    ),
+  static const Map<String, ({String title, IconData icon})> _categoryMeta = {
+    'ai': (title: 'AI Configuration', icon: Icons.smart_toy_outlined),
+    'triage': (title: 'AI Log Triage', icon: Icons.tune),
+    'health':
+        (title: 'Health Monitoring', icon: Icons.health_and_safety_outlined),
+    'security': (title: 'Security', icon: Icons.lock_outline),
+    'backup': (title: 'Backup & Restore', icon: Icons.cloud_sync_outlined),
+    'support': (title: 'Support', icon: Icons.support_agent_outlined),
   };
 
   bool _categoryMatchesQuery(String id) {
     final q = _settingsSearchQuery.trim().toLowerCase();
     if (q.isEmpty) return true;
     final meta = _categoryMeta[id];
-    if (meta == null) return true;
-    return meta.title.toLowerCase().contains(q) ||
-        meta.search.contains(q);
+    if (meta != null && meta.title.toLowerCase().contains(q)) return true;
+    // Defer to the row registry so any row keyword that matches keeps
+    // its parent category visible.
+    final rows = _categoryRowKeywords[id];
+    if (rows == null) return false;
+    for (final entry in rows.entries) {
+      if (entry.key.toLowerCase().contains(q) ||
+          entry.value.toLowerCase().contains(q)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Widget _wrapCategorySection(

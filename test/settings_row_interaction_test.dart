@@ -162,6 +162,50 @@ void main() {
   );
 
   testWidgets(
+    'searching for a row-only keyword keeps the parent category '
+    'visible and surfaces only the matching row',
+    (tester) async {
+      await useDesktop(tester);
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle(const Duration(milliseconds: 200));
+
+      // "gpt" is a keyword on the OpenRouter Model row. The AI category
+      // title does not contain it, so the registry-driven category
+      // visibility is what keeps the AI card on screen.
+      await tester.enterText(
+        find.byKey(const ValueKey('settings_search_field')),
+        'gpt',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('settings_categories_rail')),
+          findsOneWidget);
+      expect(find.text('AI Configuration'), findsWidgets);
+      expect(find.byKey(const ValueKey('settings_row_openai_key')),
+          findsNothing);
+    },
+  );
+
+  testWidgets(
+    'searching for a row-only keyword inside a conditional group keeps '
+    'the parent category visible',
+    (tester) async {
+      await useDesktop(tester);
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle(const Duration(milliseconds: 200));
+
+      // "token" is only registered against backup → WebDAV Password.
+      await tester.enterText(
+        find.byKey(const ValueKey('settings_search_field')),
+        'token',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Backup & Restore'), findsWidgets);
+    },
+  );
+
+  testWidgets(
     'mobile: changing the AI provider via the pushed detail route '
     'surfaces the sticky save bar inside that route',
     (tester) async {
