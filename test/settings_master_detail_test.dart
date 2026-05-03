@@ -30,13 +30,9 @@ void main() {
     );
   }
 
-  // Counts category cards that are present in the tree AND not hidden by
-  // a wrapping Visibility(visible: false). Cards stay mounted via
-  // maintainState:true, so this is the only reliable way to assert which
-  // sections the user can actually interact with after the master-detail
-  // refactor. We filter to ONLY the wrap-level Visibility widgets that
-  // _wrapCategorySection produces (Visibility -> Padding(bottom:20) -> card)
-  // so nested Visibility widgets inside cards don't skew the count.
+  // Counts wrap-level Visibility widgets produced by _wrapCategorySection
+  // (Visibility -> Padding(bottom:20) -> card). Other Visibility widgets
+  // nested inside cards or rows are excluded.
   int visibleSectionCount(WidgetTester tester) {
     final list = find.byKey(const ValueKey('settings_sections_list'));
     if (list.evaluate().isEmpty) return 0;
@@ -71,10 +67,10 @@ void main() {
     await tester.pumpWidget(build());
     await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
-    // 6 categories defined; only the active one (ai) is visible.
     expect(visibleSectionCount(tester), 1);
-    // The AI card's signature provider dropdown is reachable.
-    expect(find.byType(DropdownButtonFormField<AiProvider>), findsOneWidget);
+    // The AI card's Default Provider chevron row is reachable.
+    expect(find.byKey(const ValueKey('settings_row_ai_provider')),
+        findsOneWidget);
   });
 
   testWidgets(
@@ -84,20 +80,16 @@ void main() {
     await tester.pumpWidget(build());
     await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
-    // Sanity: AI dropdown initially visible.
-    expect(find.byType(DropdownButtonFormField<AiProvider>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings_row_ai_provider')),
+        findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('settings_category_security')));
     await tester.pumpAndSettle();
 
-    // Still exactly one section visible — Security.
     expect(visibleSectionCount(tester), 1);
-    // Security has no provider dropdown; it has the Set/Remove App PIN button.
-    expect(find.byType(DropdownButtonFormField<AiProvider>), findsNothing);
-    expect(
-      find.textContaining('App PIN', findRichText: true),
-      findsWidgets,
-    );
+    expect(find.byKey(const ValueKey('settings_row_ai_provider')),
+        findsNothing);
+    expect(find.byKey(const ValueKey('settings_row_app_pin')), findsOneWidget);
   });
 
   testWidgets(
@@ -107,26 +99,23 @@ void main() {
     await tester.pumpWidget(build());
     await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
-    // Default (no search): exactly one card visible (master-detail).
     expect(visibleSectionCount(tester), 1);
 
-    // Search for 'health' — only Health card matches.
     await tester.enterText(
       find.byKey(const ValueKey('settings_search_field')),
       'health',
     );
     await tester.pump();
 
-    // Health is matched; AI is hidden because search overrode master-detail
-    // and "health" doesn't appear in the AI category keywords.
     expect(visibleSectionCount(tester), 1);
-    expect(find.byType(DropdownButtonFormField<AiProvider>), findsNothing);
+    expect(find.byKey(const ValueKey('settings_row_ai_provider')),
+        findsNothing);
 
-    // Clearing returns to master-detail (one card visible: the active AI).
     await tester.tap(find.byKey(const ValueKey('settings_search_clear')));
     await tester.pump();
     expect(visibleSectionCount(tester), 1);
-    expect(find.byType(DropdownButtonFormField<AiProvider>), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings_row_ai_provider')),
+        findsOneWidget);
   });
 
   testWidgets(
@@ -143,11 +132,8 @@ void main() {
     await tester.pump();
 
     expect(visibleSectionCount(tester), 1);
-    // The matched AI card exposes the OpenAI Key field by label.
-    expect(
-      find.widgetWithText(TextFormField, 'OpenAI Key'),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('settings_row_openai_key')),
+        findsOneWidget);
   });
 
   testWidgets(
@@ -163,14 +149,11 @@ void main() {
     );
     await tester.pump();
 
-    // Backup card matched; AI dropdown is gone.
     expect(visibleSectionCount(tester), 1);
-    expect(find.byType(DropdownButtonFormField<AiProvider>), findsNothing);
-    // Backup destination dropdown should be present.
-    expect(
-      find.text('Backup Destination'),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('settings_row_ai_provider')),
+        findsNothing);
+    expect(find.byKey(const ValueKey('settings_row_backup_destination')),
+        findsOneWidget);
   });
 
   testWidgets('mobile width omits the rail and shows the category list',
@@ -181,13 +164,10 @@ void main() {
 
     expect(find.byKey(const ValueKey('settings_categories_rail')),
         findsNothing);
-    // Section list is NOT rendered — instead, the mobile category list is.
-    expect(find.byKey(const ValueKey('settings_sections_list')),
-        findsNothing);
+    expect(find.byKey(const ValueKey('settings_sections_list')), findsNothing);
     expect(find.byKey(const ValueKey('settings_mobile_category_list')),
         findsOneWidget);
 
-    // All 6 category rows are tappable.
     for (final id in const [
       'ai',
       'triage',
@@ -216,19 +196,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The pushed detail Scaffold is keyed by id.
     expect(
       find.byKey(const ValueKey('settings_category_detail_health')),
       findsOneWidget,
     );
 
-    // Inside the detail route, the AppBar title shows the category name.
     expect(find.text('HEALTH MONITORING'), findsOneWidget);
-    // The settings sections list is mounted with only the Health card visible.
     expect(visibleSectionCount(tester), 1);
-    // Health card has its background-monitoring switch.
-    expect(find.byType(SwitchListTile), findsOneWidget);
-    // The mobile detail route hides the search field.
+    // Health card's background-monitoring toggle row is keyed.
+    expect(find.byKey(const ValueKey('settings_row_health_enabled')),
+        findsOneWidget);
     expect(
       find.byKey(const ValueKey('settings_search_field')),
       findsNothing,
@@ -236,7 +213,7 @@ void main() {
   });
 
   testWidgets(
-      'mobile: editing a field inside the pushed detail route surfaces the '
+      'mobile: editing a row inside the pushed detail route surfaces the '
       'sticky save bar so changes can be saved without going back',
       (tester) async {
     await setSurface(tester, const Size(420, 900));
@@ -248,16 +225,23 @@ void main() {
 
     expect(find.byKey(const ValueKey('settings_category_detail_ai')),
         findsOneWidget);
-    // Save bar is initially hidden inside the detail route.
     expect(find.byKey(const ValueKey('settings_sticky_save_bar')),
         findsNothing);
 
-    final apiKeyField =
-        find.widgetWithText(TextFormField, 'OpenAI Key').first;
-    await tester.enterText(apiKeyField, 'sk-from-mobile-detail');
-    await tester.pump();
+    // Tap the OpenAI Key row → edit page → enter value → SAVE.
+    await tester.tap(find.byKey(const ValueKey('settings_row_openai_key')));
+    await tester.pumpAndSettle();
 
-    // After dirtying inside the pushed route the save bar must appear there.
+    expect(find.byKey(const ValueKey('settings_edit_text_field')),
+        findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('settings_edit_text_field')),
+      'sk-from-mobile-detail',
+    );
+    await tester.tap(find.byKey(const ValueKey('settings_edit_save')));
+    await tester.pumpAndSettle();
+
+    // Back on the category detail, the save bar must appear.
     expect(find.byKey(const ValueKey('settings_sticky_save_bar')),
         findsOneWidget);
     expect(find.text('SAVE'), findsOneWidget);
@@ -269,8 +253,6 @@ void main() {
     await tester.pumpWidget(build());
     await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
-    // Search active flips mobile from category-list mode to inline filtered
-    // section list.
     await tester.enterText(
       find.byKey(const ValueKey('settings_search_field')),
       'security',

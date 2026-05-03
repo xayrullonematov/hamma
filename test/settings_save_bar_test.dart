@@ -12,10 +12,6 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
   });
 
-  // The master-detail refactor only renders the active category's card on
-  // desktop, and a tappable category list on mobile. To keep the AI section
-  // (which owns the OpenAI Key field) reachable to these tests, force a
-  // desktop-class surface so the AI card is the master-detail default.
   Future<void> useDesktopSurface(WidgetTester tester) async {
     await tester.binding.setSurfaceSize(const Size(1400, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -46,29 +42,34 @@ void main() {
     );
   }
 
+  Future<void> editApiKeyViaRow(WidgetTester tester, String value) async {
+    await tester.tap(find.byKey(const ValueKey('settings_row_openai_key')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('settings_edit_text_field')),
+      value,
+    );
+    await tester.tap(find.byKey(const ValueKey('settings_edit_save')));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets(
-    'sticky save bar is hidden until a field is dirty, '
-    'shown after a change, and hidden again after save',
+    'sticky save bar is hidden until a row is dirty, '
+    'shown after a writeback and hidden again after save',
     (tester) async {
       var saves = 0;
       await useDesktopSurface(tester);
       await tester.pumpWidget(buildSubject(saveCounter: () => saves++));
-      // Allow async loads to settle so _loadingFromStorage flips to false.
       await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
       final saveBar = find.byKey(const ValueKey('settings_sticky_save_bar'));
       expect(saveBar, findsNothing);
 
-      // Type into the OpenAI API key field (by its label).
-      final apiKeyField =
-          find.widgetWithText(TextFormField, 'OpenAI Key').first;
-      await tester.enterText(apiKeyField, 'sk-test-12345');
-      await tester.pump();
+      await editApiKeyViaRow(tester, 'sk-test-12345');
 
       expect(saveBar, findsOneWidget);
       expect(find.text('Unsaved changes'), findsOneWidget);
 
-      // Tap SAVE.
       await tester.tap(find.text('SAVE'));
       await tester.pumpAndSettle();
 
@@ -78,7 +79,8 @@ void main() {
   );
 
   testWidgets(
-    'changing the AI provider alone marks settings dirty and persists via save',
+    'changing the AI provider via the chevron row marks settings dirty '
+    'and persists the picked value via save',
     (tester) async {
       var saves = 0;
       AiProvider? lastProvider;
@@ -103,10 +105,9 @@ void main() {
       expect(find.byKey(const ValueKey('settings_sticky_save_bar')),
           findsNothing);
 
-      // Open provider dropdown and pick Gemini.
-      await tester.tap(find.byType(DropdownButtonFormField<AiProvider>));
+      await tester.tap(find.byKey(const ValueKey('settings_row_ai_provider')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Gemini').last);
+      await tester.tap(find.byKey(const ValueKey('settings_edit_choice_Gemini')));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('settings_sticky_save_bar')),
@@ -128,10 +129,7 @@ void main() {
       await tester.pumpWidget(buildSubject(saveCounter: () => saves++));
       await tester.pumpAndSettle(const Duration(milliseconds: 200));
 
-      final apiKeyField =
-          find.widgetWithText(TextFormField, 'OpenAI Key').first;
-      await tester.enterText(apiKeyField, 'sk-test-12345');
-      await tester.pump();
+      await editApiKeyViaRow(tester, 'sk-test-12345');
 
       final saveBtn = find.text('SAVE');
       await tester.tap(saveBtn, warnIfMissed: false);
