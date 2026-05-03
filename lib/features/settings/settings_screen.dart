@@ -14,6 +14,7 @@ import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/app_lock_storage.dart';
 import '../../core/storage/app_prefs_storage.dart';
 import '../../core/storage/backup_storage.dart';
+import '../../core/storage/log_triage_prefs.dart';
 import '../security/app_lock_screen.dart';
 import '../../core/theme/app_colors.dart';
 import 'help_center_screen.dart';
@@ -118,6 +119,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _healthMonitoringEnabled = false;
   int _healthCheckInterval = 30;
 
+  /// "Watch with AI" lines-per-batch cadence. Loaded from
+  /// [LogTriagePrefs] on init, persisted on slider change.
+  final LogTriagePrefs _logTriagePrefs = const LogTriagePrefs();
+  int _logTriageBatchSize = LogTriagePrefs.defaultBatchSize;
+  bool _isLogTriageBatchSizeLoaded = false;
+
   bool get _isBusy => _isSaving || _isExportingBackup || _isImportingBackup;
 
   @override
@@ -168,9 +175,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadAppPinStatus();
     _loadHealthMonitoringSettings();
     _loadBackupSettings();
+    _loadLogTriageSettings();
     if (_selectedProvider == AiProvider.openRouter) {
       _loadOpenRouterModels();
     }
+  }
+
+  Future<void> _loadLogTriageSettings() async {
+    final size = await _logTriagePrefs.loadBatchSize();
+    if (!mounted) return;
+    setState(() {
+      _logTriageBatchSize = size;
+      _isLogTriageBatchSizeLoaded = true;
+    });
+  }
+
+  Future<void> _saveLogTriageBatchSize(int size) async {
+    final clamped = LogTriagePrefs.clampBatchSize(size);
+    setState(() => _logTriageBatchSize = clamped);
+    await _logTriagePrefs.saveBatchSize(clamped);
   }
 
   Future<void> _loadBackupSettings() async {
@@ -1380,6 +1403,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         const SizedBox(height: 20),
                         _buildLocalAiSection(theme),
                       ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SettingsSectionCard(
+                  title: 'AI Log Triage Cadence',
+                  subtitle:
+                      'How many log lines accumulate before "Watch with AI" sends a batch to the local model. Smaller = more frequent insights and more model calls. Local AI only.',
+                  icon: Icons.tune,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _isLogTriageBatchSizeLoaded
+                            ? 'Analyse every $_logTriageBatchSize lines'
+                            : 'Loading…',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: AppColors.textPrimary,
+                          fontFamily: AppColors.monoFamily,
+                        ),
+                      ),
+                      Slider(
+                        min: LogTriagePrefs.minBatchSize.toDouble(),
+                        max: LogTriagePrefs.maxBatchSize.toDouble(),
+                        divisions:
+                            (LogTriagePrefs.maxBatchSize -
+                                    LogTriagePrefs.minBatchSize) ~/
+                                10,
+                        value: _logTriageBatchSize.toDouble().clamp(
+                              LogTriagePrefs.minBatchSize.toDouble(),
+                              LogTriagePrefs.maxBatchSize.toDouble(),
+                            ),
+                        label: '$_logTriageBatchSize lines',
+                        onChanged: !_isLogTriageBatchSizeLoaded || _isBusy
+                            ? null
+                            : (v) => setState(
+                                  () => _logTriageBatchSize =
+                                      LogTriagePrefs.clampBatchSize(v.round()),
+                                ),
+                        onChangeEnd: !_isLogTriageBatchSizeLoaded || _isBusy
+                            ? null
+                            : (v) => _saveLogTriageBatchSize(v.round()),
+                      ),
+                      Text(
+                        'Range: ${LogTriagePrefs.minBatchSize}–${LogTriagePrefs.maxBatchSize} '
+                        '(default ${LogTriagePrefs.defaultBatchSize}). '
+                        'Open log views can override this per-session.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: _mutedColor,
+                          height: 1.4,
+                        ),
+                      ),
                     ],
                   ),
                 ),

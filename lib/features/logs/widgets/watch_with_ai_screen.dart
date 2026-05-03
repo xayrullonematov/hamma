@@ -16,6 +16,7 @@ import '../../../core/storage/api_key_storage.dart';
 import '../../../core/storage/custom_actions_storage.dart';
 import '../../../core/storage/log_triage_prefs.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../ai_assistant/ai_copilot_sheet.dart';
 import '../../quick_actions/quick_actions.dart';
 
 /// Brutalist split-pane "Watch with AI" view.
@@ -241,6 +242,73 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
     } catch (e) {
       _toast('Save failed: $e');
     }
+  }
+
+  /// Hands the current insight + the recent log tail to the AI Copilot
+  /// for a deeper, conversational follow-up. Only the local-AI bullet
+  /// of the copilot is allowed in the same zero-trust spirit as the
+  /// triage screen — the copilot itself enforces this when the user
+  /// switches providers, but we seed it with the current local
+  /// settings so the round-trip stays loopback.
+  Future<void> _openInCopilot() async {
+    final latest = _latest;
+    if (latest == null) return;
+    final settings = widget.aiSettings;
+    if (settings.provider != AiProvider.local) {
+      _toast('Local AI required.');
+      return;
+    }
+    final cmd = latest.insight.suggestedCommand?.trim();
+    final critical = latest.suggestedCommandIsCritical;
+    final tail = _rawLines
+        .skip(_rawLines.length > 40 ? _rawLines.length - 40 : 0)
+        .map((l) => l.text)
+        .join('\n');
+    final prompt = StringBuffer()
+      ..writeln('Help me triage this live log stream from ${widget.title}.')
+      ..writeln('')
+      ..writeln('AI summary so far (severity ${latest.insight.severity.label}):')
+      ..writeln(latest.insight.summary)
+      ..writeln('');
+    if (cmd != null && cmd.isNotEmpty) {
+      prompt
+        ..writeln(critical
+            ? 'Suggested command (BLOCKED by risk assessor — do NOT run as-is):'
+            : 'Suggested command:')
+        ..writeln('  $cmd')
+        ..writeln('');
+    }
+    prompt
+      ..writeln('Recent log lines (most recent last):')
+      ..writeln('---')
+      ..writeln(tail)
+      ..writeln('---')
+      ..writeln('What is the root cause and how should I investigate next?');
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: AiCopilotSheet(
+          serverId: widget.title,
+          provider: settings.provider,
+          apiKeyStorage: const ApiKeyStorage(),
+          openRouterModel: settings.openRouterModel,
+          localEndpoint: settings.localEndpoint,
+          localModel: settings.localModel,
+          initialPrompt: prompt.toString(),
+          executionTarget: AiCopilotExecutionTarget.dashboard,
+          // Triage screen has no shell of its own — execution is always
+          // refused; the copilot will surface the message instead.
+          canRunCommands: () => false,
+          getContext: () => tail,
+          onRunCommand: (_) async => null,
+          executionUnavailableMessage:
+              'Open the terminal to run commands; this view only inspects logs.',
+        ),
+      ),
+    );
   }
 
   Future<void> _copySuggested() async {
@@ -629,6 +697,8 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
     // explicitly choosing to inspect the command, not arming it.
     final canSave = hasCmd && !update.suggestedCommandIsCritical;
     final canCopy = hasCmd;
+    final canCopilot = update != null &&
+        widget.aiSettings.provider == AiProvider.local;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -650,6 +720,12 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
           icon: Icons.copy_all_outlined,
           enabled: canCopy,
           onTap: _copySuggested,
+        ),
+        _ActionChip(
+          label: 'OPEN IN COPILOT',
+          icon: Icons.smart_toy_outlined,
+          enabled: canCopilot,
+          onTap: _openInCopilot,
         ),
       ],
     );

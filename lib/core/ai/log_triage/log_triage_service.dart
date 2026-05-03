@@ -94,9 +94,14 @@ class LogTriageService {
     var cancelled = false;
     var upstreamDone = false;
 
-    Future<void> tryClose() async {
+    void tryClose() {
       if (upstreamDone && !controller.isClosed) {
-        await controller.close();
+        // Fire-and-forget: awaiting controller.close() here would
+        // deadlock against onCancel, which awaits `chain` (the very
+        // future this callback is part of). The output stream's
+        // listener still receives the synthetic "done" event because
+        // close() schedules it on the next microtask.
+        unawaited(controller.close());
       }
     }
 
@@ -106,6 +111,12 @@ class LogTriageService {
         try {
           final update = await triageBatch(batch);
           if (cancelled || controller.isClosed) return;
+          // Mute suppression: muted fingerprints stop firing entirely.
+          // The user already acknowledged this pattern; re-surfacing it
+          // every batch defeats the point of muting. The badge / count
+          // surfaces remain via _batchesSeen on the UI side, but no
+          // new InsightUpdate is delivered for muted fingerprints.
+          if (update.muted) return;
           controller.add(update);
         } catch (e, st) {
           if (cancelled || controller.isClosed) return;
@@ -131,9 +142,14 @@ class LogTriageService {
     controller.onCancel = () async {
       cancelled = true;
       await sub?.cancel();
-      // Wait for any in-flight triage to settle so we don't leave a
-      // zombie LLM request scribbling onto a closed controller.
-      await chain;
+      // Wait for in-flight triage to settle on a *genuine* cancel
+      // (subscriber detached early) so we don't leave a zombie LLM
+      // request scribbling onto a closed controller. On a natural
+      // close the chain itself scheduled this onCancel via tryClose,
+      // so awaiting it would self-deadlock — skip in that case.
+      if (!upstreamDone) {
+        await chain;
+      }
     };
     controller.onPause = () => sub?.pause();
     controller.onResume = () => sub?.resume();
