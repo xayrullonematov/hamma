@@ -194,7 +194,15 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
   void _onInsight(InsightUpdate update) {
     if (!mounted) return;
     setState(() {
-      _latest = update;
+      // Muted insights still tick the counter / clear the spinner so
+      // the UI stays lively for recurring acknowledged patterns, but
+      // we DO NOT replace _latest — the previously-surfaced insight
+      // stays put so the user isn't shown the muted summary again.
+      // This honours the mute-suppression contract while avoiding the
+      // "stuck spinner / frozen count" UX issue.
+      if (!update.muted) {
+        _latest = update;
+      }
       _batchesSeen++;
       _lastUpdateAt = DateTime.now();
       _analyzing = false;

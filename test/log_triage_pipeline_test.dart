@@ -207,16 +207,19 @@ void main() {
   });
 
   group('LogTriageService.watch — mute suppression', () {
-    test('muted fingerprints stop firing on subsequent batches', () async {
-      // Same summary every batch → same fingerprint → after the user
-      // mutes it, it should never appear again.
+    test('muted fingerprints emit with muted=true so UI stays lively',
+        () async {
+      // Same summary every batch → same fingerprint. After the user
+      // mutes it, subsequent batches MUST still be emitted (so the UI
+      // can tick its "batches analysed" counter and clear the spinner)
+      // but with muted=true so the surface layer can refuse to display
+      // the same summary again.
       final fake = _FakeAiCommandService([
         _Recipe(_insightJson(severity: 'warn', summary: 'noisy auth fail')),
       ]);
-      final prefs = _MemoryPrefs();
       final triage = await LogTriageService.create(
         aiService: fake,
-        prefs: prefs,
+        prefs: _MemoryPrefs(),
       );
 
       final source = StreamController<LogBatch>();
@@ -226,11 +229,10 @@ void main() {
       source.add(_batch(1));
       await Future<void>.delayed(const Duration(milliseconds: 30));
       expect(out, hasLength(1));
+      expect(out.first.muted, isFalse);
 
-      // User mutes the surfaced pattern.
       await triage.mute(out.first.insight.fingerprint);
 
-      // Three more batches with the same fingerprint should be suppressed.
       source
         ..add(_batch(2))
         ..add(_batch(3))
@@ -239,8 +241,10 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
       await sub.cancel();
 
-      expect(out, hasLength(1),
-          reason: 'muted insights must not be re-emitted');
+      expect(out, hasLength(4),
+          reason: 'muted insights must still emit so counters tick');
+      expect(out.skip(1).every((u) => u.muted), isTrue,
+          reason: 'all post-mute insights must carry muted=true');
       expect(triage.isMuted(out.first.insight.fingerprint), isTrue);
     });
   });

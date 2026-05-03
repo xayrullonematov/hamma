@@ -111,12 +111,13 @@ class LogTriageService {
         try {
           final update = await triageBatch(batch);
           if (cancelled || controller.isClosed) return;
-          // Mute suppression: muted fingerprints stop firing entirely.
-          // The user already acknowledged this pattern; re-surfacing it
-          // every batch defeats the point of muting. The badge / count
-          // surfaces remain via _batchesSeen on the UI side, but no
-          // new InsightUpdate is delivered for muted fingerprints.
-          if (update.muted) return;
+          // Mute is enforced at the surface layer (UI does not promote
+          // muted updates to `_latest`), but we still emit the event so
+          // listeners can keep their "batches analysed" counter and
+          // "analyzing…" spinner accurate. The `update.muted` flag is
+          // the contract: listeners MUST refuse to surface a muted
+          // insight to the user — the user already acknowledged this
+          // pattern.
           controller.add(update);
         } catch (e, st) {
           if (cancelled || controller.isClosed) return;
