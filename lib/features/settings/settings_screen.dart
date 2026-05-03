@@ -24,6 +24,7 @@ import 'vault_screen.dart';
 import 'snippet_sync_screen.dart';
 import 'local_ai_onboarding_screen.dart';
 import 'local_models_screen.dart';
+import 'widgets/settings_row.dart';
 import 'widgets/settings_section_card.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -1452,6 +1453,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 8),
+                        child: Text(
+                          'PROVIDER',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 11,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
                       Theme(
                         data: theme.copyWith(canvasColor: _panelColor),
                         child: DropdownButtonFormField<AiProvider>(
@@ -1494,7 +1508,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 8),
+                        child: Text(
+                          'API KEYS',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 11,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
                       _buildApiKeyField(
                         controller: _openAiApiKeyController,
                         label: 'OpenAI Key',
@@ -1552,6 +1579,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 8),
+                        child: Text(
+                          'BATCH CADENCE',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 11,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
                       Text(
                         _isLogTriageBatchSizeLoaded
                             ? 'Analyse every $_logTriageBatchSize lines'
@@ -1609,6 +1649,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 8),
+                        child: Text(
+                          'BACKGROUND MONITORING',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 11,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
                       SwitchListTile(
                         title: const Text('Enable Background Monitoring'),
                         subtitle: const Text(
@@ -1666,6 +1719,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 8),
+                        child: Text(
+                          'APP LOCK',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 11,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(14),
@@ -1718,6 +1784,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 8),
+                        child: Text(
+                          'DESTINATION',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 11,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
                       DropdownButtonFormField<BackupDestination>(
                         value: _backupConfig.destination,
                         decoration: const InputDecoration(
@@ -1827,7 +1906,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           helperText: 'The folder Syncthing monitors on this device',
                         ),
                       ],
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 8),
+                        child: Text(
+                          'AUTOMATION',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 11,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
                       SwitchListTile(
                         title: const Text('Daily Automatic Backup'),
                         subtitle: const Text(
@@ -1857,7 +1949,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                         contentPadding: EdgeInsets.zero,
                       ),
-                      const Divider(height: 32, color: AppColors.border),
+                      const SizedBox(height: 20),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4, bottom: 8),
+                        child: Text(
+                          'ACTIONS',
+                          style: TextStyle(
+                            fontFamily: AppColors.monoFamily,
+                            fontSize: 11,
+                            letterSpacing: 1.6,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
                       if (_backupConfig.lastBackupTime != null)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 16),
@@ -1903,40 +2008,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _isBusy
-                              ? null
-                              : () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) => const CloudSyncScreen(),
-                                    ),
-                                  );
-                                },
-                          icon: const Icon(Icons.cloud_outlined),
-                          label: const Text('Cloud Sync (Encrypted)'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _isBusy
-                              ? null
-                              : () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder: (_) =>
-                                          const SnippetSyncScreen(),
-                                    ),
-                                  );
-                                },
-                          icon: const Icon(Icons.sync_alt_outlined),
-                          label: const Text('Snippet Sync (Cross-Device)'),
-                        ),
+                      const SizedBox(height: 16),
+                      SettingsRowGroup(
+                        header: 'SYNC',
+                        children: [
+                          SettingsRow.chevron(
+                            key: const ValueKey('settings_row_cloud_sync'),
+                            icon: Icons.cloud_outlined,
+                            label: 'Cloud Sync (Encrypted)',
+                            value: 'End-to-end encrypted device sync',
+                            searchKeywords: 'cloud sync encrypted',
+                            enabled: !_isBusy,
+                            onTap: _isBusy
+                                ? null
+                                : () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => const CloudSyncScreen(),
+                                      ),
+                                    );
+                                  },
+                          ),
+                          SettingsRow.chevron(
+                            key: const ValueKey('settings_row_snippet_sync'),
+                            icon: Icons.sync_alt_outlined,
+                            label: 'Snippet Sync (Cross-Device)',
+                            value: 'Share command snippets between devices',
+                            searchKeywords: 'snippet sync cross device',
+                            enabled: !_isBusy,
+                            onTap: _isBusy
+                                ? null
+                                : () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) =>
+                                            const SnippetSyncScreen(),
+                                      ),
+                                    );
+                                  },
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -1950,57 +2061,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   subtitle: 'Access the help center and documentation.',
                   icon: Icons.support_agent_outlined,
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.tonalIcon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(builder: (_) => const HelpCenterScreen()),
-                            );
-                          },
-                          icon: const Icon(Icons.help_center_outlined),
-                          label: const Text('Help Center'),
-                        ),
+                      SettingsRowGroup(
+                        header: 'RESOURCES',
+                        children: [
+                          SettingsRow.chevron(
+                            key: const ValueKey('settings_row_help_center'),
+                            icon: Icons.help_center_outlined,
+                            label: 'Help Center',
+                            value: 'Guides, FAQs, and troubleshooting',
+                            searchKeywords: 'help center documentation',
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const HelpCenterScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          SettingsRow.chevron(
+                            key: const ValueKey('settings_row_extensions'),
+                            icon: Icons.extension_outlined,
+                            label: 'Extensions',
+                            value: 'Manage installed Hamma extensions',
+                            searchKeywords: 'extensions plugins',
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const ExtensionsScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          SettingsRow.chevron(
+                            key: const ValueKey('settings_row_vault'),
+                            icon: Icons.lock_outline,
+                            label: 'Vault',
+                            value: 'Secrets and encrypted credentials',
+                            searchKeywords: 'vault secrets credentials',
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const VaultScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const ExtensionsScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.extension_outlined),
-                          label: const Text('Extensions'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const VaultScreen(),
-                              ),
-                            );
-                          },
-                          icon: const Icon(Icons.lock_outline),
-                          label: const Text('Vault'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _isBusy ? null : _launchFeedbackEmail,
-                          icon: const Icon(Icons.mail_outline),
-                          label: const Text('Contact Support'),
-                        ),
+                      const SizedBox(height: 16),
+                      SettingsRowGroup(
+                        header: 'FEEDBACK',
+                        children: [
+                          SettingsRow.chevron(
+                            key: const ValueKey('settings_row_contact'),
+                            icon: Icons.mail_outline,
+                            label: 'Contact Support',
+                            value: 'Email the Hamma team',
+                            searchKeywords: 'contact support feedback email',
+                            enabled: !_isBusy,
+                            onTap: _isBusy ? null : _launchFeedbackEmail,
+                          ),
+                        ],
                       ),
                     ],
                   ),
