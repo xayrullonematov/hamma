@@ -32,7 +32,7 @@
 <!-- ━━━━━━━━━━━━━━━━━━━━ STATUS BADGES ROW ━━━━━━━━━━━━━━━━━━━━ -->
 
 <p>
-  <a href="https://github.com/hamma/hamma/actions/workflows/main.yml"><img src="https://github.com/hamma/hamma/actions/workflows/main.yml/badge.svg?branch=main" alt="CI"/></a>
+  <a href="https://github.com/xayrullonematov/hamma/actions/workflows/main.yml"><img src="https://github.com/xayrullonematov/hamma/actions/workflows/main.yml/badge.svg?branch=main" alt="CI"/></a>
   <img src="https://img.shields.io/badge/STATUS-BETA--RC-00FF88?style=for-the-badge&labelColor=000000&logo=statuspage&logoColor=00FF88" alt="Status"/>
   <img src="https://img.shields.io/badge/VERSION-1.1.0-FFFFFF?style=for-the-badge&labelColor=000000&logo=semver&logoColor=FFFFFF" alt="Version"/>
   <img src="https://img.shields.io/badge/LICENSE-PROPRIETARY-FF0000?style=for-the-badge&labelColor=000000&logo=gnubash&logoColor=FF0000" alt="License"/>
@@ -439,7 +439,7 @@ ollama pull gemma3
 
 ```bash
 # Clone
-git clone https://github.com/hamma/hamma.git
+git clone https://github.com/xayrullonematov/hamma.git
 cd hamma
 
 # Install Flutter deps
@@ -594,21 +594,19 @@ hamma/
 
 <div align="center">
 
-<a href="#">
+<a href="https://github.com/xayrullonematov/hamma">
   <img src="https://img.shields.io/badge/⭐_STAR_THE_REPO-FFD700?style=for-the-badge&labelColor=000000" alt="Star the repo"/>
 </a>
 &nbsp;
-<a href="#">
-  <img src="https://img.shields.io/badge/🐦_FOLLOW_ON_X-1DA1F2?style=for-the-badge&labelColor=000000&logo=x&logoColor=white" alt="Twitter"/>
+<a href="https://x.com/xayrullonematov">
+  <img src="https://img.shields.io/badge/🐦_FOLLOW_ON_X-1DA1F2?style=for-the-badge&labelColor=000000&logo=x&logoColor=white" alt="Follow on X"/>
 </a>
 &nbsp;
-<a href="#">
-  <img src="https://img.shields.io/badge/💬_JOIN_DISCORD-5865F2?style=for-the-badge&labelColor=000000&logo=discord&logoColor=white" alt="Discord"/>
+<a href="https://discord.gg/x7FGxAjYW">
+  <img src="https://img.shields.io/badge/💬_JOIN_DISCORD-5865F2?style=for-the-badge&labelColor=000000&logo=discord&logoColor=white" alt="Join Discord"/>
 </a>
 &nbsp;
-<a href="#">
-  <img src="https://img.shields.io/badge/❤️_SPONSOR-EA4AAA?style=for-the-badge&labelColor=000000&logo=githubsponsors&logoColor=white" alt="Sponsor"/>
-</a>
+<img src="https://img.shields.io/badge/❤️_SPONSOR-COMING_SOON-EA4AAA?style=for-the-badge&labelColor=000000&logo=githubsponsors&logoColor=white" alt="Sponsor — coming soon"/>
 
 <br/><br/>
 
