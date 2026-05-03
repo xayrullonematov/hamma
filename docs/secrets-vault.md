@@ -71,6 +71,36 @@ It is wired into:
 | AI Assistant prompt builder | `AiCommandService._chatWith*` redacts both the user message and prepended history before the request body is built |
 | Terminal stdout / stderr | `TerminalScreen._openShell` redacts every chunk before `_terminal.write` and before it lands in the AI-context scrollback buffer |
 | Server edit screen | "Linked Secrets" card lets the user flip a secret between global and `scope == server.id`; values are never shown here. |
+| AI Copilot "Run" button | Goes through `SshService.execute(cmd, vaultSecrets: …)` (non-interactive), NOT through the interactive TTY. The local terminal pane shows the placeholder form of the command and the (vault-redacted) output; the resolved secret value never enters the TTY echo stream and never lands in remote shell history. |
+
+### Wire-side injection: env vars, not literal substitution
+
+`SshService.execute` calls `VaultInjector.buildEnvCommand` which
+rewrites a command like
+
+    psql -h db -U app -W ${vault:DBPASS}
+
+into
+
+    DBPASS='super-secret-value' bash -lc 'psql -h db -U app -W "${DBPASS}"'
+
+before handing it to the SSH transport. The bash body that the
+remote shell evaluates only contains the reference `"${DBPASS}"` —
+the value lives only in the env-var assignment, which is
+single-quoted so secrets containing `$`, backticks, double quotes,
+semicolons, or newlines cannot break out of the string. We use
+`bash -lc` (non-interactive) so `~/.bash_history` is never written;
+the wrapper itself is prepended with a leading space for
+`HISTCONTROL=ignorespace` belt-and-braces. Tests in
+`test/vault_env_injection_test.dart` lock in:
+
+- the wire-side body never contains the raw value,
+- single quotes in the value are escaped via the close-and-reopen
+  idiom (`'\''`),
+- shell metacharacters in the value cannot break out,
+- repeated placeholders dedupe in the env block,
+- unknown placeholders throw `VaultInjectionException` before any
+  bytes leave the device.
 
 The redactor enforces a **6-character minimum** value length — anything
 shorter would generate too many false positives (a 2-char "secret"
@@ -115,8 +145,18 @@ a value the user copied themselves between copy and timeout.
   display will show what you typed up until the remote shell echoes
   something back (at which point our stdout redactor takes over).
   Use `${vault:NAME}` via the AI Assistant's "Run" button to avoid
-  this entirely — the substitution happens before the bytes leave
-  the device.
+  this entirely — that path runs through the non-interactive SSH
+  exec channel with env-var injection, so the value never enters the
+  TTY echo stream and never lands in remote shell history.
+- **The env-var assignment is visible in `argv` on the remote
+  host.** Anyone able to read `/proc/<pid>/environ` for the bash
+  wrapper (typically only the same Unix user, or root) can read the
+  injected secret while the command is running. This is a deliberate
+  trade-off: the alternative (literal substitution into the command
+  body) was strictly worse — it leaks the value into `ps`, history,
+  and stray screenshots. If you need stronger isolation, prefer
+  passing secrets through stdin or a temporary file instead of as a
+  command-line argument inside the substituted body.
 - **Docker / Services / Process managers do not yet pass
   `vaultSecrets` into `SshService.execute`.** Placeholders typed
   in those forms reach the remote shell literally. Tracked as a

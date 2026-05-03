@@ -516,8 +516,14 @@ class SshService {
 
     final injector = VaultInjector(vaultSecrets.toList(growable: false));
     final hasPlaceholders = injector.hasPlaceholders(command);
-    final commandToRun =
-        hasPlaceholders ? injector.inject(command) : command;
+    // Use env-var injection (not literal substitution) so the secret
+    // value never appears inside the command body that travels over
+    // the wire — only `"${NAME}"` does. The env block itself is
+    // single-quoted so secret values containing $, \, `, " or
+    // newlines cannot break out into shell expansion.
+    final wrapped =
+        hasPlaceholders ? injector.buildEnvCommand(command) : null;
+    final commandToRun = wrapped?.wrappedCommand ?? command;
 
     Sentry.addBreadcrumb(
       Breadcrumb(
@@ -528,7 +534,7 @@ class SshService {
           // contains the substituted secret value.
           'command': command,
           if (hasPlaceholders)
-            'vaultPlaceholders': injector.placeholderNames(command),
+            'vaultPlaceholders': wrapped!.placeholderNames,
         },
       ),
     );

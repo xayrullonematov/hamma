@@ -259,20 +259,33 @@ class _TerminalScreenState extends State<TerminalScreen> {
           canRunCommands: () => _session != null && widget.sshService.isConnected,
           getContext: () => _recentTerminalOutput,
           onRunCommand: (cmd) async {
-            // Substitute ${vault:NAME} placeholders before the bytes
-            // hit the wire. The AI assistant only ever sees the
-            // placeholder form (it built the command); the remote
-            // shell receives the resolved value; the local scrollback
-            // gets the placeholder echoed back via _handleTerminalOutput.
-            String resolved;
+            // Run AI / command-bar commands through the non-interactive
+            // SSH exec path with env-var injection — NOT by typing the
+            // resolved bytes into the interactive TTY. Reasons:
+            //  * The interactive shell would echo the resolved command
+            //    back, putting the raw secret in the local terminal
+            //    pane and the remote shell history.
+            //  * SshService.execute uses VaultInjector.buildEnvCommand,
+            //    so the wire-side command body only contains
+            //    "${NAME}" references — not the literal value.
+            // The local scrollback shows the placeholder form of the
+            // command and the (vault-redacted) output, which is what
+            // the user wants to see and what is safe to share.
+            _terminal.write('\r\n\$ $cmd\r\n');
             try {
-              resolved = VaultInjector(_vaultSecrets).inject(cmd);
+              final out = await widget.sshService.execute(
+                cmd,
+                vaultSecrets: _vaultSecrets,
+              );
+              _terminal.write('${_vaultRedactor.redact(out)}\r\n');
+              return out;
             } on VaultInjectionException catch (e) {
-              _terminal.write('\r\n[vault: ${e.message}]\r\n');
+              _terminal.write('[vault: ${e.message}]\r\n');
+              return null;
+            } catch (e) {
+              _terminal.write('[error: $e]\r\n');
               return null;
             }
-            _handleTerminalOutput('$resolved\n');
-            return null;
           },
           executionUnavailableMessage:
               'Commands can only be run when the terminal is connected.',
