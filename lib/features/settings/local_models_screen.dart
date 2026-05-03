@@ -213,6 +213,19 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      // Barrier-tap dismissal (`isDismissible`) routes through
+      // `Navigator.maybePop`, which honours the sheet's `PopScope` and
+      // therefore prompts when a pull is in progress and closes
+      // immediately otherwise.
+      //
+      // The built-in drag-to-dismiss, however, calls `Navigator.pop`
+      // directly (see Flutter's bottom_sheet.dart) and would bypass
+      // `PopScope`, silently cancelling an in-progress download. We
+      // disable it here and provide our own drag handle inside the
+      // sheet that funnels swipe-down gestures through the same
+      // confirmation flow as the close button.
+      isDismissible: true,
+      enableDrag: false,
       backgroundColor: AppColors.scaffoldBackground,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(
@@ -663,14 +676,82 @@ class _PullSheetState extends State<_PullSheet> {
     });
   }
 
+  /// Asks the user whether to abort an in-progress download.
+  /// Returns true if the user confirms cancellation.
+  Future<bool> _confirmCancelDownload() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel download?'),
+        content: const Text(
+          'The model is still downloading. Progress will be lost if you '
+          'cancel now.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Keep downloading'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Cancel download'),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _handleClosePressed() async {
+    if (_isPulling) {
+      final shouldCancel = await _confirmCancelDownload();
+      if (!shouldCancel) return;
+      await _cancel();
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(_done);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+    return PopScope<Object?>(
+      canPop: !_isPulling,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldCancel = await _confirmCancelDownload();
+        if (!shouldCancel) return;
+        await _cancel();
+        if (!mounted) return;
+        Navigator.of(context).pop(_done);
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Custom drag handle. Built-in modal drag-to-dismiss is
+          // disabled (it would bypass PopScope). A downward fling
+          // here routes through `_handleClosePressed`, so dragging
+          // shows the confirmation while pulling and dismisses the
+          // sheet immediately when no pull is active.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onVerticalDragEnd: (details) {
+              if ((details.primaryVelocity ?? 0) > 200) {
+                _handleClosePressed();
+              }
+            },
+            child: Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                color: AppColors.border,
+              ),
+            ),
+          ),
           Row(
             children: [
               Expanded(
@@ -687,7 +768,7 @@ class _PullSheetState extends State<_PullSheet> {
               ),
               IconButton(
                 icon: const Icon(Icons.close_rounded),
-                onPressed: () => Navigator.of(context).pop(_done),
+                onPressed: _handleClosePressed,
               ),
             ],
           ),
@@ -802,6 +883,7 @@ class _PullSheetState extends State<_PullSheet> {
             ],
           ),
         ],
+        ),
       ),
     );
   }
