@@ -7,6 +7,9 @@ import '../../core/ssh/connection_status.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/theme/app_colors.dart';
+import '../../plugins/hamma_api.dart';
+import '../../plugins/hamma_plugin.dart';
+import '../../plugins/plugin_registry.dart';
 import '../docker/docker_manager_screen.dart';
 import '../logs/log_viewer_screen.dart';
 import '../packages/package_manager_screen.dart';
@@ -59,6 +62,20 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
 
   int _activeTabIndex = 0;
 
+  /// Snapshot of the enabled plugins at last rebuild. Refreshed via
+  /// [_onPluginRegistryChanged] when the user toggles a plugin in
+  /// Settings → Extensions; the dashboard nav adds / removes tabs to
+  /// match without requiring a server reconnect.
+  List<HammaPlugin> _enabledPlugins = const [];
+
+  /// Per-plugin cached [HammaApi] futures, keyed by plugin id. We
+  /// build the API handle lazily the first time a plugin's tab is
+  /// opened so disabled plugins never pay the cost. The cache is
+  /// dropped when a plugin is toggled off or when the server changes.
+  final Map<String, Future<HammaApi>> _pluginApis = {};
+
+  PluginRegistry get _pluginRegistry => PluginRegistry.instance;
+
   ServerProfile get _server => widget.server;
 
   /// Snapshot of the currently-active AI configuration, suitable for
@@ -86,10 +103,73 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     _localEndpoint = widget.localEndpoint;
     _localModel = widget.localModel;
 
+    _enabledPlugins = _pluginRegistry.enabled;
+    _pluginRegistry.addListener(_onPluginRegistryChanged);
+
     if (_sshService.currentStatus.isDisconnected ||
         _sshService.currentStatus.isFailed) {
       _connect();
     }
+  }
+
+  @override
+  void dispose() {
+    _pluginRegistry.removeListener(_onPluginRegistryChanged);
+    super.dispose();
+  }
+
+  /// Refresh the dashboard's plugin tab list when the user toggles a
+  /// plugin in Settings → Extensions. We drop the cached [HammaApi]
+  /// futures for any plugin that just left the enabled set so a
+  /// re-enable later builds a fresh handle (capabilities, allow-list,
+  /// dynamic hosts can all have changed underneath us).
+  void _onPluginRegistryChanged() {
+    if (!mounted) return;
+    final next = _pluginRegistry.enabled;
+    final stillEnabled = next.map((p) => p.manifest.id).toSet();
+    // Drop any plugin that just left the enabled set...
+    _pluginApis.removeWhere((id, _) => !stillEnabled.contains(id));
+    // ...and any plugin that explicitly asked to be rebuilt
+    // (typically because its dynamic allow-list / config changed).
+    final invalidated = _pluginRegistry.consumePendingInvalidations();
+    for (final id in invalidated) {
+      _pluginApis.remove(id);
+    }
+    setState(() {
+      _enabledPlugins = next;
+      // Clamp the active tab so toggling a plugin off doesn't leave
+      // us pointing at an out-of-bounds index.
+      final maxIndex = _NavItems.items.length + _enabledPlugins.length - 1;
+      if (_activeTabIndex > maxIndex) _activeTabIndex = 0;
+    });
+  }
+
+  /// Lazily build (and cache) the [HammaApi] handle for [plugin]
+  /// against the current server session. Cleared by
+  /// [_onPluginRegistryChanged] when the plugin is toggled off.
+  Future<HammaApi> _apiFor(HammaPlugin plugin) {
+    return _pluginApis.putIfAbsent(
+      plugin.manifest.id,
+      () => _pluginRegistry.buildApi(
+        plugin: plugin,
+        server: _server,
+        sshService: _sshService,
+        aiSettings: _currentAiSettings,
+      ),
+    );
+  }
+
+  /// Total nav items shown in the sidebar / bottom bar — built-in
+  /// tabs first, plugin tabs appended in registration order.
+  int get _totalNavCount => _NavItems.items.length + _enabledPlugins.length;
+
+  /// Return the icon + label pair for nav slot [i], whether it's a
+  /// built-in or a plugin entry. Mirrors the `_NavItem` shape so the
+  /// existing sidebar / bottom-bar widgets need no changes.
+  _NavItem _navItemAt(int i) {
+    if (i < _NavItems.items.length) return _NavItems.items[i];
+    final plugin = _enabledPlugins[i - _NavItems.items.length];
+    return _NavItem(icon: plugin.manifest.icon, label: plugin.manifest.name);
   }
 
   Future<void> _connect() async {
@@ -280,9 +360,9 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           ),
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 8),
-          for (var i = 0; i < _NavItems.items.length; i++)
+          for (var i = 0; i < _totalNavCount; i++)
             _SidebarItem(
-              item: _NavItems.items[i],
+              item: _navItemAt(i),
               isActive: _activeTabIndex == i,
               isEnabled: i == 0 || isConnected,
               onTap: () => setState(() => _activeTabIndex = i),
@@ -406,27 +486,27 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             height: 64,
             labelBehavior:
                 NavigationDestinationLabelBehavior.onlyShowSelected,
-            selectedIndex: _activeTabIndex.clamp(0, _NavItems.items.length - 1),
+            selectedIndex: _activeTabIndex.clamp(0, _totalNavCount - 1),
             onDestinationSelected: (i) {
               if (i != 0 && !isConnected) return;
               setState(() => _activeTabIndex = i);
             },
             destinations: [
-              for (var i = 0; i < _NavItems.items.length; i++)
+              for (var i = 0; i < _totalNavCount; i++)
                 NavigationDestination(
                   icon: Icon(
-                    _NavItems.items[i].icon,
+                    _navItemAt(i).icon,
                     size: 20,
                     color: (i == 0 || isConnected)
                         ? AppColors.textMuted
                         : AppColors.textFaint,
                   ),
                   selectedIcon: Icon(
-                    _NavItems.items[i].icon,
+                    _navItemAt(i).icon,
                     size: 20,
                     color: AppColors.textPrimary,
                   ),
-                  label: _NavItems.items[i].label,
+                  label: _navItemAt(i).label,
                 ),
             ],
           ),
@@ -564,6 +644,16 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           aiSettings: _currentAiSettings,
         );
       default:
+        // Plugin tabs sit after the built-in slots. Index translation:
+        // tab 6 → plugin 0, tab 7 → plugin 1, …
+        final pluginIndex = _activeTabIndex - _NavItems.items.length;
+        if (pluginIndex >= 0 && pluginIndex < _enabledPlugins.length) {
+          final plugin = _enabledPlugins[pluginIndex];
+          return _PluginPanelHost(
+            plugin: plugin,
+            apiFuture: _apiFor(plugin),
+          );
+        }
         return TerminalScreen(
           sshService: _sshService,
           serverName: _server.name,
@@ -607,6 +697,86 @@ class _NavItem {
   const _NavItem({required this.icon, required this.label});
   final IconData icon;
   final String label;
+}
+
+/// Hosts a plugin's [Widget] panel inside the dashboard.
+///
+/// Plugins receive their [HammaApi] handle asynchronously (the
+/// registry resolves dynamic allow-list hosts before handing one
+/// over) so we surface the wait with a brutalist spinner and any
+/// build error with an inline failure card. Either way the rest of
+/// the dashboard chrome — sidebar, status, disconnect button —
+/// keeps working.
+class _PluginPanelHost extends StatefulWidget {
+  const _PluginPanelHost({required this.plugin, required this.apiFuture});
+
+  final HammaPlugin plugin;
+  final Future<HammaApi> apiFuture;
+
+  @override
+  State<_PluginPanelHost> createState() => _PluginPanelHostState();
+}
+
+class _PluginPanelHostState extends State<_PluginPanelHost> {
+  /// Whether [HammaPlugin.onLoad] has fired for the current API
+  /// instance. Tracked so we only call it once per panel mount even
+  /// across [FutureBuilder] rebuilds.
+  bool _onLoadFired = false;
+
+  @override
+  void dispose() {
+    if (_onLoadFired) {
+      // Best-effort by contract; we deliberately do not await — the
+      // dashboard is being torn down and we don't want to block.
+      // ignore: discarded_futures
+      widget.plugin.onUnload();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<HammaApi>(
+      future: widget.apiFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'PLUGIN INIT FAILED\n${snapshot.error}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.danger,
+                  fontFamily: AppColors.monoFamily,
+                  fontFamilyFallback: AppColors.monoFallback,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          );
+        }
+        final api = snapshot.data!;
+        if (!_onLoadFired) {
+          _onLoadFired = true;
+          // Fire-and-forget; plugins that need to surface failures
+          // should do so inside [buildPanel].
+          // ignore: discarded_futures
+          widget.plugin.onLoad(api);
+        }
+        return widget.plugin.buildPanel(context, api);
+      },
+    );
+  }
 }
 
 class _NavItems {

@@ -24,6 +24,7 @@ import 'core/sync/snippet_sync_storage.dart';
 import 'core/theme/app_colors.dart';
 import 'features/ai_assistant/global_command_palette.dart';
 import 'features/onboarding/onboarding_screen.dart';
+import 'plugins/plugin_registry.dart';
 import 'features/security/app_lock_screen.dart';
 import 'features/servers/server_list_screen.dart';
 
@@ -161,6 +162,17 @@ Future<void> _bootstrapAndRun() async {
       await BackgroundKeepalive.enable(intervalMinutes: interval);
     }
   } catch (_) {}
+
+  // Plugin registry (Phase 7) — register the compiled-in builtins
+  // and load persisted enabled-state. Best-effort: a failure here
+  // simply means no plugin tabs show up in the dashboard until the
+  // next launch, never a crash.
+  try {
+    PluginRegistry.instance.registerBuiltins();
+    await PluginRegistry.instance.load();
+  } catch (_) {
+    // Plugin loading is non-critical; never block app launch on it.
+  }
 
   // Cross-device snippet sync (Phase 5.1) — opt-in. Bind a single,
   // long-lived service to the snippet change-bus so debounced pushes
