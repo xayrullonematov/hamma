@@ -17,7 +17,6 @@ class SettingsRow extends StatelessWidget {
     this.trailing,
     this.onTap,
     this.enabled = true,
-    this.searchKeywords = '',
   });
 
   final IconData icon;
@@ -28,9 +27,6 @@ class SettingsRow extends StatelessWidget {
   final VoidCallback? onTap;
   final bool enabled;
 
-  /// Lowercased free-text used for row-granular search matching.
-  final String searchKeywords;
-
   /// Convenience factory that renders a trailing chevron.
   factory SettingsRow.chevron({
     Key? key,
@@ -40,7 +36,6 @@ class SettingsRow extends StatelessWidget {
     String? value,
     VoidCallback? onTap,
     bool enabled = true,
-    String searchKeywords = '',
   }) {
     return SettingsRow(
       key: key,
@@ -50,7 +45,6 @@ class SettingsRow extends StatelessWidget {
       value: value,
       enabled: enabled,
       onTap: onTap,
-      searchKeywords: searchKeywords,
       trailing: const Icon(
         Icons.chevron_right_rounded,
         size: 18,
@@ -69,7 +63,6 @@ class SettingsRow extends StatelessWidget {
     required bool toggleValue,
     required ValueChanged<bool>? onToggle,
     bool enabled = true,
-    String searchKeywords = '',
   }) {
     return SettingsRow(
       key: key,
@@ -79,7 +72,6 @@ class SettingsRow extends StatelessWidget {
       value: value,
       enabled: enabled,
       onTap: enabled && onToggle != null ? () => onToggle(!toggleValue) : null,
-      searchKeywords: searchKeywords,
       trailing: Switch(
         value: toggleValue,
         onChanged: enabled ? onToggle : null,
@@ -175,7 +167,8 @@ class SettingsRowGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visible = children.where((c) => c is! _SettingsRowHidden).toList();
+    final visible =
+        children.where((c) => c is! SizedBox || (c).child != null).toList();
     if (visible.isEmpty) return const SizedBox.shrink();
 
     final separated = <Widget>[];
@@ -224,14 +217,3 @@ class SettingsRowGroup extends StatelessWidget {
   }
 }
 
-/// Sentinel widget callers can use to hide a row conditionally without
-/// inserting a dangling divider. Use [SettingsRowGroup.hidden].
-class _SettingsRowHidden extends StatelessWidget {
-  const _SettingsRowHidden();
-  @override
-  Widget build(BuildContext context) => const SizedBox.shrink();
-}
-
-extension SettingsRowGroupHidden on SettingsRowGroup {
-  static const Widget hidden = _SettingsRowHidden();
-}

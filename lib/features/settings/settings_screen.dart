@@ -152,14 +152,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         keywords.toLowerCase().contains(q);
   }
 
-  /// Renders the "current value" for an API key chevron row. We never
-  /// display the raw secret — just whether one is saved and a short
-  /// suffix preview so the user can disambiguate accounts.
-  String _apiKeyValueLabel(String key) {
-    if (key.isEmpty) return 'Not set';
-    if (key.length <= 4) return '•••• ${key.substring(0)}';
-    return '•••• ${key.substring(key.length - 4)}';
-  }
+  /// Renders the "current value" for any secret chevron row. We never
+  /// echo any portion of the underlying secret regardless of length —
+  /// the row only conveys whether a secret is saved.
+  String _secretValueLabel(String key) =>
+      key.isEmpty ? 'Not set' : 'Set';
 
   Future<void> _editApiKey({
     required TextEditingController controller,
@@ -425,11 +422,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-  String _maskedValue(String raw) {
-    if (raw.isEmpty) return 'Not set';
-    if (raw.length <= 4) return raw;
-    return '${raw.substring(0, 2)}••••${raw.substring(raw.length - 2)}';
-  }
 
   /// "Watch with AI" lines-per-batch cadence. Loaded from
   /// [LogTriagePrefs] on init, persisted on slider change.
@@ -1021,7 +1013,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       _localConnectionTestResult = null;
       _localConnectionTestSuccess = null;
-      if (changed) _isDirty = true;
+      if (changed) {
+        _isDirty = true;
+        _bumpSaveBar();
+      }
     });
 
     if (provider == AiProvider.openRouter) {
@@ -1304,7 +1299,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               value: _selectedProvider.label,
                               enabled: !_isBusy,
                               onTap: _isBusy ? null : _pickAiProvider,
-                              searchKeywords: 'ai provider default',
                             ),
                         ],
                       ),
@@ -1317,7 +1311,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               key: const ValueKey('settings_row_openai_key'),
                               icon: Icons.vpn_key_rounded,
                               label: 'OpenAI Key',
-                              value: _apiKeyValueLabel(
+                              value: _secretValueLabel(
                                   _openAiApiKeyController.text),
                               enabled: !_isBusy,
                               onTap: _isBusy
@@ -1328,14 +1322,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         helperText:
                                             'Leave blank to clear the saved OpenAI key.',
                                       ),
-                              searchKeywords: 'openai key',
                             ),
                           if (_rowMatches('Gemini Key', 'gemini key api'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_gemini_key'),
                               icon: Icons.vpn_key_rounded,
                               label: 'Gemini Key',
-                              value: _apiKeyValueLabel(
+                              value: _secretValueLabel(
                                   _geminiApiKeyController.text),
                               enabled: !_isBusy,
                               onTap: _isBusy
@@ -1346,7 +1339,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         helperText:
                                             'Leave blank to clear the saved Gemini key.',
                                       ),
-                              searchKeywords: 'gemini key',
                             ),
                           if (_rowMatches(
                               'OpenRouter Key', 'openrouter key api'))
@@ -1355,7 +1347,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   'settings_row_openrouter_key'),
                               icon: Icons.vpn_key_rounded,
                               label: 'OpenRouter Key',
-                              value: _apiKeyValueLabel(
+                              value: _secretValueLabel(
                                   _openRouterApiKeyController.text),
                               enabled: !_isBusy,
                               onTap: _isBusy
@@ -1367,7 +1359,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         helperText:
                                             'Leave blank to clear the saved OpenRouter key.',
                                       ),
-                              searchKeywords: 'openrouter key',
                             ),
                         ],
                       ),
@@ -1387,7 +1378,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 enabled: !_isBusy,
                                 onTap:
                                     _isBusy ? null : _editOpenRouterModelRow,
-                                searchKeywords: 'openrouter model',
                               ),
                           ],
                         ),
@@ -1409,7 +1399,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     : _localEndpointController.text,
                                 enabled: !_isBusy,
                                 onTap: _isBusy ? null : _editLocalEndpointRow,
-                                searchKeywords: 'local endpoint',
                               ),
                             if (_rowMatches(
                                 'Local Model', 'local model ollama'))
@@ -1423,7 +1412,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     : _localModelController.text,
                                 enabled: !_isBusy,
                                 onTap: _isBusy ? null : _editLocalModelRow,
-                                searchKeywords: 'local model',
                               ),
                             if (_rowMatches('Test Connection', 'test ping'))
                               SettingsRow.chevron(
@@ -1437,7 +1425,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     !_isTestingLocalConnection &&
                                     _isLocalEndpointValid,
                                 onTap: _testLocalConnection,
-                                searchKeywords: 'test connection ping',
                               ),
                             if (_rowMatches('Detect Engines', 'detect scan'))
                               SettingsRow.chevron(
@@ -1451,7 +1438,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         : '${_detectedLocalEngines.length} engine(s) found'),
                                 enabled: !_isBusy && !_isDetectingLocalEngines,
                                 onTap: _detectLocalEngines,
-                                searchKeywords: 'detect engines',
                               ),
                             if (_rowMatches(
                                 'Manage Models', 'manage pull models'))
@@ -1463,7 +1449,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 value: 'Pull, list, or remove local models',
                                 enabled: !_isBusy && _isLocalEndpointValid,
                                 onTap: _openLocalModelManager,
-                                searchKeywords: 'manage models',
                               ),
                             if (_rowMatches(
                                 'First-Run Setup', 'wizard onboarding'))
@@ -1475,7 +1460,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 value: 'Walk through install + initial pull',
                                 enabled: !_isBusy,
                                 onTap: _runLocalAiOnboarding,
-                                searchKeywords: 'first run setup wizard',
                               ),
                           ],
                         ),
@@ -1511,7 +1495,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               enabled:
                                   _isLogTriageBatchSizeLoaded && !_isBusy,
                               onTap: _editLogTriageBatchSizeRow,
-                              searchKeywords: 'log triage batch lines analyse',
                             ),
                         ],
                       ),
@@ -1547,8 +1530,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               onToggle: _isBusy
                                   ? null
                                   : _setHealthMonitoringEnabled,
-                              searchKeywords:
-                                  'health monitor background uptime',
                             ),
                           if (_healthMonitoringEnabled &&
                               _rowMatches('Check Interval',
@@ -1561,8 +1542,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               value: '$_healthCheckInterval minutes',
                               enabled: !_isBusy,
                               onTap: _isBusy ? null : _editHealthIntervalRow,
-                              searchKeywords:
-                                  'check interval minutes frequency',
                             ),
                         ],
                       ),
@@ -1601,9 +1580,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               onTap: _hasAppPin == null || _isBusy
                                   ? null
                                   : _openAppLockSettings,
-                              searchKeywords:
-                                  'app pin biometric lock unlock security '
-                                  'set remove',
                             ),
                         ],
                       ),
@@ -1640,10 +1616,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               enabled: !_isBusy,
                               onTap:
                                   _isBusy ? null : _pickBackupDestination,
-                              searchKeywords:
-                                  'backup destination sftp webdav syncthing '
-                                  'host port username password url path '
-                                  'token nextcloud',
                             ),
                         ],
                       ),
@@ -1667,7 +1639,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   title: 'SFTP Host',
                                   helperText: 'Hostname or IP of your server',
                                 ),
-                                searchKeywords: 'sftp host',
                               ),
                             if (_rowMatches('Username', 'sftp username user'))
                               SettingsRow.chevron(
@@ -1683,7 +1654,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   controller: _sftpUsernameController,
                                   title: 'SFTP Username',
                                 ),
-                                searchKeywords: 'sftp username',
                               ),
                             if (_rowMatches('Port', 'sftp port'))
                               SettingsRow.chevron(
@@ -1699,7 +1669,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   title: 'SFTP Port',
                                   keyboardType: TextInputType.number,
                                 ),
-                                searchKeywords: 'sftp port',
                               ),
                             if (_rowMatches('Password', 'sftp password ssh'))
                               SettingsRow.chevron(
@@ -1707,7 +1676,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     'settings_row_sftp_password'),
                                 icon: Icons.password_rounded,
                                 label: 'Password',
-                                value: _maskedValue(
+                                value: _secretValueLabel(
                                     _sftpPasswordController.text),
                                 enabled: !_isBusy,
                                 onTap: () => _editBackupTextField(
@@ -1716,7 +1685,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   helperText: 'SSH Password',
                                   obscure: true,
                                 ),
-                                searchKeywords: 'sftp password ssh',
                               ),
                             if (_rowMatches('Backup Directory',
                                 'sftp path directory'))
@@ -1734,8 +1702,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   helperText: 'Absolute path on server',
                                   monospace: true,
                                 ),
-                                searchKeywords:
-                                    'sftp backup directory path',
                               ),
                           ],
                         ),
@@ -1763,7 +1729,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       'e.g. https://nextcloud.com/remote.php/dav/files/user/',
                                   monospace: true,
                                 ),
-                                searchKeywords: 'webdav url',
                               ),
                             if (_rowMatches('Username', 'webdav username'))
                               SettingsRow.chevron(
@@ -1779,7 +1744,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   controller: _webdavUsernameController,
                                   title: 'WebDAV Username',
                                 ),
-                                searchKeywords: 'webdav username',
                               ),
                             if (_rowMatches('Password / App Token',
                                 'webdav password token'))
@@ -1788,7 +1752,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     'settings_row_webdav_password'),
                                 icon: Icons.password_rounded,
                                 label: 'Password / App Token',
-                                value: _maskedValue(
+                                value: _secretValueLabel(
                                     _webdavPasswordController.text),
                                 enabled: !_isBusy,
                                 onTap: () => _editBackupTextField(
@@ -1796,8 +1760,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   title: 'WebDAV Password',
                                   obscure: true,
                                 ),
-                                searchKeywords:
-                                    'webdav password app token',
                               ),
                           ],
                         ),
@@ -1826,8 +1788,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       'The folder Syncthing monitors on this device',
                                   monospace: true,
                                 ),
-                                searchKeywords:
-                                    'syncthing local path folder',
                               ),
                           ],
                         ),
@@ -1847,8 +1807,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               toggleValue: _backupConfig.autoBackupEnabled,
                               enabled: !_isBusy,
                               onToggle: _setAutoBackupEnabled,
-                              searchKeywords:
-                                  'daily automatic backup wifi background',
                             ),
                         ],
                       ),
@@ -1867,7 +1825,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   : 'Never run',
                               enabled: !_isBusy && !_isExportingBackup,
                               onTap: _exportBackup,
-                              searchKeywords: 'backup now export',
                             ),
                           if (_rowMatches('Restore', 'restore import'))
                             SettingsRow.chevron(
@@ -1877,7 +1834,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               value: 'Import a previous backup file',
                               enabled: !_isBusy && !_isImportingBackup,
                               onTap: _importBackup,
-                              searchKeywords: 'restore import backup',
                             ),
                         ],
                       ),
@@ -1885,41 +1841,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'SYNC',
                         children: [
-                          SettingsRow.chevron(
-                            key: const ValueKey('settings_row_cloud_sync'),
-                            icon: Icons.cloud_outlined,
-                            label: 'Cloud Sync (Encrypted)',
-                            value: 'End-to-end encrypted device sync',
-                            searchKeywords: 'cloud sync encrypted',
-                            enabled: !_isBusy,
-                            onTap: _isBusy
-                                ? null
-                                : () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => const CloudSyncScreen(),
-                                      ),
-                                    );
-                                  },
-                          ),
-                          SettingsRow.chevron(
-                            key: const ValueKey('settings_row_snippet_sync'),
-                            icon: Icons.sync_alt_outlined,
-                            label: 'Snippet Sync (Cross-Device)',
-                            value: 'Share command snippets between devices',
-                            searchKeywords: 'snippet sync cross device',
-                            enabled: !_isBusy,
-                            onTap: _isBusy
-                                ? null
-                                : () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) =>
-                                            const SnippetSyncScreen(),
-                                      ),
-                                    );
-                                  },
-                          ),
+                          if (_rowMatches(
+                              'Cloud Sync (Encrypted)',
+                              'cloud sync encrypted end to end device'))
+                            SettingsRow.chevron(
+                              key: const ValueKey('settings_row_cloud_sync'),
+                              icon: Icons.cloud_outlined,
+                              label: 'Cloud Sync (Encrypted)',
+                              value: 'End-to-end encrypted device sync',
+                              enabled: !_isBusy,
+                              onTap: _isBusy
+                                  ? null
+                                  : () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute<void>(
+                                          builder: (_) =>
+                                              const CloudSyncScreen(),
+                                        ),
+                                      );
+                                    },
+                            ),
+                          if (_rowMatches(
+                              'Snippet Sync (Cross-Device)',
+                              'snippet sync cross device share command'))
+                            SettingsRow.chevron(
+                              key: const ValueKey('settings_row_snippet_sync'),
+                              icon: Icons.sync_alt_outlined,
+                              label: 'Snippet Sync (Cross-Device)',
+                              value: 'Share command snippets between devices',
+                              enabled: !_isBusy,
+                              onTap: _isBusy
+                                  ? null
+                                  : () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                const SnippetSyncScreen()),
+                                      );
+                                    },
+                            ),
                         ],
                       ),
                     ],
@@ -1939,63 +1899,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       SettingsRowGroup(
                         header: 'RESOURCES',
                         children: [
-                          SettingsRow.chevron(
-                            key: const ValueKey('settings_row_help_center'),
-                            icon: Icons.help_center_outlined,
-                            label: 'Help Center',
-                            value: 'Guides, FAQs, and troubleshooting',
-                            searchKeywords: 'help center documentation',
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const HelpCenterScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          SettingsRow.chevron(
-                            key: const ValueKey('settings_row_extensions'),
-                            icon: Icons.extension_outlined,
-                            label: 'Extensions',
-                            value: 'Manage installed Hamma extensions',
-                            searchKeywords: 'extensions plugins',
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const ExtensionsScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                          SettingsRow.chevron(
-                            key: const ValueKey('settings_row_vault'),
-                            icon: Icons.lock_outline,
-                            label: 'Vault',
-                            value: 'Secrets and encrypted credentials',
-                            searchKeywords: 'vault secrets credentials',
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const VaultScreen(),
-                                ),
-                              );
-                            },
-                          ),
+                          if (_rowMatches('Help Center',
+                              'help center guides faqs troubleshooting documentation'))
+                            SettingsRow.chevron(
+                              key: const ValueKey('settings_row_help_center'),
+                              icon: Icons.help_center_outlined,
+                              label: 'Help Center',
+                              value: 'Guides, FAQs, and troubleshooting',
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const HelpCenterScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                          if (_rowMatches('Extensions',
+                              'extensions plugins manage installed'))
+                            SettingsRow.chevron(
+                              key: const ValueKey('settings_row_extensions'),
+                              icon: Icons.extension_outlined,
+                              label: 'Extensions',
+                              value: 'Manage installed Hamma extensions',
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const ExtensionsScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                          if (_rowMatches('Vault',
+                              'vault secrets encrypted credentials'))
+                            SettingsRow.chevron(
+                              key: const ValueKey('settings_row_vault'),
+                              icon: Icons.lock_outline,
+                              label: 'Vault',
+                              value: 'Secrets and encrypted credentials',
+                              onTap: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const VaultScreen(),
+                                  ),
+                                );
+                              },
+                            ),
                         ],
                       ),
                       const SizedBox(height: 16),
                       SettingsRowGroup(
                         header: 'FEEDBACK',
                         children: [
-                          SettingsRow.chevron(
-                            key: const ValueKey('settings_row_contact'),
-                            icon: Icons.mail_outline,
-                            label: 'Contact Support',
-                            value: 'Email the Hamma team',
-                            searchKeywords: 'contact support feedback email',
-                            enabled: !_isBusy,
-                            onTap: _isBusy ? null : _launchFeedbackEmail,
-                          ),
+                          if (_rowMatches('Contact Support',
+                              'contact support feedback email hamma team'))
+                            SettingsRow.chevron(
+                              key: const ValueKey('settings_row_contact'),
+                              icon: Icons.mail_outline,
+                              label: 'Contact Support',
+                              value: 'Email the Hamma team',
+                              enabled: !_isBusy,
+                              onTap: _isBusy ? null : _launchFeedbackEmail,
+                            ),
                         ],
                       ),
                     ],

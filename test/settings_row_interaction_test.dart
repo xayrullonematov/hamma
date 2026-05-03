@@ -124,4 +124,72 @@ void main() {
       expect(find.text('API KEYS'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    'searching inside the Support card hides non-matching Resources rows',
+    (tester) async {
+      await useDesktop(tester);
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle(const Duration(milliseconds: 200));
+
+      // Jump straight to the Support category in the rail; this scrolls
+      // the right pane to that section so its rows are laid out.
+      await tester.tap(
+          find.byKey(const ValueKey('settings_category_support')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('settings_row_help_center')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('settings_row_extensions')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('settings_row_vault')),
+          findsOneWidget);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('settings_search_field')),
+        'vault',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('settings_row_vault')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('settings_row_help_center')),
+          findsNothing);
+      expect(find.byKey(const ValueKey('settings_row_extensions')),
+          findsNothing);
+      expect(find.text('RESOURCES'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'mobile: changing the AI provider via the pushed detail route '
+    'surfaces the sticky save bar inside that route',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(420, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle(const Duration(milliseconds: 200));
+
+      // Mobile: tap the AI category in the master list to push the detail.
+      await tester.tap(
+          find.byKey(const ValueKey('settings_mobile_category_ai')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('settings_sticky_save_bar')),
+          findsNothing);
+
+      await tester
+          .tap(find.byKey(const ValueKey('settings_row_ai_provider')));
+      await tester.pumpAndSettle();
+      await tester
+          .tap(find.byKey(const ValueKey('settings_edit_choice_Gemini')));
+      await tester.pumpAndSettle();
+
+      // Save bar must surface on the pushed detail route, not just on the
+      // root settings screen behind it.
+      expect(find.byKey(const ValueKey('settings_sticky_save_bar')),
+          findsOneWidget);
+    },
+  );
 }
