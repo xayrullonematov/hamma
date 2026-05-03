@@ -56,6 +56,25 @@ ordering produces meaningfully different processes from the by-CPU
 ordering. The Health tab renders both **TOP PROCESSES BY CPU** and
 **TOP PROCESSES BY RAM** side-by-side under the tile grid.
 
+### Rolling window
+
+`RollingBuffer.setCapacity` is called whenever the user changes the
+poll interval, so each per-metric ring keeps the **same wall-clock
+window (~60 minutes)** independent of cadence. At 2 s the buffer
+holds 1800 samples; at 30 s it holds 120; at the 5 s default it holds
+720. The default-constructed buffer (`capacity: 720`) covers 60 min
+at 5 s and is resized in place — no samples are dropped on grow.
+
+### Shell-injection safety
+
+WATCH commands that splice in remote-derived values (mount points
+from `df -P`, interface names from `/proc/net/dev`) pass those values
+through `HealthTab.shellQuoteForTest` first — a POSIX single-quote
+escape that wraps the value in `'…'` and rewrites every embedded
+`'` as `'\''`. A hostile mount like `/mnt/foo'; rm -rf /; echo '`
+becomes a single `find` argument with no command-substitution
+escape; verified by `test/observability_health_tab_test.dart`.
+
 ### Anomaly callout
 
 When at least one metric crosses the z-score threshold, the Health

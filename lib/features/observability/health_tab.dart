@@ -36,6 +36,15 @@ class HealthTab extends StatefulWidget {
   /// [sshService.execute].
   final MetricPoller? poller;
 
+  /// POSIX shell single-quote escape. Wraps [value] in single quotes
+  /// and escapes any embedded `'` as `'\''`. Used by `_watchCommandFor`
+  /// to splice values derived from remote command output (mount
+  /// points, interface names) into a WATCH command without giving
+  /// the remote host a quote-breakout primitive.
+  @visibleForTesting
+  static String shellQuoteForTest(String value) =>
+      "'${value.replaceAll("'", r"'\''")}'";
+
   @override
   State<HealthTab> createState() => _HealthTabState();
 }
@@ -50,7 +59,10 @@ class _HealthTabState extends State<HealthTab> {
   bool _booting = true;
 
   static const List<int> _intervalChoices = [2, 5, 10, 30];
+  static const Duration _rollingWindow = Duration(minutes: 60);
   int _intervalSeconds = 5;
+
+  String _shQuote(String value) => HealthTab.shellQuoteForTest(value);
 
   // One buffer per surfaced metric. Disk uses a map keyed by mount.
   final RollingBuffer _cpuBuf = RollingBuffer();
@@ -235,9 +247,30 @@ class _HealthTabState extends State<HealthTab> {
     if (seconds == _intervalSeconds) return;
     try {
       _poller.setInterval(Duration(seconds: seconds));
-      setState(() => _intervalSeconds = seconds);
+      setState(() {
+        _intervalSeconds = seconds;
+        _resizeBuffersForInterval(seconds);
+      });
     } on ArgumentError catch (e) {
       _toast('Bad interval: ${e.message}');
+    }
+  }
+
+  /// Resize every per-metric ring so the rolling window covers a
+  /// consistent ~60 minutes of wall-clock regardless of poll cadence
+  /// (default capacity of 720 only equals 60 min at 5 s — at 30 s it
+  /// would be 6 h, at 2 s only 24 min).
+  void _resizeBuffersForInterval(int seconds) {
+    final cap = (_rollingWindow.inSeconds ~/ seconds).clamp(60, 7200);
+    for (final buf in [
+      _cpuBuf,
+      _memBuf,
+      _loadBuf,
+      ..._diskBufs.values,
+      ..._netRxBufs.values,
+      ..._netTxBufs.values,
+    ]) {
+      buf.setCapacity(cap);
     }
   }
 
@@ -485,14 +518,19 @@ class _HealthTabState extends State<HealthTab> {
             '--sort=-pcpu | head';
       default:
         if (key.startsWith('disk:') && mountPoint != null) {
-          // Most-recent file growth on the affected mount, refreshed.
-          return "find '$mountPoint' -xdev -type f -printf "
+          // Mount points come from parsing `df -P` on the remote host;
+          // splice them in as a single shell-quoted argument so a
+          // hostile / weirdly-named mount can't break out and execute
+          // arbitrary commands on the connected box.
+          final mp = _shQuote(mountPoint);
+          return 'find $mp -xdev -type f -printf '
               "'%T@ %s %p\\n' 2>/dev/null | sort -nr | head -n 30";
         }
         if (key.startsWith('net:') && iface != null) {
+          final i = _shQuote(iface);
           // Per-socket bytes — works on systemd + busybox boxes.
-          return "ss -tunp 2>/dev/null | head -n 30; "
-              "echo '---'; ip -s link show $iface 2>/dev/null";
+          return 'ss -tunp 2>/dev/null | head -n 30; '
+              "echo '---'; ip -s link show $i 2>/dev/null";
         }
         return 'journalctl -f -n 50';
     }

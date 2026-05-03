@@ -14,16 +14,33 @@ import 'dart:math' as math;
 ///     it stays anomalous until the score drops below `T - hysteresis`.
 class RollingBuffer {
   RollingBuffer({
-    this.capacity = 720, // 60 min @ 5 s
+    int capacity = 720, // 60 min @ 5 s
     this.minSamplesForAnomaly = 12,
     this.zScoreThreshold = 3.0,
     this.hysteresis = 1.0,
-  })  : assert(capacity > 1),
+  })  : _capacity = capacity,
+        assert(capacity > 1),
         assert(minSamplesForAnomaly >= 3),
         assert(zScoreThreshold > 0),
         assert(hysteresis >= 0 && hysteresis < zScoreThreshold);
 
-  final int capacity;
+  int _capacity;
+  int get capacity => _capacity;
+
+  /// Resize the ring. The buffer is preserved (oldest samples are
+  /// dropped if the new capacity is smaller). Call this after the
+  /// caller changes the poll cadence so the rolling window covers
+  /// the same wall-clock duration regardless of interval.
+  void setCapacity(int value) {
+    if (value < 2) {
+      throw ArgumentError.value(value, 'capacity', 'must be >= 2');
+    }
+    _capacity = value;
+    while (_samples.length > _capacity) {
+      _samples.removeAt(0);
+    }
+  }
+
   final int minSamplesForAnomaly;
   final double zScoreThreshold;
   final double hysteresis;
@@ -38,7 +55,7 @@ class RollingBuffer {
     double v,
   ) {
     _samples.add((t: t, v: v));
-    while (_samples.length > capacity) {
+    while (_samples.length > _capacity) {
       _samples.removeAt(0);
     }
 
