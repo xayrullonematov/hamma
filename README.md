@@ -490,6 +490,8 @@ System deps via Nix: `flutter`, `libsecret`, `keybinder3`, `libappindicator`, `s
 
 > Every AI suggestion is **reviewed by you** before it touches a remote shell. The "Safety-First" rule is non-negotiable.
 
+- 📄 **Threat Model** — see [`threat_model.md`](threat_model.md) for the full asset / boundary / actor / mitigation breakdown.
+
 <br/>
 
 ---
