@@ -172,8 +172,9 @@ class AiCommandService {
   ///      block, ignoring any surrounding prose or markdown. String-aware
   ///      so braces inside JSON strings don't prematurely close the object.
   ///
-  /// Public for testing only; do not call from outside this class.
-  @visibleForTesting
+  /// Public so peer services (e.g. the log-triage pipeline) can reuse
+  /// the same string-aware brace scanner instead of duplicating it.
+  /// Originally test-only; promoted once we had a non-test caller.
   static Map<String, dynamic>? parseJsonFromResponse(String text) {
     final trimmed = text.trim();
 

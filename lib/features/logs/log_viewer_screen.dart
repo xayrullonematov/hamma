@@ -3,17 +3,26 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:dartssh2/dartssh2.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/storage/api_key_storage.dart';
 import '../../core/theme/app_colors.dart';
+import 'widgets/watch_with_ai_screen.dart';
 
 class LogViewerScreen extends StatefulWidget {
   const LogViewerScreen({
     super.key,
     required this.sshService,
     required this.serverName,
+    this.aiSettings,
   });
 
   final SshService sshService;
   final String serverName;
+
+  /// When supplied, an extra AppBar action opens the same stream in
+  /// the "Watch with AI" split-pane view. The triage screen itself
+  /// will refuse non-local providers, so this button can be shown
+  /// regardless of the active provider.
+  final AiSettings? aiSettings;
 
   @override
   State<LogViewerScreen> createState() => _LogViewerScreenState();
@@ -68,6 +77,44 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
     }
   }
 
+  void _openWatchWithAi() {
+    final settings = widget.aiSettings;
+    if (settings == null) return;
+    final command = _buildStreamCommand();
+    if (command == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pick a log source first.')),
+      );
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => WatchWithAiScreen(
+          sshService: widget.sshService,
+          command: command,
+          title: _selectedSource.label,
+          aiSettings: settings,
+        ),
+      ),
+    );
+  }
+
+  /// Builds the streaming shell command for the currently-selected
+  /// source, or `null` if the source isn't fully configured (e.g.
+  /// custom path with empty input).
+  String? _buildStreamCommand() {
+    switch (_selectedSource) {
+      case LogSource.system:
+        return 'sudo -S journalctl -f -n 100';
+      case LogSource.auth:
+        return 'sudo -S tail -f -n 100 /var/log/auth.log';
+      case LogSource.custom:
+        final path = _customPathController.text.trim();
+        if (path.isEmpty) return null;
+        return 'sudo -S tail -f -n 100 $path';
+    }
+  }
+
   Future<void> _startStreaming() async {
     await _stopStreaming();
     
@@ -76,22 +123,10 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       _logEntries.add(_LogEntry('--- Starting stream for ${_selectedSource.label} ---', isError: false));
     });
 
-    String command = '';
-    switch (_selectedSource) {
-      case LogSource.system:
-        command = 'sudo -S journalctl -f -n 100';
-        break;
-      case LogSource.auth:
-        command = 'sudo -S tail -f -n 100 /var/log/auth.log';
-        break;
-      case LogSource.custom:
-        final path = _customPathController.text.trim();
-        if (path.isEmpty) {
-          setState(() => _logEntries.add(_LogEntry('Error: No custom path provided.', isError: true)));
-          return;
-        }
-        command = 'sudo -S tail -f -n 100 $path';
-        break;
+    final command = _buildStreamCommand();
+    if (command == null) {
+      setState(() => _logEntries.add(_LogEntry('Error: No custom path provided.', isError: true)));
+      return;
     }
 
     try {
@@ -174,6 +209,12 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
         backgroundColor: _backgroundColor,
         title: const Text('Real-time Logs'),
         actions: [
+          if (widget.aiSettings != null)
+            IconButton(
+              icon: const Icon(Icons.auto_awesome, color: AppColors.accent),
+              tooltip: 'Watch with AI',
+              onPressed: _openWatchWithAi,
+            ),
           IconButton(
             icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
             onPressed: () => setState(() => _isPaused = !_isPaused),

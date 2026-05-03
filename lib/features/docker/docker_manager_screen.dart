@@ -1,17 +1,27 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/storage/api_key_storage.dart';
 import '../../core/theme/app_colors.dart';
+import '../logs/widgets/watch_with_ai_screen.dart';
 
 class DockerManagerScreen extends StatefulWidget {
   const DockerManagerScreen({
     super.key,
     required this.sshService,
     required this.serverName,
+    this.aiSettings,
   });
 
   final SshService sshService;
   final String serverName;
+
+  /// Current AI configuration. When provided and the active provider is
+  /// the local engine, container log views surface a "Watch with AI"
+  /// button that opens the live triage split-pane. Optional so the
+  /// screen can still render in contexts that haven't plumbed the
+  /// settings through (e.g. tests).
+  final AiSettings? aiSettings;
 
   @override
   State<DockerManagerScreen> createState() => _DockerManagerScreenState();
@@ -96,6 +106,7 @@ class _DockerManagerScreenState extends State<DockerManagerScreen> {
       builder: (context) => _DockerLogsView(
         sshService: widget.sshService,
         container: container,
+        aiSettings: widget.aiSettings,
       ),
     );
   }
@@ -350,10 +361,12 @@ class _DockerLogsView extends StatefulWidget {
   const _DockerLogsView({
     required this.sshService,
     required this.container,
+    this.aiSettings,
   });
 
   final SshService sshService;
   final DockerContainer container;
+  final AiSettings? aiSettings;
 
   @override
   State<_DockerLogsView> createState() => _DockerLogsViewState();
@@ -366,6 +379,24 @@ class _DockerLogsViewState extends State<_DockerLogsView> {
   void initState() {
     super.initState();
     _fetchLogs();
+  }
+
+  void _openWatchWithAi(BuildContext context) {
+    final settings = widget.aiSettings;
+    if (settings == null) return;
+    Navigator.of(context).pop(); // close the sheet first
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => WatchWithAiScreen(
+          sshService: widget.sshService,
+          // `--tail 50` seeds the AI with recent context; `-f` keeps
+          // the stream live for ongoing triage.
+          command: 'docker logs -f --tail 50 ${widget.container.id}',
+          title: 'docker logs ${widget.container.name}',
+          aiSettings: settings,
+        ),
+      ),
+    );
   }
 
   Future<void> _fetchLogs() async {
@@ -394,10 +425,27 @@ class _DockerLogsViewState extends State<_DockerLogsView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Logs: ${widget.container.name}',
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              Expanded(
+                child: Text(
+                  'Logs: ${widget.container.name}',
+                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
+              if (widget.aiSettings != null)
+                TextButton.icon(
+                  onPressed: () => _openWatchWithAi(context),
+                  icon: const Icon(Icons.auto_awesome, size: 16),
+                  label: const Text('WATCH WITH AI'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.accent,
+                    textStyle: const TextStyle(
+                      fontFamily: AppColors.monoFamily,
+                      fontSize: 11,
+                      letterSpacing: 1.4,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
               IconButton(
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close, color: Colors.white70),

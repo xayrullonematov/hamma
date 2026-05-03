@@ -60,6 +60,21 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
 
   ServerProfile get _server => widget.server;
 
+  /// Snapshot of the currently-active AI configuration, suitable for
+  /// passing into screens that lazily build an [AiCommandService] on
+  /// demand (e.g. the Docker logs sheet → Watch with AI).
+  ///
+  /// We only know the active-provider's API key in this widget (the
+  /// other slots aren't loaded into memory), so the resulting map only
+  /// includes that one entry.
+  AiSettings get _currentAiSettings => AiSettings(
+        provider: _aiProvider,
+        apiKeys: {_aiProvider: _apiKey},
+        openRouterModel: _openRouterModel,
+        localEndpoint: _localEndpoint,
+        localModel: _localModel,
+      );
+
   @override
   void initState() {
     super.initState();
@@ -527,6 +542,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         return DockerManagerScreen(
           sshService: _sshService,
           serverName: _server.name,
+          aiSettings: _currentAiSettings,
         );
       case 3:
         return ServiceManagementScreen(

@@ -213,6 +213,18 @@ Three new opt-in destinations sit on top of the existing BackupCrypto v2 (HMBK /
 - `lib/features/settings/cloud_restore_screen.dart` — guarded restore-on-new-device flow with master-password prompt and red warning banner.
 - Entry point added under "Backup & Restore" in `settings_screen.dart` ("Cloud Sync (Encrypted)"). Cloud destinations are filtered out of the legacy destination dropdown so they always go through the dedicated screen.
 
+## AI-Assisted Live Log Triage (Phase 5.2 — local AI only)
+
+A "Watch with AI" surface that streams `journalctl -f`, `docker logs -f`, or arbitrary `tail -f` output through the local LLM and renders structured insights alongside the raw log feed. Cloud providers are refused at construction; an in-screen banner explains the requirement and links back to AI settings. Log lines never leave loopback — the only outbound traffic is to the user's own local model endpoint.
+
+- `lib/core/ai/log_triage/log_batcher.dart` — `LogBatcher` (line + maxWait flush, `hardLineCap` clamp at 500). 50-line default; user-tunable 10–500 in steps of 10.
+- `lib/core/ai/log_triage/log_triage_models.dart` — `TriageSeverity` (`normal | watch | warn | critical`), `LogInsight` (snake/camel-case tolerant JSON parser, blank `suggestedCommand` normalised to null, stable fingerprint over normalised summary + severity for dedup/mute), `InsightUpdate` (carries the originating batch + per-insight risk gate result), `LogTriageException`.
+- `lib/core/ai/log_triage/log_triage_service.dart` — refuses non-`local` providers; uses `AiCommandService.parseJsonFromResponse` for robust JSON extraction; runs `CommandRiskAssessor.assessFast` on every `suggestedCommand` so the UI can refuse one-tap execution of dangerous suggestions.
+- `lib/core/storage/log_triage_prefs.dart` — `FlutterSecureStorage`-backed muted-fingerprint set + per-device cadence (clamped 10..500).
+- `lib/features/logs/widgets/watch_with_ai_screen.dart` — brutalist split-pane (raw log left, insight feed right), cadence menu, mute/save-as-snippet/copy actions, "Local AI required" banner for non-local providers. Saves snippets via `CustomActionsStorage` so they ride the existing sync bus.
+- Wiring: `lib/features/logs/log_viewer_screen.dart` and `lib/features/docker/docker_manager_screen.dart` (`_DockerLogsView`) both expose a "Watch with AI" launcher when `aiSettings` is plumbed through. `ServerDashboardScreen._currentAiSettings` builds the snapshot and passes it into `DockerManagerScreen`.
+- Tests: `test/log_batcher_test.dart` (line/time flush, hardLineCap, end-of-stream drain) and `test/log_triage_service_test.dart` (severity parsing, snake/camel tolerance, fingerprint stability, command-risk gating).
+
 ## Cross-Device Snippet Sharing (Phase 5.1 — opt-in)
 
 Custom quick-action snippets ride on top of the same encrypted cloud-sync transport, but as a separate, smaller blob keyed `snippets/snippets.aes`. Off by default; gated on a configured cloud destination.
