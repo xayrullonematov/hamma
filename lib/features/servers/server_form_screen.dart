@@ -201,15 +201,37 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.zero,
+            InkWell(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: publicKey));
+                _showSnackBar('Public key copied to clipboard.');
+              },
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.zero,
+                ),
+                child: SelectableText(
+                  publicKey,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 14,
+                    height: 1.4,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
               ),
-              child: SelectableText(
-                publicKey,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'TAP TO COPY',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.4,
+                color: AppColors.textMuted,
+                fontFamily: AppColors.monoFamily,
+                fontFamilyFallback: AppColors.monoFallback,
               ),
             ),
           ],
@@ -393,6 +415,28 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                             ],
                           ),
                           const SizedBox(height: 12),
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _privateKeyController,
+                            builder: (context, value, _) {
+                              final n = value.text.length;
+                              if (n == 0) return const SizedBox.shrink();
+                              return Padding(
+                                key: const ValueKey(
+                                    'private_key_chars_indicator'),
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Text(
+                                  '$n character${n == 1 ? '' : 's'} pasted',
+                                  style: const TextStyle(
+                                    color: AppColors.textMuted,
+                                    fontSize: 11,
+                                    letterSpacing: 1.2,
+                                    fontFamily: AppColors.monoFamily,
+                                    fontFamilyFallback: AppColors.monoFallback,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                           _ObscuredMultilineTextFormField(
                             controller: _privateKeyController,
                             decoration: InputDecoration(

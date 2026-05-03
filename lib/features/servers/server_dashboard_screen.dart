@@ -604,31 +604,42 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
       );
     }
     if (status.isConnecting && !status.isConnected) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.textPrimary,
-              ),
+      return Column(
+        children: [
+          Container(
+            key: const ValueKey('dashboard_connecting_banner'),
+            width: double.infinity,
+            color: AppColors.panel,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: const [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'ESTABLISHING SSH CONNECTION',
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                      fontSize: 11,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            Text(
-              'ESTABLISHING SSH CONNECTION',
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontFamily: AppColors.monoFamily,
-                fontFamilyFallback: AppColors.monoFallback,
-                fontSize: 11,
-                letterSpacing: 1.4,
-              ),
-            ),
-          ],
-        ),
+          ),
+          const Divider(height: 1, thickness: 1, color: AppColors.border),
+          Expanded(child: _buildTabContent()),
+        ],
       );
     }
 

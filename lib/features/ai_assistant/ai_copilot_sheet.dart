@@ -2140,7 +2140,7 @@ class _OpenRouterModelPickerSheetState
   static const _panelColor = AppColors.panel;
   static const _primaryColor = AppColors.primary;
 
-  final TextEditingController _searchController = TextEditingController();
+  final _searchController = TextEditingController();
   String _query = '';
 
   @override
