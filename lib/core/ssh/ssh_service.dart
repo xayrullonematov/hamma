@@ -10,6 +10,8 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../background/background_keepalive.dart';
 import '../storage/trusted_host_key_storage.dart';
+import '../vault/vault_injector.dart';
+import '../vault/vault_secret.dart';
 import 'connection_status.dart';
 import 'ssh_exception.dart';
 import 'ssh_transport.dart';
@@ -493,22 +495,46 @@ class SshService {
     }
   }
 
-  Future<String> execute(String command) async {
+  /// Run [command] on the connected transport.
+  ///
+  /// When [vaultSecrets] is supplied, every `${vault:NAME}` placeholder
+  /// is substituted with the matching secret value at the SSH boundary.
+  /// The Sentry breadcrumb deliberately records the **pre-substitution**
+  /// command (with placeholders intact) so the secret value never lands
+  /// in the breadcrumb buffer or the crash report. Callers that surface
+  /// this method's input string in the in-app command-history pane
+  /// should likewise persist the placeholder form, not the substituted
+  /// form.
+  Future<String> execute(
+    String command, {
+    Iterable<VaultSecret> vaultSecrets = const [],
+  }) async {
     final transport = _transport;
     if (transport == null) {
       throw StateError('SSH client is not connected.');
     }
 
+    final injector = VaultInjector(vaultSecrets.toList(growable: false));
+    final hasPlaceholders = injector.hasPlaceholders(command);
+    final commandToRun =
+        hasPlaceholders ? injector.inject(command) : command;
+
     Sentry.addBreadcrumb(
       Breadcrumb(
         message: 'Executing SSH command',
         category: 'ssh',
-        data: {'command': command},
+        data: {
+          // Always log the placeholder form so the breadcrumb never
+          // contains the substituted secret value.
+          'command': command,
+          if (hasPlaceholders)
+            'vaultPlaceholders': injector.placeholderNames(command),
+        },
       ),
     );
 
     try {
-      final output = await transport.run(command);
+      final output = await transport.run(commandToRun);
       return utf8.decode(output);
     } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {

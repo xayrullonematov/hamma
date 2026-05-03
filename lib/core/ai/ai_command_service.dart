@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:meta/meta.dart';
 
+import '../vault/vault_redactor.dart';
 import 'ai_provider.dart';
 import 'command_risk_assessor.dart';
 import 'ollama_client.dart';
@@ -468,17 +469,29 @@ class AiCommandService {
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${config.apiKey}');
     }
 
+    // Vault redaction at the network boundary: every literal vault
+    // value in the user prompt or the prepended history is replaced
+    // with `••••••• (vault: NAME)` before the request body is built,
+    // so the secret never crosses process boundaries — not to a cloud
+    // provider, and not to the local LLM either.
+    final redactor = GlobalVaultRedactor.current;
     final messages = [
       {'role': 'system', 'content': systemInstruction ?? _chatInstruction},
-      ...history,
-      {'role': 'user', 'content': prompt},
+      ...history.map((m) => {
+            ...m,
+            if (m['content'] != null) 'content': redactor.redact(m['content']),
+          }),
+      {'role': 'user', 'content': redactor.redact(prompt)},
     ];
 
-    request.write(jsonEncode({
+    // Write the body as UTF-8 bytes — the redaction marker uses U+2022
+    // ("•") which HttpClient.write would reject under its default
+    // Latin-1 encoder.
+    request.add(utf8.encode(jsonEncode({
       'model': config.model,
       'temperature': 0.4,
       'messages': messages,
-    }));
+    })));
 
     final response = await request.close().timeout(_responseTimeout);
     final responseBody = await response.transform(utf8.decoder).join();
@@ -515,18 +528,24 @@ class AiCommandService {
       );
     }
 
+    // Vault redaction at the network boundary — see _chatWithOpenAi.
+    final redactor = GlobalVaultRedactor.current;
     final messages = [
       {'role': 'system', 'content': systemInstruction ?? _chatInstruction},
-      ...history,
-      {'role': 'user', 'content': prompt},
+      ...history.map((m) => {
+            ...m,
+            if (m['content'] != null) 'content': redactor.redact(m['content']),
+          }),
+      {'role': 'user', 'content': redactor.redact(prompt)},
     ];
 
-    request.write(jsonEncode({
+    // UTF-8 bytes — see _chatWithOpenAi for rationale.
+    request.add(utf8.encode(jsonEncode({
       'model': config.model,
       'temperature': 0.4,
       'stream': true,
       'messages': messages,
-    }));
+    })));
 
     final response = await request.close().timeout(_responseTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -596,11 +615,13 @@ class AiCommandService {
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
     request.headers.set('x-goog-api-key', config.apiKey);
 
+    // Vault redaction at the network boundary — see _chatWithOpenAi.
+    final redactor = GlobalVaultRedactor.current;
     final contents = history.map((m) {
       return {
         'role': m['role'] == 'assistant' ? 'model' : 'user',
         'parts': [
-          {'text': m['content']}
+          {'text': redactor.redact(m['content'])}
         ]
       };
     }).toList();
@@ -608,11 +629,12 @@ class AiCommandService {
     contents.add({
       'role': 'user',
       'parts': [
-        {'text': 'System Instruction: ${systemInstruction ?? _chatInstruction}\n\nUser: $prompt'}
+        {'text': 'System Instruction: ${systemInstruction ?? _chatInstruction}\n\nUser: ${redactor.redact(prompt)}'}
       ]
     });
 
-    request.write(jsonEncode({'contents': contents}));
+    // UTF-8 bytes — see _chatWithOpenAi for rationale.
+    request.add(utf8.encode(jsonEncode({'contents': contents})));
 
     final response = await request.close().timeout(_responseTimeout);
     final responseBody = await response.transform(utf8.decoder).join();

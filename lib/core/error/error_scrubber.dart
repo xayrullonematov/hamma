@@ -1,3 +1,5 @@
+import '../vault/vault_redactor.dart';
+
 /// Strips likely-sensitive substrings from error messages before they are
 /// displayed to the user or sent to a remote crash reporter.
 ///
@@ -61,7 +63,12 @@ class ErrorScrubber {
   static String scrub(String? input) {
     if (input == null || input.isEmpty) return '';
 
-    var s = input;
+    // Pre-pass: redact any literal vault secret value first, so the
+    // generic regex passes never see (and therefore never partially
+    // shadow) a secret. The global redactor is set by the host app
+    // whenever the vault state changes; tests and bare callers see
+    // the empty redactor and pay zero cost.
+    var s = GlobalVaultRedactor.current.redact(input);
 
     // Order matters: the most specific patterns run first to avoid
     // partial overlap (e.g., a PEM block contains the literal word

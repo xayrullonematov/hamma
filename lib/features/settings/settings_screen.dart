@@ -20,6 +20,7 @@ import '../../core/theme/app_colors.dart';
 import 'help_center_screen.dart';
 import 'cloud_sync_screen.dart';
 import 'extensions_screen.dart';
+import 'vault_screen.dart';
 import 'snippet_sync_screen.dart';
 import 'local_ai_onboarding_screen.dart';
 import 'local_models_screen.dart';
@@ -1847,6 +1848,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           },
                           icon: const Icon(Icons.extension_outlined),
                           label: const Text('Extensions'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const VaultScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.lock_outline),
+                          label: const Text('Vault'),
                         ),
                       ),
                       const SizedBox(height: 12),

@@ -22,6 +22,10 @@ import 'core/storage/saved_servers_storage.dart';
 import 'core/sync/runbook_sync_service.dart';
 import 'core/sync/snippet_sync_service.dart';
 import 'core/sync/snippet_sync_storage.dart';
+import 'core/sync/vault_sync_service.dart';
+import 'core/vault/vault_change_bus.dart';
+import 'core/vault/vault_redactor.dart';
+import 'core/vault/vault_storage.dart';
 import 'core/theme/app_colors.dart';
 import 'features/ai_assistant/global_command_palette.dart';
 import 'features/onboarding/onboarding_screen.dart';
@@ -193,6 +197,36 @@ Future<void> _bootstrapAndRun() async {
     // Snippet sync is non-critical; never block app launch on it.
   }
 
+  // Per-server secrets vault (Task #31). Two pieces stand up here:
+  //
+  //   1. Seed the GlobalVaultRedactor from disk so the first error,
+  //      AI prompt, or Sentry breadcrumb after launch already sees
+  //      the right values to redact — there is no "secrets aren't
+  //      registered yet" gap. Subsequent edits re-seed via the
+  //      VaultChangeBus listener below.
+  //   2. Start the VaultSyncService so per-device edits ride the
+  //      same cloud blob already used for snippets/runbooks.
+  //
+  // Both are wrapped in best-effort try/catch — vault wiring must
+  // never block app launch.
+  try {
+    final vaultStorage = VaultStorage();
+    final initial = await vaultStorage.loadAll();
+    GlobalVaultRedactor.set(VaultRedactor.from(initial));
+    VaultChangeBus.instance.changes.listen((_) async {
+      try {
+        final next = await vaultStorage.loadAll();
+        GlobalVaultRedactor.set(VaultRedactor.from(next));
+      } catch (_) {/* best-effort */}
+    });
+    final vaultSync = VaultSyncService(vaultStorage: vaultStorage)..start();
+    if (await const SnippetSyncStorage().isEnabled()) {
+      unawaited(vaultSync.pullAndMerge());
+    }
+  } catch (_) {
+    // Vault sync/redactor seeding is non-critical; never block launch.
+  }
+
   // Cross-device runbook sync (Phase 8) — sibling of snippet sync.
   // Only `team:true` runbooks ride the wire; everything else stays
   // on the originating device. Reuses the same encrypted blob /
@@ -236,6 +270,9 @@ Future<void> _bootstrapAndRun() async {
       // passes through the same scrubber the in-app crash screen uses
       // so the two views of an error stay consistent.
       options.beforeSend = (SentryEvent event, Hint hint) {
+        // ErrorScrubber already runs the GlobalVaultRedactor as a
+        // pre-pass, so calling scrub() here covers both the regex
+        // patterns and any in-memory vault secret values.
         if (event.message != null) {
           event.message = SentryMessage(
             ErrorScrubber.scrub(event.message!.formatted),
