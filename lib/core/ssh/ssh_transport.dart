@@ -28,7 +28,17 @@ abstract class SshTransport {
   void close();
 
   /// Run a one-shot command and return its stdout bytes.
-  Future<Uint8List> run(String command);
+  ///
+  /// [environment] is forwarded as SSH `env` channel requests
+  /// (SSH_MSG_CHANNEL_REQUEST type "env") **before** the command
+  /// starts, so the values travel over the wire as protocol-level
+  /// env frames and never appear in the command text. Stock sshd
+  /// only honours these for names listed in `AcceptEnv`; for names
+  /// it rejects, the variable is silently absent on the remote
+  /// side, so callers that need the value to be available
+  /// regardless of sshd policy must also wrap the command body
+  /// (see `VaultInjector.buildEnvCommand`).
+  Future<Uint8List> run(String command, {Map<String, String>? environment});
 
   /// Start a streaming session for [command].
   Future<SSHSession> execute(String command);
@@ -124,7 +134,8 @@ class DartSsh2Transport implements SshTransport {
   void close() => _client.close();
 
   @override
-  Future<Uint8List> run(String command) => _client.run(command);
+  Future<Uint8List> run(String command, {Map<String, String>? environment}) =>
+      _client.run(command, environment: environment);
 
   @override
   Future<SSHSession> execute(String command) => _client.execute(command);

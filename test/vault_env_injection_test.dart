@@ -90,28 +90,15 @@ void main() {
       );
     });
 
-    test('placeholder inside single-quoted string: closes-and-reopens '
-        'so the env var actually expands', () {
+    test('placeholder inside single-quoted string is rewritten with '
+        'the close-and-reopen idiom so the env var expands', () {
       final injector = VaultInjector([_s('TOKEN', 'bearer-xyz-1234')]);
       final wrapped = injector.buildEnvCommand(
         "curl -H 'Authorization: Bearer \${vault:TOKEN}' https://api",
       );
-      // The bash -lc body must contain the close+reopen idiom
-      // 'lit'"\${TOKEN}"'lit', NOT a literal `\${TOKEN}` left
-      // inside a single-quoted string (which would never expand).
       final body = wrapped.wrappedCommand.split('bash -lc ').last;
-      expect(
-        body.contains("'\"\${TOKEN}\"'"),
-        isTrue,
-        reason:
-            'placeholder inside \'…\' must be rewritten as '
-            "'\"\${TOKEN}\"' so the env var expands at runtime",
-      );
-      expect(
-        body.contains('bearer-xyz-1234'),
-        isFalse,
-        reason: 'literal value must NOT appear inside the bash -lc body',
-      );
+      expect(body.contains("'\"\${TOKEN}\"'"), isTrue);
+      expect(body.contains('bearer-xyz-1234'), isFalse);
     });
 
     test('placeholder inside double-quoted string: bare \${NAME} '

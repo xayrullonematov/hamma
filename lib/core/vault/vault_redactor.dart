@@ -101,18 +101,9 @@ class StreamingVaultRedactor {
           .map((e) => e.value.length)
           .reduce((a, b) => a > b ? a : b);
 
-  /// Process [chunk]. Returns the safely-redacted prefix of
-  /// `_carry + chunk`; the unsafe tail is held until the next
-  /// [feed] / [flush].
-  ///
-  /// "Safe" means: no occurrence of any registered secret value
-  /// straddles the emit/carry boundary. We find the earliest
-  /// position `i` in `combined` from which a secret prefix matches
-  /// the in-flight tail, and emit only `combined[0..i]`. Everything
-  /// from `i` onwards is held as carry — it is either the start of
-  /// a real secret (will be redacted on the next round) or
-  /// harmless plaintext (will be emitted on the next round once the
-  /// disambiguating bytes arrive).
+  /// Emits the safely-redacted prefix of `_carry + chunk` and
+  /// holds the unsafe tail (any in-flight prefix-of-secret) for
+  /// the next [feed] / [flush].
   String feed(String chunk) {
     if (_redactor.isEmpty) return _redactor.redact(chunk);
     final combined = _carry + chunk;
@@ -126,10 +117,8 @@ class StreamingVaultRedactor {
     return _redactor.redact(safePrefix);
   }
 
-  /// Largest `i` such that `combined[0..i]` cannot contain the
-  /// leading bytes of an as-yet-incomplete secret. Equivalently:
-  /// the earliest position from which any secret value is a
-  /// possible prefix-match of the unfinished tail.
+  /// Largest emit length such that no secret prefix straddles the
+  /// emit/carry boundary.
   int _safeEmitLength(String combined) {
     int emitLen = combined.length;
     final scanFrom = combined.length - (_maxLen - 1);

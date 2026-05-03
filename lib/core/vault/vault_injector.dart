@@ -8,13 +8,7 @@ import 'vault_secret.dart';
 /// history retains, so the secret never lands in scrollback or
 /// breadcrumbs. See [SshService.execute] for the call site.
 class VaultInjector {
-  /// Builds a name → secret lookup with **deterministic scope
-  /// precedence**: a server-scoped secret always wins over a
-  /// global secret of the same name. Without this rule, the
-  /// caller's storage iteration order would silently decide which
-  /// credential leaves the device — which is exactly the kind of
-  /// "wrong secret to wrong host" failure the per-server vault
-  /// model exists to prevent.
+  /// Server-scoped secrets shadow globals of the same name.
   VaultInjector(List<VaultSecret> secrets)
       : _byName = _buildLookup(secrets);
 
@@ -22,16 +16,7 @@ class VaultInjector {
     final out = <String, VaultSecret>{};
     for (final s in secrets) {
       final existing = out[s.name];
-      if (existing == null) {
-        out[s.name] = s;
-        continue;
-      }
-      // Server-scoped beats global. If both are scoped (caller
-      // passed mixed scopes), the later non-global wins — but
-      // VaultStorage.loadVisibleTo only ever returns one scope
-      // bound to the active server, so this branch is a defensive
-      // no-op in production.
-      if (existing.isGlobal && !s.isGlobal) {
+      if (existing == null || (existing.isGlobal && !s.isGlobal)) {
         out[s.name] = s;
       }
     }
@@ -85,11 +70,9 @@ class VaultInjector {
     });
   }
 
-  /// Wraps [command] so each referenced vault secret is exposed via
-  /// a per-command environment variable instead of being substituted
-  /// inline. See `docs/secrets-vault.md` for the rewrite shape, the
-  /// quoting rules, and the (documented) `argv` exposure trade-off.
-  /// Throws [VaultInjectionException] if a placeholder is unknown.
+  /// Wraps [command] so vault placeholders resolve via env vars
+  /// instead of inline substitution. See `docs/secrets-vault.md`.
+  /// Throws [VaultInjectionException] on an unknown placeholder.
   EnvInjectedCommand buildEnvCommand(String command) {
     final names = <String>{};
     final missing = <String>{};
@@ -131,25 +114,9 @@ class VaultInjector {
   static String _singleQuote(String s) =>
       "'${s.replaceAll("'", r"'\''")}'";
 
-  /// Walks [command] tracking POSIX shell quoting state and emits
-  /// the right env-var reference for each `${vault:NAME}` it
-  /// encounters:
-  ///
-  /// - Outside any quotes: emit `"${NAME}"` so word-splitting and
-  ///   glob-expansion of the value are still suppressed.
-  /// - Inside double quotes: emit `${NAME}` (the surrounding `"` is
-  ///   already there, and shell expansion is already enabled).
-  /// - Inside single quotes: close the single quote, emit
-  ///   `"${NAME}"`, then reopen the single quote — the standard
-  ///   `'lit'"$VAR"'lit'` concatenation idiom. This is necessary
-  ///   because single quotes disable ALL expansion in POSIX shell,
-  ///   so the placeholder would otherwise reach the remote shell
-  ///   verbatim and the `${vault:…}` form would land in `argv` or
-  ///   in an HTTP header instead of the secret value.
-  ///
-  /// Backslash escaping is honoured outside single quotes so a
-  /// literal `\${vault:NAME}` is left alone — matching the rule
-  /// that single-quoted strings disable backslash too.
+  /// POSIX shell quoting-aware substitution. Outside quotes →
+  /// `"$NAME"`; inside `"…"` → bare `$NAME`; inside `'…'` → close,
+  /// `"$NAME"`, reopen.
   static String _shellAwareSubstitute(String command) {
     final out = StringBuffer();
     bool inSingle = false;

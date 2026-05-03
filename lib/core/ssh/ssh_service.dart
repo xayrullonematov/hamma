@@ -516,11 +516,12 @@ class SshService {
 
     final injector = VaultInjector(vaultSecrets.toList(growable: false));
     final hasPlaceholders = injector.hasPlaceholders(command);
-    // Env-var injection: see VaultInjector.buildEnvCommand and
-    // docs/secrets-vault.md for the rewrite shape and trade-offs.
     final wrapped =
         hasPlaceholders ? injector.buildEnvCommand(command) : null;
     final commandToRun = wrapped?.wrappedCommand ?? command;
+    // SSH protocol env-frame channel + inline wrapper fallback.
+    // See docs/secrets-vault.md.
+    final envForChannel = wrapped?.env;
 
     Sentry.addBreadcrumb(
       Breadcrumb(
@@ -537,7 +538,10 @@ class SshService {
     );
 
     try {
-      final output = await transport.run(commandToRun);
+      final output = await transport.run(
+        commandToRun,
+        environment: envForChannel,
+      );
       return utf8.decode(output);
     } catch (error, stackTrace) {
       if (_looksLikeDisconnect(error)) {

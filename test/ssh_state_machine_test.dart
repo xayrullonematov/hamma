@@ -165,6 +165,7 @@ class FakeSshConnector {
 
 /// A minimal in-memory [SshTransport] for state-machine tests.
 class FakeSshTransport implements SshTransport {
+  Map<String, String>? lastRunEnvironment;
   FakeSshTransport({this.failNextPing = false});
 
   final Completer<void> _doneCompleter = Completer<void>();
@@ -221,8 +222,10 @@ class FakeSshTransport implements SshTransport {
   // Command/forwarding methods are unused by the state machine. Tests
   // that exercise execute/shell/forwardLocal need their own fakes.
   @override
-  Future<Uint8List> run(String command) =>
-      throw UnimplementedError('FakeSshTransport.run');
+  Future<Uint8List> run(String command, {Map<String, String>? environment}) {
+    lastRunEnvironment = environment;
+    throw UnimplementedError('FakeSshTransport.run');
+  }
 
   @override
   Future<SSHSession> execute(String command) =>
