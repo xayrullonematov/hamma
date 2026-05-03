@@ -17,15 +17,10 @@ class CloudObject {
   final DateTime lastModified;
 }
 
-/// One entry in the cross-device sync manifest. The manifest is a
-/// small JSON document listing every blob each device has uploaded
-/// so other devices can pick the newest snapshot to restore.
-///
-/// The manifest is *not* encrypted by the cloud-sync layer because it
-/// only contains opaque metadata (timestamps, device ids, blob hashes).
-/// It cannot be used to decrypt or even partially read the encrypted
-/// vault — that still requires the user's master PIN, which never
-/// leaves the device.
+/// One entry in the cross-device sync manifest — a JSON document
+/// listing every blob each device has uploaded so peers can pick
+/// the newest snapshot to restore. The manifest is itself encrypted
+/// (HMBK) before upload by [CloudSyncEngine].
 class CloudSyncManifestEntry {
   const CloudSyncManifestEntry({
     required this.key,

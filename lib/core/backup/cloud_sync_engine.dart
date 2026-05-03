@@ -58,15 +58,11 @@ class CloudSyncEngine {
   final String deviceId;
   final String prefix;
 
-  /// Wraps `BackupCrypto.encrypt(password, plaintext)`. Injecting the
-  /// closure rather than the password keeps the engine ignorant of the
-  /// PIN and makes testing trivial.
+  /// `BackupCrypto.encrypt(password, plaintext)`. Engine never sees the PIN.
   final Uint8List Function(Uint8List plaintext) encrypter;
 
-  /// Wraps `BackupCrypto.decrypt(password, ciphertext)`. Used to read
-  /// the encrypted manifest. The manifest itself is wrapped in HMBK
-  /// ciphertext so the cloud provider never sees device IDs, snapshot
-  /// timestamps, or blob hashes in the clear.
+  /// `BackupCrypto.decrypt(password, ciphertext)`. Used to read the
+  /// HMBK-encrypted manifest.
   final Uint8List Function(Uint8List ciphertext) decrypter;
 
   final DateTime Function() _clock;
