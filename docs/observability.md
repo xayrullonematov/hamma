@@ -31,7 +31,38 @@ one SSH round-trip per tick, batching every detected source into a
 single `bash` command separated by `===HAMMA-<NAME>===` markers. The
 parser splits the response by marker and feeds each section to the
 appropriate parser in `metric_parsers.dart`. Polling defaults to **5 s**
-and is configurable in **2–60 s** range.
+and is configurable in the **2–30 s** range from a chip selector in
+the Health tab header (2s / 5s / 10s / 30s).
+
+### Tile interactions
+
+Each tile exposes three actions:
+
+- **Tap card / open-icon → expand**. Pushes a full-screen
+  `MetricChartScreen` with grid lines, min/avg/max/window stats and a
+  draggable touch crosshair that snaps to the nearest sample and shows
+  the exact `(time, value)` in a tooltip.
+- **EXPLAIN** — see "Explain this spike" below.
+- **WATCH** — opens `WatchWithAiScreen` with a *metric-aware* command:
+  `top -b -d2` for CPU, `top -o %MEM` for memory, `uptime; ps … sort
+  by %CPU` for load, growth-by-mtime `find … -printf` for disks,
+  `ss -tunp + ip -s link show <iface>` for network. Generic
+  `journalctl -f` is only the last-resort fallback.
+
+### Process lists
+
+Each round we widen the `top` capture to 30 rows so the by-RAM
+ordering produces meaningfully different processes from the by-CPU
+ordering. The Health tab renders both **TOP PROCESSES BY CPU** and
+**TOP PROCESSES BY RAM** side-by-side under the tile grid.
+
+### Anomaly callout
+
+When at least one metric crosses the z-score threshold, the Health
+tab renders a red **ANOMALY DETECTED** banner above the tiles listing
+each affected metric (e.g. `CPU, Network eth0 crossed the z-score
+threshold`). Individual tiles also continue to show their per-tile
+ANOMALY badge and red border.
 
 ### Feature detection
 
@@ -74,8 +105,12 @@ Tapping **EXPLAIN** on a tile builds a single prompt containing:
 
 The prompt is sent through `AiCommandService` and the response is
 parsed as the same strict-JSON `LogInsight` schema the log-triage
-screen already understands, so the diagnosis card uses identical
-rendering. Any `suggestedCommand` is risk-gated through
+screen already understands. The diagnosis card is rendered through a
+shared `LogInsightView` widget (in
+`lib/features/observability/widgets/log_insight_view.dart`) that owns
+the severity badge, summary, suggested-command card and risk-hint
+list — `ExplanationCard` is now a thin wrapper around it so the
+copy/safety UX is byte-identical to log-triage. Any `suggestedCommand` is risk-gated through
 `CommandRiskAssessor.assessFast` — critical-risk suggestions are
 shown with a **BLOCKED** badge and the copy/run buttons are hidden.
 

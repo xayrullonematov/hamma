@@ -92,15 +92,24 @@ void main() {
       expect(calls, greaterThan(0));
     });
 
-    test('setInterval rejects out-of-range values', () {
+    test('setInterval rejects out-of-range values (allowed window: 2..30s)',
+        () {
       final poller = MetricPoller(exec: (_) async => '');
       expect(
-        () => poller.setInterval(Duration.zero),
+        () => poller.setInterval(const Duration(seconds: 1)),
         throwsA(isA<ArgumentError>()),
       );
       expect(
-        () => poller.setInterval(const Duration(minutes: 2)),
+        () => poller.setInterval(const Duration(seconds: 31)),
         throwsA(isA<ArgumentError>()),
+      );
+      expect(
+        () => poller.setInterval(const Duration(seconds: 2)),
+        returnsNormally,
+      );
+      expect(
+        () => poller.setInterval(const Duration(seconds: 30)),
+        returnsNormally,
       );
     });
   });

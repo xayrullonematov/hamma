@@ -637,16 +637,30 @@ session, parses the output of `top`, `free -k`, `df -P`,
 `/proc/net/dev`, `/proc/loadavg` (parsers in `metric_parsers.dart`,
 fixture-tested) and emits typed `MetricSnapshot`s. Per-metric
 `RollingBuffer`s (60 min ring, z-score with hysteresis) drive
-sparkline tiles and anomaly banners.
+sparkline tiles, the cross-metric ANOMALY DETECTED callout banner,
+and a full-screen `MetricChartScreen` (touch-tracking crosshair,
+min/avg/max stats) reachable via the open-in-full icon on each tile.
+The poll interval is user-configurable from a 2/5/10/30s chip group
+in the tab header (`MetricPoller.setInterval` enforces 2–30s). The
+`top` capture is widened to 30 rows so the dashboard can show both
+**TOP PROCESSES BY CPU** *and* **TOP PROCESSES BY RAM** side-by-side.
 
 Tapping **EXPLAIN** routes the recent buffer + a fresh `journalctl`
 tail through `ObservabilityExplainer`, which **enforces local-AI
 only** — the same loopback guarantee `LogTriageService` provides.
-Suggested commands are risk-gated through `CommandRiskAssessor`.
-**WATCH WITH AI** cross-links to the existing `WatchWithAiScreen`.
-First-run capability probe caches `HostCapabilities` so unsupported
-tools simply hide their tile rather than error. Docs:
-`docs/observability.md`.
+The diagnosis card is rendered through the shared `LogInsightView`
+widget so the severity badge / suggested-command card / copy-blocking
+risk gating is byte-identical to log-triage; `ExplanationCard` is a
+thin wrapper. Suggested commands are risk-gated through
+`CommandRiskAssessor` (high *and* critical are blocked from copy).
+
+**WATCH WITH AI** cross-links to the existing `WatchWithAiScreen` with
+a *metric-aware* command per tile: `top -b -d2` for CPU, `top -o %MEM`
+for memory, `uptime; ps …` for load, growth-by-mtime `find` for disks,
+`ss -tunp + ip -s link show` for network — generic `journalctl -f` is
+only the last-resort fallback. First-run capability probe caches
+`HostCapabilities` so unsupported tools simply hide their tile rather
+than error. Docs: `docs/observability.md`.
 The `process_manager` CPU vs RAM bars are also tone-differentiated
 (white vs gray) to preserve readability when both sit side-by-side.
 

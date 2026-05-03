@@ -81,6 +81,22 @@ class MetricTile extends StatelessWidget {
                       ),
                     ),
                   ),
+                if (onExpand != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: InkWell(
+                      onTap: onExpand,
+                      child: const Padding(
+                        padding: EdgeInsets.all(2),
+                        child: Icon(
+                          Icons.open_in_full,
+                          size: 12,
+                          color: AppColors.textMuted,
+                          semanticLabel: 'Expand chart',
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 6),

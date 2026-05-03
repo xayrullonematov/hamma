@@ -43,11 +43,11 @@ class MetricPoller {
 
   /// Reconfigure the poll interval. Takes effect on the next tick.
   void setInterval(Duration value) {
-    if (value < const Duration(seconds: 1)) {
-      throw ArgumentError.value(value, 'interval', 'must be >= 1s');
+    if (value < const Duration(seconds: 2)) {
+      throw ArgumentError.value(value, 'interval', 'must be >= 2s');
     }
-    if (value > const Duration(seconds: 60)) {
-      throw ArgumentError.value(value, 'interval', 'must be <= 60s');
+    if (value > const Duration(seconds: 30)) {
+      throw ArgumentError.value(value, 'interval', 'must be <= 30s');
     }
     _interval = value;
     if (_started) {
@@ -136,10 +136,13 @@ class MetricPoller {
       List<ProcessSample> topByCpu = const [];
       List<ProcessSample> topByMem = const [];
       if (caps.hasTop && sections.containsKey('CPU')) {
-        final (cpuSample, procs) = MetricParsers.parseTop(sections['CPU']!);
+        final (cpuSample, procs) =
+            MetricParsers.parseTop(sections['CPU']!, top: 30);
         cpu = cpuSample;
-        topByCpu = procs;
-        // Order by mem descending for the by-memory tile.
+        topByCpu = procs.length > 5 ? procs.sublist(0, 5) : procs;
+        // Order the wider sample window by mem descending so the
+        // by-memory tile actually shows different processes than
+        // the by-CPU tile.
         topByMem = [...procs]
           ..sort((a, b) => b.memPercent.compareTo(a.memPercent));
         if (topByMem.length > 5) topByMem = topByMem.sublist(0, 5);
@@ -208,7 +211,11 @@ command -v df >/dev/null 2>&1 && echo DF
       buf.writeln('echo "===HAMMA-$name==="');
       buf.writeln(body);
     }
-    if (caps.hasTop) section('CPU', 'top -b -n1 | head -n 25');
+    // We grab a wider top window (30 process rows) so the by-mem
+    // sort below has real data to work with — `top` ships the rows
+    // pre-sorted by CPU, so without the wider grab the by-RAM tile
+    // would just re-shuffle the top CPU consumers.
+    if (caps.hasTop) section('CPU', 'top -b -n1 | head -n 40');
     if (caps.hasFree) section('MEM', 'free -k');
     if (caps.hasDf) section('DISK', 'df -P');
     if (caps.hasProcNetDev) section('NET', 'cat /proc/net/dev');

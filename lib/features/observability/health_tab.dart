@@ -12,16 +12,13 @@ import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/theme/app_colors.dart';
 import '../logs/widgets/watch_with_ai_screen.dart';
+import 'metric_chart_screen.dart';
 import 'widgets/explanation_card.dart';
 import 'widgets/metric_tile.dart';
 
 /// Per-server **Health** tab — agentless metric grid with sparklines,
-/// anomaly banners, and one-tap "EXPLAIN" through the local LLM.
-///
-/// Owns a [MetricPoller] for the SSH session passed in, plus one
-/// [RollingBuffer] per surfaced metric. Buffers are kept in-memory
-/// only — closing the tab drops them; v1 has no persistent metric
-/// storage by design (see docs/observability.md).
+/// anomaly callouts, expandable charts, and one-tap "EXPLAIN" through
+/// the local LLM.
 class HealthTab extends StatefulWidget {
   const HealthTab({
     super.key,
@@ -52,6 +49,9 @@ class _HealthTabState extends State<HealthTab> {
   String? _error;
   bool _booting = true;
 
+  static const List<int> _intervalChoices = [2, 5, 10, 30];
+  int _intervalSeconds = 5;
+
   // One buffer per surfaced metric. Disk uses a map keyed by mount.
   final RollingBuffer _cpuBuf = RollingBuffer();
   final RollingBuffer _memBuf = RollingBuffer();
@@ -72,6 +72,7 @@ class _HealthTabState extends State<HealthTab> {
     super.initState();
     _poller = widget.poller ??
         MetricPoller(exec: (cmd) => widget.sshService.execute(cmd));
+    _intervalSeconds = _poller.interval.inSeconds.clamp(2, 30);
     _start();
   }
 
@@ -203,11 +204,41 @@ class _HealthTabState extends State<HealthTab> {
     );
   }
 
+  void _expand({
+    required String title,
+    required String unit,
+    required RollingBuffer buffer,
+    double? yMax,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MetricChartScreen(
+          title: title,
+          unit: unit,
+          samples: buffer.samples
+              .map((s) => (t: s.t, v: s.v))
+              .toList(growable: false),
+          yMax: yMax,
+        ),
+      ),
+    );
+  }
+
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
     );
+  }
+
+  void _setInterval(int seconds) {
+    if (seconds == _intervalSeconds) return;
+    try {
+      _poller.setInterval(Duration(seconds: seconds));
+      setState(() => _intervalSeconds = seconds);
+    } on ArgumentError catch (e) {
+      _toast('Bad interval: ${e.message}');
+    }
   }
 
   @override
@@ -240,6 +271,7 @@ class _HealthTabState extends State<HealthTab> {
     }
 
     final isLocal = widget.aiSettings.provider == AiProvider.local;
+    final activeAnomalies = _activeAnomalyLabels();
 
     return CustomScrollView(
       slivers: [
@@ -247,6 +279,21 @@ class _HealthTabState extends State<HealthTab> {
           padding: const EdgeInsets.all(12),
           sliver: SliverToBoxAdapter(child: _header(isLocal)),
         ),
+        if (activeAnomalies.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            sliver: SliverToBoxAdapter(
+              child: _Banner(
+                icon: Icons.warning_amber_rounded,
+                color: AppColors.danger,
+                title: 'ANOMALY DETECTED',
+                body:
+                    '${activeAnomalies.join(", ")} crossed the z-score '
+                    'threshold. Tap EXPLAIN on the affected tile to ask the '
+                    'local AI for a likely cause.',
+              ),
+            ),
+          ),
         if (_error != null)
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -282,23 +329,41 @@ class _HealthTabState extends State<HealthTab> {
                     child: ExplanationCard(
                       result: entry.value,
                       metricName: entry.key,
-                      onClose: () => setState(() => _explanations.remove(entry.key)),
+                      onClose: () =>
+                          setState(() => _explanations.remove(entry.key)),
                     ),
                   ),
               ],
             ),
           ),
-        if (_latest != null && _latest!.topByCpu.isNotEmpty)
+        if (_latest != null &&
+            (_latest!.topByCpu.isNotEmpty || _latest!.topByMemory.isNotEmpty))
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-            sliver: SliverToBoxAdapter(child: _processList(_latest!)),
+            sliver: SliverToBoxAdapter(child: _processLists(_latest!)),
           ),
       ],
     );
   }
 
+  List<String> _activeAnomalyLabels() {
+    final out = <String>[];
+    if (_anomaly['cpu'] == true) out.add('CPU');
+    if (_anomaly['mem'] == true) out.add('Memory');
+    if (_anomaly['load'] == true) out.add('Load');
+    for (final entry in _anomaly.entries) {
+      if (entry.value && entry.key.startsWith('net:')) {
+        out.add('Network ${entry.key.substring(4)}');
+      }
+    }
+    return out;
+  }
+
   Widget _header(bool isLocal) {
-    return Row(
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 10,
+      runSpacing: 6,
       children: [
         const Text(
           'HEALTH',
@@ -310,7 +375,6 @@ class _HealthTabState extends State<HealthTab> {
             fontFamilyFallback: AppColors.monoFallback,
           ),
         ),
-        const SizedBox(width: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
@@ -330,7 +394,7 @@ class _HealthTabState extends State<HealthTab> {
             ),
           ),
         ),
-        const Spacer(),
+        _intervalSelector(),
         if (_latest?.timestamp != null)
           Text(
             'LAST ${_fmt(_latest!.timestamp)}',
@@ -346,9 +410,107 @@ class _HealthTabState extends State<HealthTab> {
     );
   }
 
+  Widget _intervalSelector() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'POLL ',
+          style: TextStyle(
+            color: AppColors.textFaint,
+            fontSize: 10,
+            letterSpacing: 1.4,
+            fontFamily: AppColors.monoFamily,
+            fontFamilyFallback: AppColors.monoFallback,
+          ),
+        ),
+        for (final s in _intervalChoices)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: InkWell(
+              onTap: () => _setInterval(s),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: s == _intervalSeconds
+                        ? AppColors.textPrimary
+                        : AppColors.border,
+                  ),
+                  color: s == _intervalSeconds
+                      ? AppColors.textPrimary
+                      : Colors.transparent,
+                ),
+                child: Text(
+                  '${s}S',
+                  style: TextStyle(
+                    color: s == _intervalSeconds
+                        ? AppColors.scaffoldBackground
+                        : AppColors.textMuted,
+                    fontSize: 10,
+                    letterSpacing: 1.2,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   String _fmt(DateTime t) {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${two(t.hour)}:${two(t.minute)}:${two(t.second)}';
+  }
+
+  /// Choose a metric-aware command for WATCH WITH AI so the user
+  /// lands on logs / live output that's actually relevant to the
+  /// spike, not a generic journal tail. Each command is read-only;
+  /// `WatchWithAiScreen` re-runs the local-AI guard before sending.
+  String _watchCommandFor(String key, {String? mountPoint, String? iface}) {
+    switch (key) {
+      case 'cpu':
+        return 'top -b -d 2';
+      case 'mem':
+        // `top -o %MEM` re-sorts the live view by memory consumption.
+        return 'top -b -d 2 -o %MEM';
+      case 'load':
+        return 'uptime; ps -eo pid,user,pri,ni,pcpu,pmem,stat,comm '
+            '--sort=-pcpu | head';
+      default:
+        if (key.startsWith('disk:') && mountPoint != null) {
+          // Most-recent file growth on the affected mount, refreshed.
+          return "find '$mountPoint' -xdev -type f -printf "
+              "'%T@ %s %p\\n' 2>/dev/null | sort -nr | head -n 30";
+        }
+        if (key.startsWith('net:') && iface != null) {
+          // Per-socket bytes — works on systemd + busybox boxes.
+          return "ss -tunp 2>/dev/null | head -n 30; "
+              "echo '---'; ip -s link show $iface 2>/dev/null";
+        }
+        return 'journalctl -f -n 50';
+    }
+  }
+
+  String _watchTitleFor(String key, {String? mountPoint, String? iface}) {
+    switch (key) {
+      case 'cpu':
+        return 'top (CPU)';
+      case 'mem':
+        return 'top (memory)';
+      case 'load':
+        return 'load + top processes';
+      default:
+        if (key.startsWith('disk:')) return 'disk: ${mountPoint ?? "?"}';
+        if (key.startsWith('net:')) return 'net: ${iface ?? "?"}';
+        return 'journalctl';
+    }
   }
 
   List<Widget> _buildTiles(bool isLocal) {
@@ -366,6 +528,14 @@ class _HealthTabState extends State<HealthTab> {
         anomalous: _anomaly['cpu'] == true,
         yMax: 100,
         explainBusy: _explainingNow.contains('cpu'),
+        onExpand: _cpuBuf.samples.length >= 2
+            ? () => _expand(
+                  title: 'CPU',
+                  unit: '%',
+                  buffer: _cpuBuf,
+                  yMax: 100,
+                )
+            : null,
         onExplain: isLocal
             ? () => _explain(
                   key: 'cpu',
@@ -374,7 +544,10 @@ class _HealthTabState extends State<HealthTab> {
                   unit: '%',
                 )
             : null,
-        onWatch: () => _watch('journalctl -f -n 50', 'journalctl -f'),
+        onWatch: () => _watch(
+          _watchCommandFor('cpu'),
+          _watchTitleFor('cpu'),
+        ),
       ));
     }
     if (caps.hasFree) {
@@ -390,6 +563,14 @@ class _HealthTabState extends State<HealthTab> {
         anomalous: _anomaly['mem'] == true,
         yMax: 100,
         explainBusy: _explainingNow.contains('mem'),
+        onExpand: _memBuf.samples.length >= 2
+            ? () => _expand(
+                  title: 'Memory',
+                  unit: '%',
+                  buffer: _memBuf,
+                  yMax: 100,
+                )
+            : null,
         onExplain: isLocal
             ? () => _explain(
                   key: 'mem',
@@ -398,7 +579,10 @@ class _HealthTabState extends State<HealthTab> {
                   unit: '%',
                 )
             : null,
-        onWatch: () => _watch('journalctl -f -n 50', 'journalctl -f'),
+        onWatch: () => _watch(
+          _watchCommandFor('mem'),
+          _watchTitleFor('mem'),
+        ),
       ));
     }
     if (caps.hasProcLoadavg) {
@@ -414,6 +598,9 @@ class _HealthTabState extends State<HealthTab> {
         history: _loadBuf.samples.map((s) => s.v).toList(),
         anomalous: _anomaly['load'] == true,
         explainBusy: _explainingNow.contains('load'),
+        onExpand: _loadBuf.samples.length >= 2
+            ? () => _expand(title: 'Load 1m', unit: 'load', buffer: _loadBuf)
+            : null,
         onExplain: isLocal
             ? () => _explain(
                   key: 'load',
@@ -422,12 +609,16 @@ class _HealthTabState extends State<HealthTab> {
                   unit: 'load',
                 )
             : null,
-        onWatch: () => _watch('journalctl -f -n 50', 'journalctl -f'),
+        onWatch: () => _watch(
+          _watchCommandFor('load'),
+          _watchTitleFor('load'),
+        ),
       ));
     }
     if (caps.hasDf) {
       for (final disk in snap?.disks ?? const <DiskMount>[]) {
         final buf = _diskBufs[disk.mountPoint];
+        final key = 'disk:${disk.mountPoint}';
         tiles.add(MetricTile(
           label: 'DISK ${disk.mountPoint}',
           value: disk.usagePercent.toStringAsFixed(1),
@@ -437,9 +628,17 @@ class _HealthTabState extends State<HealthTab> {
           history: buf?.samples.map((s) => s.v).toList() ?? const [],
           anomalous: false,
           yMax: 100,
+          onExpand: (buf != null && buf.samples.length >= 2)
+              ? () => _expand(
+                    title: 'Disk ${disk.mountPoint}',
+                    unit: '%',
+                    buffer: buf,
+                    yMax: 100,
+                  )
+              : null,
           onWatch: () => _watch(
-            'tail -f /var/log/syslog 2>/dev/null || journalctl -f',
-            'syslog (${disk.mountPoint})',
+            _watchCommandFor(key, mountPoint: disk.mountPoint),
+            _watchTitleFor(key, mountPoint: disk.mountPoint),
           ),
         ));
       }
@@ -447,6 +646,7 @@ class _HealthTabState extends State<HealthTab> {
     if (caps.hasProcNetDev) {
       for (final net in snap?.network ?? const <NetInterfaceSample>[]) {
         final rx = _netRxBufs[net.name];
+        final key = 'net:${net.name}';
         tiles.add(MetricTile(
           label: 'NET ${net.name}',
           value: _bytesPerSec(net.rxBytesPerSecond + net.txBytesPerSecond),
@@ -455,24 +655,54 @@ class _HealthTabState extends State<HealthTab> {
               'RX ${_bytesPerSec(net.rxBytesPerSecond)}/s  '
               'TX ${_bytesPerSec(net.txBytesPerSecond)}/s',
           history: rx?.samples.map((s) => s.v).toList() ?? const [],
-          anomalous: _anomaly['net:${net.name}'] == true,
-          explainBusy: _explainingNow.contains('net:${net.name}'),
+          anomalous: _anomaly[key] == true,
+          explainBusy: _explainingNow.contains(key),
+          onExpand: (rx != null && rx.samples.length >= 2)
+              ? () => _expand(
+                    title: 'Net RX ${net.name}',
+                    unit: 'B/s',
+                    buffer: rx,
+                  )
+              : null,
           onExplain: isLocal && rx != null
               ? () => _explain(
-                    key: 'net:${net.name}',
+                    key: key,
                     displayName: 'Network RX on ${net.name}',
                     buffer: rx,
                     unit: 'bytes/s',
                   )
               : null,
-          onWatch: () => _watch('journalctl -f -n 50', 'journalctl -f'),
+          onWatch: () => _watch(
+            _watchCommandFor(key, iface: net.name),
+            _watchTitleFor(key, iface: net.name),
+          ),
         ));
       }
     }
     return tiles;
   }
 
-  Widget _processList(MetricSnapshot snap) {
+  Widget _processLists(MetricSnapshot snap) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (snap.topByCpu.isNotEmpty)
+          Expanded(child: _processList('TOP PROCESSES BY CPU',
+              snap.topByCpu, _ProcessSortKey.cpu)),
+        if (snap.topByCpu.isNotEmpty && snap.topByMemory.isNotEmpty)
+          const SizedBox(width: 10),
+        if (snap.topByMemory.isNotEmpty)
+          Expanded(child: _processList('TOP PROCESSES BY RAM',
+              snap.topByMemory, _ProcessSortKey.mem)),
+      ],
+    );
+  }
+
+  Widget _processList(
+    String title,
+    List<ProcessSample> rows,
+    _ProcessSortKey sortKey,
+  ) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: AppColors.border),
@@ -482,9 +712,9 @@ class _HealthTabState extends State<HealthTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'TOP PROCESSES BY CPU',
-            style: TextStyle(
+          Text(
+            title,
+            style: const TextStyle(
               color: AppColors.textMuted,
               letterSpacing: 1.4,
               fontSize: 10,
@@ -494,7 +724,7 @@ class _HealthTabState extends State<HealthTab> {
             ),
           ),
           const SizedBox(height: 8),
-          for (final p in snap.topByCpu)
+          for (final p in rows)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(
@@ -502,7 +732,9 @@ class _HealthTabState extends State<HealthTab> {
                   SizedBox(
                     width: 56,
                     child: Text(
-                      '${p.cpuPercent.toStringAsFixed(1)}%',
+                      sortKey == _ProcessSortKey.cpu
+                          ? '${p.cpuPercent.toStringAsFixed(1)}%'
+                          : '${p.memPercent.toStringAsFixed(1)}%',
                       style: const TextStyle(
                         color: AppColors.textPrimary,
                         fontFamily: AppColors.monoFamily,
@@ -557,6 +789,8 @@ class _HealthTabState extends State<HealthTab> {
 
   static String _bytesPerSec(double bps) => _bytes(bps.round());
 }
+
+enum _ProcessSortKey { cpu, mem }
 
 class _Banner extends StatelessWidget {
   const _Banner({
