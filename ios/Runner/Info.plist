@@ -47,5 +47,9 @@
         <true/>
         <key>NSFaceIDUsageDescription</key>
         <string>We use Face ID to securely unlock your server credentials.</string>
+        <key>NSMicrophoneUsageDescription</key>
+        <string>Hamma uses the microphone for hands-free voice commands to your AI Assistant. Audio is processed entirely on this device — no recording leaves your phone.</string>
+        <key>NSSpeechRecognitionUsageDescription</key>
+        <string>Hamma transcribes your spoken commands using Apple's on-device speech recognizer. Transcription happens locally — Hamma will refuse to send audio to any cloud service.</string>
 </dict>
 </plist>

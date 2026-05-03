@@ -50,6 +50,14 @@ dependencies:
   # bindings (lib/core/ai/llama_cpp_bindings.dart).
   ffi: ^2.1.0
 
+  # Voice-driven mobile ops (Task #29). Both packages are configured
+  # for on-device recognition / on-device synthesis only — see
+  # lib/core/voice/. The Dart-only voice_recognizer state machine
+  # depends only on a thin backend interface so tests don't need the
+  # platform plugins.
+  speech_to_text: ^7.0.0
+  flutter_tts: ^4.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

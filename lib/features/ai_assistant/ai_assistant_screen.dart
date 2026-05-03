@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -9,10 +11,16 @@ import '../../core/ai/local_engine_health_monitor.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/chat_history_storage.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/voice/voice_backend_speech_to_text.dart';
+import '../../core/voice/voice_recognizer.dart';
+import '../../core/voice/voice_session.dart';
+import '../../core/voice/voice_speaker.dart';
 import 'widgets/chat_avatar.dart';
 import 'widgets/chat_session_drawer.dart';
 import 'widgets/local_engine_status_pill.dart';
 import 'widgets/typing_indicator.dart';
+import 'widgets/voice_input_button.dart';
+import 'widgets/voice_mode_toggle.dart';
 
 class AiAssistantScreen extends StatefulWidget {
   const AiAssistantScreen({
@@ -65,6 +73,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   bool _isLoading = false;
   LocalEngineHealthMonitor? _localMonitor;
 
+  // Voice — only constructed on iOS/Android. Keeps desktop builds
+  // unaffected by the speech_to_text / flutter_tts platform plugins.
+  late final VoiceSession _voiceSession = VoiceSession();
+  VoiceRecognizer? _voiceRecognizer;
+  VoiceSpeaker? _voiceSpeaker;
+  bool _voiceMicActive = false;
+
   @override
   void initState() {
     super.initState();
@@ -80,7 +95,48 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         endpoint.isNotEmpty) {
       _localMonitor = LocalEngineHealthMonitor(endpoint: endpoint);
     }
+    _maybeInitVoice();
     _initChat();
+  }
+
+  /// Constructs the voice subsystem on supported mobile platforms.
+  /// Desktop / web simply skip — the mic button never renders so
+  /// the speech_to_text plugin is never touched.
+  void _maybeInitVoice() {
+    if (kIsWeb) return;
+    if (!(Platform.isIOS || Platform.isAndroid)) return;
+    _voiceRecognizer = VoiceRecognizer(backend: SpeechToTextBackend());
+    _voiceSpeaker = VoiceSpeaker();
+    _voiceSession.addListener(_onVoiceSessionChanged);
+  }
+
+  void _onVoiceSessionChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _onVoiceTranscript(String text) {
+    _inputController.text = text;
+    _sendMessage();
+  }
+
+  void _onVoiceListeningChanged(bool listening) {
+    if (_voiceMicActive == listening) return;
+    setState(() => _voiceMicActive = listening);
+    _voiceSession.setAudioActive(listening);
+  }
+
+  Future<void> _maybeSpeakReply(String reply) async {
+    final speaker = _voiceSpeaker;
+    if (speaker == null || !_voiceSession.isConversational) return;
+    _voiceSession.setAudioActive(true);
+    try {
+      await speaker.speak(reply);
+    } finally {
+      if (mounted && !_voiceMicActive) {
+        _voiceSession.setAudioActive(false);
+      }
+    }
   }
 
   Future<void> _initChat() async {
@@ -142,6 +198,11 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     _scrollController.dispose();
     unawaited(_localMonitor?.dispose());
     _localMonitor = null;
+    _voiceSession.removeListener(_onVoiceSessionChanged);
+    unawaited(_voiceSpeaker?.stop());
+    unawaited(_voiceRecognizer?.cancel());
+    _voiceRecognizer?.dispose();
+    _voiceSession.dispose();
     super.dispose();
   }
 
@@ -215,6 +276,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         _scrollToBottom();
         _saveCurrentMessages();
         _updateSessionTitleIfNeeded(text);
+        unawaited(_maybeSpeakReply(buffer.toString()));
       }
     } catch (e) {
       if (mounted) {
@@ -497,6 +559,28 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         title: const Text('AI Assistant'),
         elevation: 0,
         actions: [
+          if (_voiceRecognizer != null) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: OnDeviceVoiceChip(active: _voiceSession.audioActive),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 12,
+              ),
+              child: VoiceModeToggle(
+                session: _voiceSession,
+                onChanged: (mode) {
+                  _voiceSession.setMode(mode);
+                  if (mode == VoiceMode.off) {
+                    unawaited(_voiceSpeaker?.stop());
+                    unawaited(_voiceRecognizer?.cancel());
+                  }
+                },
+              ),
+            ),
+          ],
           if (_localMonitor != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -806,6 +890,14 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 ),
               ),
             ),
+            if (_voiceRecognizer != null && _voiceSession.isVoiceEnabled) ...[
+              const SizedBox(width: 8),
+              VoiceInputButton(
+                recognizer: _voiceRecognizer!,
+                onTranscript: _onVoiceTranscript,
+                onListeningChanged: _onVoiceListeningChanged,
+              ),
+            ],
             const SizedBox(width: 12),
             IconButton.filled(
               onPressed: _isLoading ? null : _sendMessage,
