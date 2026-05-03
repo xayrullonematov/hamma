@@ -152,7 +152,7 @@ class _PluginCard extends StatelessWidget {
               Switch(
                 value: enabled,
                 onChanged: onToggle,
-                activeColor: AppColors.textPrimary,
+                activeThumbColor: AppColors.textPrimary,
               ),
             ],
           ),

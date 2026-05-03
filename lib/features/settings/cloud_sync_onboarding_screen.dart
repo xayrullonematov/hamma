@@ -235,15 +235,20 @@ class _CloudSyncOnboardingScreenState
           ),
         ),
         const SizedBox(height: 12),
-        for (final c in CloudSyncCadence.values)
-          RadioListTile<CloudSyncCadence>(
-            value: c,
-            groupValue: _cadence,
-            onChanged: (v) =>
-                v == null ? null : setState(() => _cadence = v),
-            title: Text(c.name.toUpperCase()),
-            contentPadding: EdgeInsets.zero,
+        RadioGroup<CloudSyncCadence>(
+          groupValue: _cadence,
+          onChanged: (v) => v == null ? null : setState(() => _cadence = v),
+          child: Column(
+            children: [
+              for (final c in CloudSyncCadence.values)
+                RadioListTile<CloudSyncCadence>(
+                  value: c,
+                  title: Text(c.name.toUpperCase()),
+                  contentPadding: EdgeInsets.zero,
+                ),
+            ],
           ),
+        ),
         const SizedBox(height: 16),
         Container(
           padding: const EdgeInsets.all(12),

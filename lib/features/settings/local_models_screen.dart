@@ -385,7 +385,13 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                 'No models installed yet. Pull one from the catalog below.',
           )
         else
-          ..._models.map(_buildModelTile),
+          RadioGroup<String>(
+            groupValue: _selectedDefault,
+            onChanged: (v) => setState(() => _selectedDefault = v),
+            child: Column(
+              children: _models.map(_buildModelTile).toList(),
+            ),
+          ),
       ],
     );
   }
@@ -406,8 +412,6 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
         children: [
           Radio<String>(
             value: m.name,
-            groupValue: _selectedDefault,
-            onChanged: (v) => setState(() => _selectedDefault = v),
             activeColor: _zeroTrustGreen,
           ),
           Expanded(
@@ -722,7 +726,7 @@ class _PullSheetState extends State<_PullSheet> {
         final shouldCancel = await _confirmCancelDownload();
         if (!shouldCancel) return;
         await _cancel();
-        if (!mounted) return;
+        if (!context.mounted) return;
         Navigator.of(context).pop(_done);
       },
       child: Padding(

@@ -500,7 +500,7 @@ class _StepCard extends StatelessWidget {
       case RunbookStepType.waitFor:
         return [
           DropdownButtonFormField<String>(
-            value: s.waitMode,
+            initialValue: s.waitMode,
             decoration: const InputDecoration(labelText: 'waitMode'),
             items: const [
               DropdownMenuItem(value: 'time', child: Text('time')),

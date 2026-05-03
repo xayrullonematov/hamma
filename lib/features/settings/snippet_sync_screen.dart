@@ -211,7 +211,7 @@ class _SnippetSyncScreenState extends State<SnippetSyncScreen> {
       child: SwitchListTile(
         value: _enabled,
         onChanged: (_syncing || !_cloudReady) ? null : _toggle,
-        activeColor: AppColors.accent,
+        activeThumbColor: AppColors.accent,
         title: const Text(
           'Sync snippets across devices',
           style: TextStyle(color: AppColors.textPrimary),
