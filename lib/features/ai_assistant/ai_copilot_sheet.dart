@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -10,10 +12,17 @@ import '../../core/ai/command_risk_assessor.dart';
 import '../../core/ai/local_engine_health_monitor.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/chat_history_storage.dart';
+import '../../core/voice/voice_backend_speech_to_text.dart';
+import '../../core/voice/voice_mode_storage.dart';
+import '../../core/voice/voice_recognizer.dart';
+import '../../core/voice/voice_session.dart';
+import '../../core/voice/voice_speaker.dart';
 import 'copilot/widgets/copilot_chrome.dart';
 import 'copilot/widgets/step_timeline_card.dart';
 import 'widgets/interactive_command_block.dart';
 import 'widgets/local_engine_status_pill.dart';
+import 'widgets/voice_input_button.dart';
+import 'widgets/voice_mode_toggle.dart';
 import '../../core/theme/app_colors.dart';
 
 class AiCopilotSheet extends StatefulWidget {
@@ -77,6 +86,14 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   final CommandRiskAssessor _riskAssessor = const CommandRiskAssessor();
   final TextEditingController _promptController = TextEditingController();
 
+  // Voice — only constructed on iOS/Android. Desktop / web builds
+  // never touch the speech_to_text or flutter_tts plugins.
+  late final VoiceSession _voiceSession = VoiceSession();
+  final VoiceModeStorage _voiceModeStorage = const VoiceModeStorage();
+  VoiceRecognizer? _voiceRecognizer;
+  VoiceSpeaker? _voiceSpeaker;
+  bool _voiceMicActive = false;
+
   late AiProvider _activeProvider;
   late String? _activeOpenRouterModel;
   String _activeApiKey = '';
@@ -112,6 +129,57 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     _syncLocalEngineMonitor();
     _loadChatHistory();
     _loadActiveProviderState();
+    _maybeInitVoice();
+  }
+
+  /// Builds the voice subsystem on iOS/Android only. Desktop / web
+  /// skip — the mic button never renders so the speech_to_text
+  /// plugin is never touched.
+  void _maybeInitVoice() {
+    if (kIsWeb) return;
+    if (!(Platform.isIOS || Platform.isAndroid)) return;
+    _voiceRecognizer = VoiceRecognizer(backend: SpeechToTextBackend());
+    _voiceSpeaker = VoiceSpeaker();
+    _voiceSession.addListener(_onVoiceSessionChanged);
+    // Restore the user's last voice mode for this server so an
+    // on-call engineer who enabled conversational mode keeps it on
+    // across app restarts.
+    unawaited(() async {
+      final saved = await _voiceModeStorage.load(widget.serverId);
+      if (mounted && saved != VoiceMode.off) {
+        _voiceSession.setMode(saved);
+      }
+    }());
+  }
+
+  void _onVoiceSessionChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  void _onVoiceTranscript(String text) {
+    _promptController.text = text;
+    _submitPrompt();
+  }
+
+  void _onVoiceListeningChanged(bool listening) {
+    if (_voiceMicActive == listening) return;
+    setState(() => _voiceMicActive = listening);
+    _voiceSession.setAudioActive(listening);
+  }
+
+  Future<void> _maybeSpeakReply(String reply) async {
+    final speaker = _voiceSpeaker;
+    if (speaker == null || !_voiceSession.isConversational) return;
+    if (reply.trim().isEmpty) return;
+    _voiceSession.setAudioActive(true);
+    try {
+      await speaker.speak(reply);
+    } finally {
+      if (mounted && !_voiceMicActive) {
+        _voiceSession.setAudioActive(false);
+      }
+    }
   }
 
   @override
@@ -152,6 +220,11 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     _promptController.dispose();
     unawaited(_localMonitor?.dispose());
     _localMonitor = null;
+    _voiceSession.removeListener(_onVoiceSessionChanged);
+    unawaited(_voiceSpeaker?.stop());
+    unawaited(_voiceRecognizer?.cancel());
+    _voiceRecognizer?.dispose();
+    _voiceSession.dispose();
     super.dispose();
   }
 
@@ -606,6 +679,13 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     });
 
     _saveChatHistory(updatedMessages);
+
+    // Speak assistant replies aloud when conversational voice mode is
+    // on. No-op on desktop / web (speaker is null) and when the user
+    // hasn't enabled conversational mode.
+    if (role == 'assistant' && normalizedContent.isNotEmpty) {
+      unawaited(_maybeSpeakReply(normalizedContent));
+    }
   }
 
   Future<void> _saveChatHistory(List<_ChatMessage> messages) async {
@@ -1434,6 +1514,25 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                   ],
                 ),
               ),
+              if (_voiceRecognizer != null) ...[
+                OnDeviceVoiceChip(active: _voiceSession.audioActive),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, right: 4, top: 2),
+                  child: VoiceModeToggle(
+                    session: _voiceSession,
+                    onChanged: (mode) {
+                      _voiceSession.setMode(mode);
+                      unawaited(
+                        _voiceModeStorage.save(widget.serverId, mode),
+                      );
+                      if (mode == VoiceMode.off) {
+                        unawaited(_voiceSpeaker?.stop());
+                        unawaited(_voiceRecognizer?.cancel());
+                      }
+                    },
+                  ),
+                ),
+              ],
               if (_activeProvider == AiProvider.local &&
                   _localMonitor != null) ...[
                 Padding(
@@ -1916,6 +2015,19 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                   ),
                 ),
               ),
+              if (_voiceRecognizer != null) ...[
+                const SizedBox(width: 8),
+                // Hold-to-talk mic. Routes the final transcript
+                // through the same _submitPrompt() path as the send
+                // button, so risk-gated command generation, history
+                // persistence, and conversational TTS all apply
+                // identically.
+                VoiceInputButton(
+                  recognizer: _voiceRecognizer!,
+                  onTranscript: _onVoiceTranscript,
+                  onListeningChanged: _onVoiceListeningChanged,
+                ),
+              ],
               const SizedBox(width: 10),
               Builder(builder: (context) {
                 final bool isDisabled = _isGenerating ||

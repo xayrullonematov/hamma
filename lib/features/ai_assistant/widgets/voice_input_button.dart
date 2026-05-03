@@ -85,15 +85,22 @@ class _VoiceInputButtonState extends State<VoiceInputButton> {
         ),
         content: const SingleChildScrollView(
           child: Text(
-            'Hamma transcribes your voice using your phone\'s on-device '
-            'speech recognizer. Audio never leaves this device.\n\n'
-            '• iOS uses Apple\'s on-device SFSpeechRecognizer.\n'
-            '• Android uses the system SpeechRecognizer with the offline '
-            'preference flag.\n\n'
-            'If on-device recognition isn\'t available, the mic stays '
-            'disabled — Hamma refuses to fall back to a cloud service.\n\n'
-            'You\'ll be asked for microphone (and on iOS, speech-recognition) '
-            'permission on first use.',
+            'Hamma transcribes your voice using your phone\'s built-in '
+            'speech recognizer and asks the OS to keep it on-device.\n\n'
+            '• iOS: Apple\'s SFSpeechRecognizer with '
+            '`requiresOnDeviceRecognition` set — iOS hard-fails if the '
+            'locale isn\'t installed on-device, so audio cannot be sent '
+            'to Apple\'s servers.\n'
+            '• Android: the system SpeechRecognizer with the offline '
+            'preference flag. This is a strong preference but not an '
+            'absolute hardware contract on every OEM — install your '
+            'offline language pack in Settings → System → Languages & '
+            'input → On-device speech recognition to be sure.\n\n'
+            'If on-device recognition reports unavailable, the mic '
+            'stays disabled — Hamma refuses to silently fall back to a '
+            'cloud service.\n\n'
+            'You\'ll be asked for microphone (and on iOS, speech-'
+            'recognition) permission on first use.',
             style: TextStyle(color: AppColors.textPrimary, height: 1.5),
           ),
         ),
