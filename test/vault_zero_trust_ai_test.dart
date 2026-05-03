@@ -19,10 +19,6 @@ void main() {
     receivedBodies.clear();
     GlobalVaultRedactor.reset();
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    // Cast through dynamic because Flutter test runner type-checks
-    // against a stub HttpServer when running headless on web targets,
-    // but here we always run on the dart:io VM.
-    // ignore: avoid_dynamic_calls
     server.listen((req) async {
       final body = await utf8.decoder.bind(req).join();
       receivedBodies.add(body);

@@ -197,18 +197,8 @@ Future<void> _bootstrapAndRun() async {
     // Snippet sync is non-critical; never block app launch on it.
   }
 
-  // Per-server secrets vault (Task #31). Two pieces stand up here:
-  //
-  //   1. Seed the GlobalVaultRedactor from disk so the first error,
-  //      AI prompt, or Sentry breadcrumb after launch already sees
-  //      the right values to redact — there is no "secrets aren't
-  //      registered yet" gap. Subsequent edits re-seed via the
-  //      VaultChangeBus listener below.
-  //   2. Start the VaultSyncService so per-device edits ride the
-  //      same cloud blob already used for snippets/runbooks.
-  //
-  // Both are wrapped in best-effort try/catch — vault wiring must
-  // never block app launch.
+  // Seed GlobalVaultRedactor from disk and start vault sync.
+  // Best-effort: must never block app launch.
   try {
     final vaultStorage = VaultStorage();
     final initial = await vaultStorage.loadAll();
