@@ -1,0 +1,6 @@
+Mem: 412304K used, 1234560K free, 0K shrd, 12340K buff, 99012K cached
+CPU:  12.5% usr   3.1% sys   0.0% nic  84.0% idle   0.1% io   0.1% irq   0.2% sirq
+Load average: 0.20 0.18 0.16 1/82 4123
+  PID  PPID USER     STAT   VSZ %VSZ CPU %CPU COMMAND
+ 1234     1 root     S     54320  4.5   0  9.1 /usr/sbin/sshd -D
+ 2034   100 nobody   S     12340  1.0   0  3.4 nginx: worker process

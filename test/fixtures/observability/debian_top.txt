@@ -1,0 +1,12 @@
+top - 14:23:11 up 12 days,  3:14,  1 user,  load average: 0.42, 0.55, 0.61
+Tasks: 132 total,   1 running, 131 sleeping,   0 stopped,   0 zombie
+%Cpu(s):  3.2 us,  1.1 sy,  0.0 ni, 95.4 id,  0.2 wa,  0.0 hi,  0.1 si,  0.0 st
+MiB Mem :   1980.4 total,    412.1 free,    884.3 used,    683.9 buff/cache
+MiB Swap:    512.0 total,    512.0 free,      0.0 used.    932.7 avail Mem
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+   1234 postgres  20   0  412312  98112  31204 S  18.6   4.8   2:01.34 postgres
+   2034 www-data  20   0  198432  45120  21034 S   9.4   2.2   0:43.91 nginx
+   1287 root      20   0   54320  12340   8120 S   4.1   0.6   0:11.04 sshd
+    981 root      20   0   88112  20012  10003 S   2.0   1.0   0:09.55 systemd-journal
+   2410 user      20   0   12340   2210   1900 R   1.2   0.1   0:00.45 top

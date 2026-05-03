@@ -623,7 +623,30 @@ brutalist palette, all stateful UI uses three tiers:
   high-risk / critical-risk
 
 Applied in: `server_list_screen` connection state, `docker_manager`
-container state, `ai_assistant._riskColor`, `ai_copilot_sheet._riskColor`.
+container state, `ai_assistant._riskColor`, `ai_copilot_sheet._riskColor`,
+and the `health_tab` metric tile borders / anomaly badges (red == out
+of band).
+
+## Live observability ("Health" tab)
+
+The dashboard's **Health** tab (`lib/features/observability/health_tab.dart`,
+nav slot 5, between Packages and Logs) is an *agentless* metric
+surface: `MetricPoller` (`lib/core/observability/metric_poller.dart`)
+issues one batched `bash` command per tick over the existing SSH
+session, parses the output of `top`, `free -k`, `df -P`,
+`/proc/net/dev`, `/proc/loadavg` (parsers in `metric_parsers.dart`,
+fixture-tested) and emits typed `MetricSnapshot`s. Per-metric
+`RollingBuffer`s (60 min ring, z-score with hysteresis) drive
+sparkline tiles and anomaly banners.
+
+Tapping **EXPLAIN** routes the recent buffer + a fresh `journalctl`
+tail through `ObservabilityExplainer`, which **enforces local-AI
+only** — the same loopback guarantee `LogTriageService` provides.
+Suggested commands are risk-gated through `CommandRiskAssessor`.
+**WATCH WITH AI** cross-links to the existing `WatchWithAiScreen`.
+First-run capability probe caches `HostCapabilities` so unsupported
+tools simply hide their tile rather than error. Docs:
+`docs/observability.md`.
 The `process_manager` CPU vs RAM bars are also tone-differentiated
 (white vs gray) to preserve readability when both sit side-by-side.
 

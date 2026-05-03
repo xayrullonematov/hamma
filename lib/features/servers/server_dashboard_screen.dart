@@ -12,6 +12,7 @@ import '../../plugins/hamma_plugin.dart';
 import '../../plugins/plugin_registry.dart';
 import '../docker/docker_manager_screen.dart';
 import '../logs/log_viewer_screen.dart';
+import '../observability/health_tab.dart';
 import '../packages/package_manager_screen.dart';
 import '../runbooks/runbooks_screen.dart';
 import '../sftp/file_explorer_screen.dart';
@@ -628,6 +629,13 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           serverName: _server.name,
         );
       case 5:
+        // Live observability — agentless metric tiles + AI explainer.
+        return HealthTab(
+          sshService: _sshService,
+          serverName: _server.name,
+          aiSettings: _currentAiSettings,
+        );
+      case 6:
         // System / auth / custom file-tail log viewer with the
         // "Watch with AI" entrypoint baked in.
         return LogViewerScreen(
@@ -635,7 +643,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           serverName: _server.name,
           aiSettings: _currentAiSettings,
         );
-      case 6:
+      case 7:
         // Runbooks tab: per-server multi-step AI-assisted workflows.
         return RunbooksScreen(
           sshService: _sshService,
@@ -785,6 +793,7 @@ class _NavItems {
     _NavItem(icon: Icons.directions_boat_rounded, label: 'Docker'),
     _NavItem(icon: Icons.settings_input_component_rounded, label: 'Services'),
     _NavItem(icon: Icons.system_update_alt_rounded, label: 'Packages'),
+    _NavItem(icon: Icons.monitor_heart_outlined, label: 'Health'),
     _NavItem(icon: Icons.article_outlined, label: 'Logs'),
     _NavItem(icon: Icons.menu_book_outlined, label: 'Runbooks'),
   ];
