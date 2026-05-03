@@ -8,9 +8,18 @@ import 'package:hamma/features/settings/settings_screen.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
+  setUp(() async {
     FlutterSecureStorage.setMockInitialValues({});
   });
+
+  // The master-detail refactor only renders the active category's card on
+  // desktop, and a tappable category list on mobile. To keep the AI section
+  // (which owns the OpenAI Key field) reachable to these tests, force a
+  // desktop-class surface so the AI card is the master-detail default.
+  Future<void> useDesktopSurface(WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+  }
 
   Widget buildSubject({
     required int Function() saveCounter,
@@ -42,6 +51,7 @@ void main() {
     'shown after a change, and hidden again after save',
     (tester) async {
       var saves = 0;
+      await useDesktopSurface(tester);
       await tester.pumpWidget(buildSubject(saveCounter: () => saves++));
       // Allow async loads to settle so _loadingFromStorage flips to false.
       await tester.pumpAndSettle(const Duration(milliseconds: 200));
@@ -72,6 +82,7 @@ void main() {
     (tester) async {
       var saves = 0;
       AiProvider? lastProvider;
+      await useDesktopSurface(tester);
       await tester.pumpWidget(
         MaterialApp(
           home: SettingsScreen(
@@ -113,6 +124,7 @@ void main() {
     'rapid double-tap on SAVE only fires onSaveAiSettings once',
     (tester) async {
       var saves = 0;
+      await useDesktopSurface(tester);
       await tester.pumpWidget(buildSubject(saveCounter: () => saves++));
       await tester.pumpAndSettle(const Duration(milliseconds: 200));
 

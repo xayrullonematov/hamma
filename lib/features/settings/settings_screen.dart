@@ -126,7 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final TextEditingController _settingsSearchController =
       TextEditingController();
   String _settingsSearchQuery = '';
-  String? _activeCategoryId;
+  String _activeCategoryId = 'ai';
   final ScrollController _settingsScrollController = ScrollController();
   final Map<String, GlobalKey> _categoryKeys = {
     'ai': GlobalKey(),
@@ -1405,13 +1405,79 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final showRail = constraints.maxWidth >= 1100;
-            final list = ListView(
-              key: const ValueKey('settings_sections_list'),
-              controller: _settingsScrollController,
-              padding: EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24),
-              children: [
-                _buildSettingsSearchField(theme),
-                const SizedBox(height: 16),
+            final hasSearch = _settingsSearchQuery.trim().isNotEmpty;
+            final listPadding =
+                EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24);
+
+            // Desktop: rail + selected-category detail pane.
+            // Active search overrides master-detail so users see all matches.
+            if (showRail) {
+              final restrict =
+                  hasSearch ? null : <String>{_activeCategoryId};
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildCategoriesRail(theme),
+                  const VerticalDivider(width: 1, color: AppColors.border),
+                  Expanded(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 800),
+                        child: _buildSectionList(
+                          context,
+                          theme,
+                          controller: _settingsScrollController,
+                          padding: listPadding,
+                          restrictToIds: restrict,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            // Mobile/tablet with active search: show all matching cards inline.
+            if (hasSearch) {
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: _buildSectionList(
+                    context,
+                    theme,
+                    controller: _settingsScrollController,
+                    padding: listPadding,
+                  ),
+                ),
+              );
+            }
+
+            // Mobile/tablet without search: tappable category list that
+            // pushes a detail route per category.
+            return _buildMobileCategoryList(theme, listPadding);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionList(
+    BuildContext context,
+    ThemeData theme, {
+    required ScrollController controller,
+    required EdgeInsets padding,
+    Set<String>? restrictToIds,
+    bool showSearchField = true,
+  }) {
+    return ListView(
+      key: const ValueKey('settings_sections_list'),
+      controller: controller,
+      padding: padding,
+      children: [
+        if (showSearchField) ...[
+          _buildSettingsSearchField(theme),
+          const SizedBox(height: 16),
+        ],
                 _wrapCategorySection(
                   'ai',
                   SettingsSectionCard(
@@ -1510,6 +1576,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   ),
+                  restrictToIds: restrictToIds,
                 ),
                 _wrapCategorySection(
                   'triage',
@@ -1565,6 +1632,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   ),
+                  restrictToIds: restrictToIds,
                 ),
                 _wrapCategorySection(
                   'health',
@@ -1619,6 +1687,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   ),
+                  restrictToIds: restrictToIds,
                 ),
                 _wrapCategorySection(
                   'security',
@@ -1670,6 +1739,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   ),
+                  restrictToIds: restrictToIds,
                 ),
                 _wrapCategorySection(
                   'backup',
@@ -1902,6 +1972,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   ),
+                  restrictToIds: restrictToIds,
                 ),
                 _wrapCategorySection(
                   'support',
@@ -1965,44 +2036,114 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                   ),
+                  restrictToIds: restrictToIds,
                 ),
-                Text(
-                  'Hamma v1.0.0',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: _mutedColor,
-                    height: 1.4,
+        Text(
+          'Hamma v1.0.0',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: _mutedColor,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileCategoryList(ThemeData theme, EdgeInsets padding) {
+    return ListView(
+      key: const ValueKey('settings_mobile_category_list'),
+      controller: _settingsScrollController,
+      padding: padding,
+      children: [
+        _buildSettingsSearchField(theme),
+        const SizedBox(height: 16),
+        ..._categoryMeta.entries.map((entry) {
+          final id = entry.key;
+          final meta = entry.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Material(
+              color: AppColors.panel,
+              child: InkWell(
+                key: ValueKey('settings_mobile_category_$id'),
+                onTap: () => _openCategoryDetail(id),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 18,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(meta.icon, size: 20),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          meta.title.toUpperCase(),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right_rounded, size: 18),
+                    ],
                   ),
                 ),
-              ],
-            );
-            if (!showRail) {
-              return Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  child: list,
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  void _openCategoryDetail(String id) {
+    final meta = _categoryMeta[id];
+    if (meta == null) return;
+    final ctrl = ScrollController();
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            settings: RouteSettings(name: 'settings_category_detail/$id'),
+            builder: (routeContext) {
+              final routeTheme = Theme.of(routeContext);
+              final inset =
+                  MediaQuery.of(routeContext).viewInsets.bottom;
+              return Scaffold(
+                key: ValueKey('settings_category_detail_$id'),
+                appBar: AppBar(
+                  title: Text(meta.title.toUpperCase()),
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    onPressed: () => Navigator.of(routeContext).pop(),
+                  ),
                 ),
-              );
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildCategoriesRail(theme),
-                const VerticalDivider(width: 1, color: AppColors.border),
-                Expanded(
+                body: SafeArea(
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 800),
-                      child: list,
+                      child: _buildSectionList(
+                        routeContext,
+                        routeTheme,
+                        controller: ctrl,
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          12,
+                          16,
+                          inset + 24,
+                        ),
+                        restrictToIds: <String>{id},
+                        showSearchField: false,
+                      ),
                     ),
                   ),
                 ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
+              );
+            },
+          ),
+        )
+        .whenComplete(() => ctrl.dispose());
   }
 
   static const Map<String, ({String title, IconData icon, String search})>
@@ -2010,34 +2151,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'ai': (
       title: 'AI Configuration',
       icon: Icons.smart_toy_outlined,
+      // Search keywords cover both the category and every field label
+      // inside it, so search hits surface the matching category card.
       search:
-          'ai configuration provider openai gemini openrouter local model copilot key',
+          'ai configuration provider openai gemini openrouter local model '
+          'copilot key default provider openai key gemini key openrouter key '
+          'local endpoint local model',
     ),
     'triage': (
       title: 'AI Log Triage',
       icon: Icons.tune,
-      search: 'ai log triage cadence batch lines watch local',
+      search:
+          'ai log triage cadence batch lines watch local analyse every',
     ),
     'health': (
       title: 'Health Monitoring',
       icon: Icons.health_and_safety_outlined,
-      search: 'health monitoring background check interval uptime servers',
+      search:
+          'health monitoring background check interval uptime servers '
+          'enable background monitoring check interval minutes',
     ),
     'security': (
       title: 'Security',
       icon: Icons.lock_outline,
-      search: 'security app pin biometric lock vault master password',
+      search:
+          'security app pin biometric lock vault master password '
+          'set app pin remove app pin',
     ),
     'backup': (
       title: 'Backup & Restore',
       icon: Icons.cloud_sync_outlined,
       search:
-          'backup restore sftp webdav syncthing snippet cloud sync export import daily',
+          'backup restore sftp webdav syncthing snippet cloud sync export '
+          'import daily backup destination sftp host username port password '
+          'backup directory webdav url syncthing local path daily automatic '
+          'backup backup now restore cloud sync',
     ),
     'support': (
       title: 'Support',
       icon: Icons.support_agent_outlined,
-      search: 'support help center extensions vault contact feedback',
+      search:
+          'support help center extensions vault contact feedback',
     ),
   };
 
@@ -2050,11 +2204,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
         meta.search.contains(q);
   }
 
-  Widget _wrapCategorySection(String id, Widget card) {
+  Widget _wrapCategorySection(
+    String id,
+    Widget card, {
+    Set<String>? restrictToIds,
+  }) {
+    final visible = restrictToIds != null
+        ? restrictToIds.contains(id)
+        : _categoryMatchesQuery(id);
     return KeyedSubtree(
       key: _categoryKeys[id],
       child: Visibility(
-        visible: _categoryMatchesQuery(id),
+        visible: visible,
         maintainState: true,
         maintainAnimation: true,
         child: Padding(
