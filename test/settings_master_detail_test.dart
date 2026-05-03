@@ -235,6 +235,34 @@ void main() {
     );
   });
 
+  testWidgets(
+      'mobile: editing a field inside the pushed detail route surfaces the '
+      'sticky save bar so changes can be saved without going back',
+      (tester) async {
+    await setSurface(tester, const Size(420, 900));
+    await tester.pumpWidget(build());
+    await tester.pumpAndSettle(const Duration(milliseconds: 200));
+
+    await tester.tap(find.byKey(const ValueKey('settings_mobile_category_ai')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('settings_category_detail_ai')),
+        findsOneWidget);
+    // Save bar is initially hidden inside the detail route.
+    expect(find.byKey(const ValueKey('settings_sticky_save_bar')),
+        findsNothing);
+
+    final apiKeyField =
+        find.widgetWithText(TextFormField, 'OpenAI Key').first;
+    await tester.enterText(apiKeyField, 'sk-from-mobile-detail');
+    await tester.pump();
+
+    // After dirtying inside the pushed route the save bar must appear there.
+    expect(find.byKey(const ValueKey('settings_sticky_save_bar')),
+        findsOneWidget);
+    expect(find.text('SAVE'), findsOneWidget);
+  });
+
   testWidgets('mobile: search inside the category list filters cards inline',
       (tester) async {
     await setSurface(tester, const Size(420, 900));

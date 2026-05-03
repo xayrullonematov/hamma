@@ -123,6 +123,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isDirty = false;
   bool _loadingFromStorage = true;
 
+  // Notifies the mobile per-category detail route (pushed onto a separate
+  // Element subtree from this State) so its sticky save bar appears the
+  // moment the user dirties a field inside the pushed page.
+  final ValueNotifier<int> _saveBarTrigger = ValueNotifier<int>(0);
+  void _bumpSaveBar() => _saveBarTrigger.value++;
+
   final TextEditingController _settingsSearchController =
       TextEditingController();
   String _settingsSearchQuery = '';
@@ -140,6 +146,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _markDirty() {
     if (_loadingFromStorage || _isDirty || !mounted) return;
     setState(() => _isDirty = true);
+    _bumpSaveBar();
   }
 
   /// "Watch with AI" lines-per-batch cadence. Loaded from
@@ -353,6 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() {
       _isSaving = true;
+      _bumpSaveBar();
       _openRouterModel = resolvedOpenRouterModel;
     });
 
@@ -416,6 +424,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       setState(() {
         _isDirty = false;
+        _bumpSaveBar();
       });
     } catch (error) {
       if (!mounted) {
@@ -429,6 +438,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) {
         setState(() {
           _isSaving = false;
+          _bumpSaveBar();
         });
       }
     }
@@ -1256,6 +1266,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   setState(() {
                     _localEndpointController.text = e.endpoint;
                     _isDirty = true;
+                    _bumpSaveBar();
                   });
                 },
                 child: Container(
@@ -1353,54 +1364,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           tooltip: 'Back to servers',
         ),
       ),
-      bottomNavigationBar: (!_isDirty && !_isSaving) ? null : SafeArea(
-        top: false,
-        child: Container(
-          key: const ValueKey('settings_sticky_save_bar'),
-          decoration: const BoxDecoration(
-            color: AppColors.panel,
-            border: Border(
-              top: BorderSide(color: AppColors.border, width: 1),
-            ),
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _isSaving ? 'Saving…' : 'Unsaved changes',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: _mutedColor,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _isBusy ? null : _save,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 14,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                icon: _isSaving
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save_rounded, size: 16),
-                label: const Text('SAVE'),
-              ),
-            ],
-          ),
-        ),
-      ),
+      bottomNavigationBar: _buildStickySaveBar(theme),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -1615,6 +1579,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   _logTriageBatchSize =
                                       LogTriagePrefs.clampBatchSize(v.round());
                                   _isDirty = true;
+                                  _bumpSaveBar();
                                 }),
                         onChangeEnd: !_isLogTriageBatchSizeLoaded || _isBusy
                             ? null
@@ -1657,6 +1622,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   setState(() {
                                     _healthMonitoringEnabled = value;
                                     _isDirty = true;
+                                    _bumpSaveBar();
                                   });
                                 },
                         contentPadding: EdgeInsets.zero,
@@ -1680,6 +1646,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     setState(() {
                                       _healthCheckInterval = value.toInt();
                                       _isDirty = true;
+                                      _bumpSaveBar();
                                     });
                                   },
                         ),
@@ -1772,6 +1739,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (value != null) {
                             setState(() {
                               _isDirty = true;
+                              _bumpSaveBar();
                               _backupConfig = BackupConfig(
                                 destination: value,
                                 sftpHost: _backupConfig.sftpHost,
@@ -1869,6 +1837,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onChanged: (value) {
                           setState(() {
                             _isDirty = true;
+                            _bumpSaveBar();
                             _backupConfig = BackupConfig(
                               destination: _backupConfig.destination,
                               sftpHost: _backupConfig.sftpHost,
@@ -2098,6 +2067,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  // Sticky bottom bar exposing SAVE while there are unsaved AI-settings.
+  // Reused by both the main settings Scaffold and the mobile per-category
+  // detail route so edits made inside a pushed detail page don't leave the
+  // user without a save affordance until they navigate back.
+  Widget? _buildStickySaveBar(ThemeData theme) {
+    if (!_isDirty && !_isSaving) return null;
+    return SafeArea(
+      top: false,
+      child: Container(
+        key: const ValueKey('settings_sticky_save_bar'),
+        decoration: const BoxDecoration(
+          color: AppColors.panel,
+          border: Border(
+            top: BorderSide(color: AppColors.border, width: 1),
+          ),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _isSaving ? 'Saving…' : 'Unsaved changes',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: _mutedColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              onPressed: _isBusy ? null : _save,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+              ),
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_rounded, size: 16),
+              label: const Text('SAVE'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openCategoryDetail(String id) {
     final meta = _categoryMeta[id];
     if (meta == null) return;
@@ -2110,7 +2135,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               final routeTheme = Theme.of(routeContext);
               final inset =
                   MediaQuery.of(routeContext).viewInsets.bottom;
-              return Scaffold(
+              // AnimatedBuilder rebuilds on dirty/saving state changes so
+              // the save bar appears in the pushed route too.
+              return AnimatedBuilder(
+                animation: _saveBarTrigger,
+                builder: (innerCtx, _) => Scaffold(
                 key: ValueKey('settings_category_detail_$id'),
                 appBar: AppBar(
                   title: Text(meta.title.toUpperCase()),
@@ -2119,6 +2148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onPressed: () => Navigator.of(routeContext).pop(),
                   ),
                 ),
+                bottomNavigationBar: _buildStickySaveBar(routeTheme),
                 body: SafeArea(
                   child: Center(
                     child: ConstrainedBox(
@@ -2138,6 +2168,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ),
+                ),
                 ),
               );
             },
