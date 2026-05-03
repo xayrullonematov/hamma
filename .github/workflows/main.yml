@@ -5,6 +5,8 @@ on:
     branches: [ main ]
     tags:
       - 'v*'
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 # Allow the release job to publish GitHub Releases.
@@ -12,6 +14,52 @@ permissions:
   contents: write
 
 jobs:
+  # ─────────────────────────────────────────────────────────────
+  # Verify — runs `flutter analyze --fatal-warnings` and the full
+  # test suite on a 3-OS matrix (Linux, macOS, Windows). Every
+  # platform build job below blocks on this job, so a regression
+  # cannot ship a release artifact.
+  #
+  # Coverage is collected on each OS and uploaded as a workflow
+  # artifact (`coverage-<os>`) for later inspection. We deliberately
+  # skip third-party coverage services for now — the artifact is the
+  # source of truth.
+  # ─────────────────────────────────────────────────────────────
+  verify:
+    name: Verify (analyze + test)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.8'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze (fatal warnings)
+        run: flutter analyze --fatal-warnings
+
+      - name: Test (with coverage)
+        run: flutter test --coverage
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-${{ github.run_number }}
+          path: coverage/lcov.info
+          if-no-files-found: ignore
+
   # ─────────────────────────────────────────────────────────────
   # Android — APK (split per ABI)
   #
@@ -28,6 +76,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   build_android:
     name: Android APK
+    needs: [verify]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -62,12 +111,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos
-
-      - name: Test
-        run: flutter test
 
       # Decodes the keystore from a base64 secret and writes key.properties.
       # Skipped automatically (with a warning) when the secret is not set.
@@ -116,6 +159,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   build_linux:
     name: Linux AppImage
+    needs: [verify]
     runs-on: ubuntu-latest
     steps:
       - name: Install Linux build dependencies
@@ -159,9 +203,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos
 
       - name: Build Linux
         run: |
@@ -250,6 +291,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   build_windows:
     name: Windows Installer
+    needs: [verify]
     runs-on: windows-latest
     steps:
       - name: Checkout repo
@@ -284,9 +326,6 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze --no-fatal-infos
 
       - name: Build Windows
         run: flutter build windows --release --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }}

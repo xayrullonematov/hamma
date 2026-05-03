@@ -32,6 +32,7 @@
 <!-- ━━━━━━━━━━━━━━━━━━━━ STATUS BADGES ROW ━━━━━━━━━━━━━━━━━━━━ -->
 
 <p>
+  <a href="https://github.com/hamma/hamma/actions/workflows/main.yml"><img src="https://github.com/hamma/hamma/actions/workflows/main.yml/badge.svg?branch=main" alt="CI"/></a>
   <img src="https://img.shields.io/badge/STATUS-BETA--RC-00FF88?style=for-the-badge&labelColor=000000&logo=statuspage&logoColor=00FF88" alt="Status"/>
   <img src="https://img.shields.io/badge/VERSION-1.0.0-FFFFFF?style=for-the-badge&labelColor=000000&logo=semver&logoColor=FFFFFF" alt="Version"/>
   <img src="https://img.shields.io/badge/LICENSE-PROPRIETARY-FF0000?style=for-the-badge&labelColor=000000&logo=gnubash&logoColor=FF0000" alt="License"/>
