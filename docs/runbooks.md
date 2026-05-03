@@ -23,19 +23,37 @@ copies it into your personal list.
 
 ## Step types
 
-| `type`         | Purpose                                                 |
-| -------------- | ------------------------------------------------------- |
-| `command`      | Execute bash on the active SSH session.                 |
-| `promptUser`   | Pause and ask the operator for a value at runtime.      |
-| `waitFor`      | `time` (sleep), `regex` (match prior output), `manual`. |
-| `aiSummarize`  | Run prior output through the configured AI for digest.  |
-| `notify`       | Surface a toast / system notification.                  |
+The on-disk JSON discriminator (`type` field) is **hyphenated**. The Dart
+camelCase enum names are also accepted on read for back-compat with any
+existing saved blob; new writes always use the hyphenated form.
+
+| `type`          | Purpose                                                 |
+| --------------- | ------------------------------------------------------- |
+| `command`       | Execute bash on the active SSH session.                 |
+| `prompt-user`   | Pause and ask the operator for a value at runtime.      |
+| `wait-for`      | `time` (sleep), `regex` (match prior output), `manual`. |
+| `branch`        | Regex-gated `if/else` jump to another step id.          |
+| `ai-summarize`  | Run prior output through the configured AI for digest.  |
+| `notify`        | Surface a toast / system notification.                  |
 
 Every step also supports:
 
 - `continueOnError` — keep running even if this step fails.
 - `skipIfRegex` + `skipIfReferenceStepId` — conditional skip when a previous
   step's stdout matches a pattern.
+
+### `branch` step
+
+A `branch` step evaluates `branchRegex` (multiline) against the stdout of
+`branchReferenceStepId` (or the previous step if unset). On a match the
+runner jumps to the step whose id matches `branchTrueGoToStepId`; otherwise
+it jumps to `branchFalseGoToStepId`. Either target may be omitted to mean
+"fall through to the next step" — that's how you write a one-armed `if`.
+
+Jump targets may point forward (skip ahead) or backward (loop). To keep
+runaway loops loud rather than silent, the runner caps total step
+executions at `steps.length * 8` and aborts the run with `cancelled` if the
+ceiling is hit.
 
 ## Templating
 
@@ -73,10 +91,18 @@ network boundary the same way the rest of the AI Assistant does.
 
 ## Cancellation semantics
 
-The runner uses the blocking `SshService.execute` API for V1 simplicity. When
-**STOP** is tapped, the current command finishes locally and all subsequent
-steps are skipped with status `cancelled`. A future iteration will switch to
-`streamCommand` for true mid-flight termination.
+The runner exposes a `RunbookCancellation` token with two surfaces:
+
+- A polled `isCancelled` flag the main loop checks between steps.
+- An `onCancel(VoidCallback)` listener API the SSH adapter uses to register
+  a teardown callback.
+
+The dashboard's run-screen wires every command through `streamCommand`,
+which returns an `SSHSession` we can `close()`. Pressing **STOP** flips the
+flag *and* fires every registered listener, which terminates the in-flight
+SSH session immediately rather than waiting for the remote command to
+drain. The cancelled command is reported as status `cancelled` (not
+`failed`), and all later steps are skipped with the same status.
 
 ## Sync ride-along
 

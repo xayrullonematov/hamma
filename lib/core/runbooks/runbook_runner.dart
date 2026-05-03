@@ -112,16 +112,62 @@ class RunbookFinished extends RunbookEvent {
 /// Cooperative cancellation token. Read by [RunbookRunner] between
 /// steps; `cancel()` may be invoked from the UI's STOP button.
 ///
-/// Note on semantics: the runner currently waits for the in-flight
-/// command to finish before honouring cancellation (it uses the
-/// blocking `SshService.execute` API). All subsequent steps are
-/// then skipped with [RunbookStepStatus.cancelled]. This matches
-/// the documented behaviour in `docs/runbooks.md`.
+/// In addition to the polled `isCancelled` flag the token exposes
+/// [onCancel] so the SSH adapter (or any other long-running
+/// resource holder) can register a teardown callback. When STOP is
+/// pressed the runner fires every registered callback before
+/// returning, which is what kills the in-flight SSH session
+/// cleanly rather than waiting for the remote command to drain.
 class RunbookCancellation {
   bool _cancelled = false;
   bool get isCancelled => _cancelled;
-  void cancel() => _cancelled = true;
+
+  final List<void Function()> _listeners = [];
+
+  /// Register a callback to fire as soon as [cancel] is called. If
+  /// [cancel] has already fired the callback runs immediately.
+  void onCancel(void Function() listener) {
+    if (_cancelled) {
+      try {
+        listener();
+      } catch (_) {/* listener errors must not break the runner */}
+      return;
+    }
+    _listeners.add(listener);
+  }
+
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    final snapshot = List<void Function()>.from(_listeners);
+    _listeners.clear();
+    for (final cb in snapshot) {
+      try {
+        cb();
+      } catch (_) {/* ignore */}
+    }
+  }
 }
+
+/// Thrown by an [RunbookCommandExecutor] to signal the in-flight
+/// command was killed because the user pressed STOP. The runner
+/// maps this to [RunbookStepStatus.cancelled] without surfacing it
+/// as an error.
+class RunbookCommandCancelled implements Exception {
+  const RunbookCommandCancelled();
+  @override
+  String toString() => 'RunbookCommandCancelled';
+}
+
+/// Function signature the runner uses to execute a command. The
+/// second argument is the runner's [RunbookCancellation] so the
+/// adapter can register a teardown callback (see
+/// [RunbookCancellation.onCancel]) and kill any underlying SSH
+/// session immediately when the user presses STOP.
+typedef RunbookCommandExecutor = Future<String> Function(
+  String command,
+  RunbookCancellation cancellation,
+);
 
 /// Callback the UI installs to confirm risk-gated commands. Return
 /// `true` to proceed, `false` to abort the runbook.
@@ -179,9 +225,10 @@ class RunbookRunner {
   final Map<String, String> params;
 
   /// Executes the command on a real (or fake) SSH session and
-  /// returns its stdout. Defaults to `SshService.execute` in
-  /// production; tests inject a fake.
-  final Future<String> Function(String command) executeCommand;
+  /// returns its stdout. The second argument is the runner's
+  /// cancellation token: the adapter is expected to register an
+  /// `onCancel` listener so STOP can kill the in-flight session.
+  final RunbookCommandExecutor executeCommand;
 
   /// AI configuration used by `aiSummarize` steps. Optional — if
   /// absent the steps are skipped with a placeholder summary.
@@ -222,8 +269,28 @@ class RunbookRunner {
 
     bool cancelled = false;
 
-    for (var i = 0; i < runbook.steps.length; i++) {
-      final step = runbook.steps[i];
+    // The runner walks an instruction pointer rather than a plain
+    // for-loop because `branch` steps can jump forward or backward.
+    // We cap at `steps.length * 8` total step executions so a
+    // pathological runbook (e.g. an infinite loop branch) halts
+    // loudly with a cancellation rather than spinning forever.
+    int ip = 0;
+    int execCount = 0;
+    final maxExec = runbook.steps.length * 8;
+
+    while (ip < runbook.steps.length) {
+      if (execCount++ >= maxExec) {
+        cancelled = true;
+        results.add(_skipResult(
+          runbook.steps[ip],
+          status: RunbookStepStatus.cancelled,
+          summary: 'Aborted: branch loop exceeded $maxExec executions.',
+        ));
+        _events.add(StepFinished(results.last, ip));
+        break;
+      }
+
+      final step = runbook.steps[ip];
 
       if (cancellation.isCancelled || cancelled) {
         cancelled = true;
@@ -232,11 +299,12 @@ class RunbookRunner {
           status: RunbookStepStatus.cancelled,
           summary: 'Run was cancelled before this step.',
         ));
-        _events.add(StepFinished(results.last, i));
+        _events.add(StepFinished(results.last, ip));
+        ip++;
         continue;
       }
 
-      _events.add(StepStarted(step, i));
+      _events.add(StepStarted(step, ip));
 
       // Conditional skip — applies regardless of step type.
       if (_shouldSkip(step)) {
@@ -245,25 +313,33 @@ class RunbookRunner {
           status: RunbookStepStatus.skipped,
           summary: 'Skipped: skipIfRegex matched referenced output.',
         ));
-        _events.add(StepFinished(results.last, i));
+        _events.add(StepFinished(results.last, ip));
+        ip++;
         continue;
       }
 
       final stepStartedAt = DateTime.now().toUtc();
+      int? jumpToIndex;
       try {
-        final result = await _runStep(
+        final outcome = await _runStep(
           step,
           paramValues,
           stepStartedAt,
         );
-        results.add(result);
-        _events.add(StepFinished(result, i));
+        results.add(outcome.result);
+        _events.add(StepFinished(outcome.result, ip));
+        if (outcome.jumpToStepId != null) {
+          final idx = runbook.steps
+              .indexWhere((s) => s.id == outcome.jumpToStepId);
+          if (idx >= 0) jumpToIndex = idx;
+        }
         // continueOnError applies to BOTH `failed` and `cancelled`
         // (e.g. a risk-gate refusal). The hard STOP button (the
         // global cancellation token) bypasses this — it's checked
         // at the top of the next loop iteration regardless.
-        final softStop = result.status == RunbookStepStatus.failed ||
-            result.status == RunbookStepStatus.cancelled;
+        final softStop =
+            outcome.result.status == RunbookStepStatus.failed ||
+                outcome.result.status == RunbookStepStatus.cancelled;
         if (softStop && !step.continueOnError) {
           cancelled = true;
         }
@@ -279,9 +355,11 @@ class RunbookRunner {
           error: e.toString(),
         );
         results.add(r);
-        _events.add(StepFinished(r, i));
+        _events.add(StepFinished(r, ip));
         if (!step.continueOnError) cancelled = true;
       }
+
+      ip = jumpToIndex ?? (ip + 1);
     }
 
     // Final `cancelled` reflects ANY non-success exit path, not
@@ -315,23 +393,58 @@ class RunbookRunner {
     }
   }
 
-  Future<RunbookStepResult> _runStep(
+  Future<_StepOutcome> _runStep(
     RunbookStep step,
     Map<String, String> params,
     DateTime startedAt,
   ) async {
     switch (step.type) {
       case RunbookStepType.command:
-        return _runCommand(step, params, startedAt);
+        return _StepOutcome(await _runCommand(step, params, startedAt));
       case RunbookStepType.promptUser:
-        return _runPrompt(step, params, startedAt);
+        return _StepOutcome(await _runPrompt(step, params, startedAt));
       case RunbookStepType.waitFor:
-        return _runWait(step, startedAt);
+        return _StepOutcome(await _runWait(step, startedAt));
       case RunbookStepType.aiSummarize:
-        return _runAiSummarize(step, params, startedAt);
+        return _StepOutcome(await _runAiSummarize(step, params, startedAt));
       case RunbookStepType.notify:
-        return _runNotify(step, params, startedAt);
+        return _StepOutcome(await _runNotify(step, params, startedAt));
+      case RunbookStepType.branch:
+        return _runBranch(step, startedAt);
     }
+  }
+
+  _StepOutcome _runBranch(RunbookStep step, DateTime startedAt) {
+    final refId = step.branchReferenceStepId;
+    final source = refId == null
+        ? (_stepStdout.values.isEmpty ? '' : _stepStdout.values.last)
+        : (_stepStdout[refId] ?? '');
+    final pattern = step.branchRegex ?? '';
+    bool matched;
+    String? error;
+    try {
+      matched = RegExp(pattern, multiLine: true).hasMatch(source);
+    } catch (e) {
+      matched = false;
+      error = 'branchRegex did not compile: $e';
+    }
+    final target =
+        matched ? step.branchTrueGoToStepId : step.branchFalseGoToStepId;
+    return _StepOutcome(
+      RunbookStepResult(
+        step: step,
+        status: error != null
+            ? RunbookStepStatus.failed
+            : RunbookStepStatus.succeeded,
+        startedAt: startedAt,
+        finishedAt: DateTime.now().toUtc(),
+        summary: error ??
+            'Branch ${matched ? "matched" : "did not match"}; '
+                '${target == null ? "fell through" : "jumped to $target"}.',
+        error: error,
+      ),
+      jumpToStepId: target,
+    );
   }
 
   Future<RunbookStepResult> _runCommand(
@@ -366,7 +479,8 @@ class RunbookRunner {
       final timeout = step.timeoutSeconds != null
           ? Duration(seconds: step.timeoutSeconds!)
           : _defaultTimeout;
-      final stdout = await executeCommand(rendered).timeout(timeout);
+      final stdout =
+          await executeCommand(rendered, cancellation).timeout(timeout);
       _stepStdout[step.id] = stdout;
       _events.add(StepStdout(step, stdout));
       return RunbookStepResult(
@@ -375,6 +489,16 @@ class RunbookRunner {
         startedAt: startedAt,
         finishedAt: DateTime.now().toUtc(),
         stdout: stdout,
+      );
+    } on RunbookCommandCancelled {
+      // STOP button reached the SSH adapter and killed the session
+      // cleanly. Surface as cancelled, not failed.
+      return RunbookStepResult(
+        step: step,
+        status: RunbookStepStatus.cancelled,
+        startedAt: startedAt,
+        finishedAt: DateTime.now().toUtc(),
+        summary: 'Command cancelled by STOP.',
       );
     } on TimeoutException {
       return RunbookStepResult(
@@ -385,6 +509,18 @@ class RunbookRunner {
         error: 'Command exceeded timeout.',
       );
     } catch (e) {
+      // If the user pressed STOP mid-command and the SSH session
+      // surfaced the close as a generic error, treat it as
+      // cancelled rather than a real failure.
+      if (cancellation.isCancelled) {
+        return RunbookStepResult(
+          step: step,
+          status: RunbookStepStatus.cancelled,
+          startedAt: startedAt,
+          finishedAt: DateTime.now().toUtc(),
+          summary: 'Command cancelled by STOP.',
+        );
+      }
       return RunbookStepResult(
         step: step,
         status: RunbookStepStatus.failed,
@@ -575,6 +711,14 @@ class RunbookRunner {
   Map<String, String> get debugStepStdout => Map.unmodifiable(_stepStdout);
 }
 
+/// Internal helper: a step's [RunbookStepResult] plus an optional
+/// jump target id (only branch steps use this).
+class _StepOutcome {
+  _StepOutcome(this.result, {this.jumpToStepId});
+  final RunbookStepResult result;
+  final String? jumpToStepId;
+}
+
 /// Replace `{{paramName}}` with the matching param value and
 /// `{{step.id.stdout}}` with the captured stdout from a previous
 /// step. Unknown tokens are left intact (the runner treats this as a
@@ -632,7 +776,7 @@ String encodeRunResult(RunbookRunResult result) {
           (r) => {
             'stepId': r.step.id,
             'label': r.step.label,
-            'type': r.step.type.name,
+            'type': r.step.type.wireName,
             'status': r.status.name,
             'durationMs': r.duration.inMilliseconds,
             if (r.stdout.isNotEmpty) 'stdout': r.stdout,

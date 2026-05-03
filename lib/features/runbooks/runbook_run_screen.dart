@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/ai/command_risk_assessor.dart';
@@ -129,7 +131,7 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     final runner = RunbookRunner(
       runbook: widget.runbook,
       params: _params,
-      executeCommand: widget.sshService.execute,
+      executeCommand: _executeWithCancel,
       aiSettings: widget.aiSettings,
       confirmRiskGate: _confirmRiskGate,
       promptUser: _promptUser,
@@ -148,6 +150,44 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
 
   void _stop() {
     _runner?.cancellation.cancel();
+  }
+
+  /// Runs a single command via [SshService.streamCommand] (which
+  /// returns an [SSHSession] we can `close()`), and registers an
+  /// `onCancel` listener with the runner's cancellation token so
+  /// pressing STOP terminates the in-flight session immediately —
+  /// not just the next-step gate. Returns combined stdout+stderr.
+  Future<String> _executeWithCancel(
+    String command,
+    RunbookCancellation cancellation,
+  ) async {
+    final session = await widget.sshService.streamCommand(command);
+
+    // Wire STOP -> kill this session. The listener fires
+    // immediately if STOP was already pressed before the session
+    // came up.
+    cancellation.onCancel(() {
+      try {
+        session.close();
+      } catch (_) {/* already closed */}
+    });
+
+    final stdoutBuf = <int>[];
+    final stderrBuf = <int>[];
+    final stdoutSub = session.stdout.listen(stdoutBuf.addAll);
+    final stderrSub = session.stderr.listen(stderrBuf.addAll);
+
+    try {
+      await session.done;
+    } finally {
+      await stdoutSub.cancel();
+      await stderrSub.cancel();
+    }
+
+    if (cancellation.isCancelled) {
+      throw const RunbookCommandCancelled();
+    }
+    return utf8.decode([...stdoutBuf, ...stderrBuf], allowMalformed: true);
   }
 
   Future<bool> _confirmRiskGate(

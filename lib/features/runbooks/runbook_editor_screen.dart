@@ -228,7 +228,7 @@ class _RunbookEditorScreenState extends State<RunbookEditorScreen> {
                 OutlinedButton.icon(
                   onPressed: () => _addStep(t),
                   icon: const Icon(Icons.add_rounded, size: 14),
-                  label: Text('ADD ${t.name.toUpperCase()}'),
+                  label: Text('ADD ${t.wireName.toUpperCase()}'),
                 ),
             ],
           ),
@@ -404,7 +404,7 @@ class _StepCard extends StatelessWidget {
                   border: Border.all(color: AppColors.accent),
                 ),
                 child: Text(
-                  step.type.name.toUpperCase(),
+                  step.type.wireName.toUpperCase(),
                   style: const TextStyle(
                     color: AppColors.accent,
                     fontFamily: AppColors.monoFamily,
@@ -556,6 +556,38 @@ class _StepCard extends StatelessWidget {
             maxLines: 2,
             decoration: const InputDecoration(labelText: 'notifyMessage'),
             onChanged: (v) => on(s.copyWith(notifyMessage: v)),
+          ),
+        ];
+      case RunbookStepType.branch:
+        return [
+          TextFormField(
+            initialValue: s.branchRegex,
+            decoration: const InputDecoration(
+              labelText: 'branchRegex',
+              hintText: 'regex evaluated against the referenced step output',
+            ),
+            onChanged: (v) => on(s.copyWith(branchRegex: v)),
+          ),
+          TextFormField(
+            initialValue: s.branchReferenceStepId,
+            decoration: const InputDecoration(
+              labelText: 'branchReferenceStepId (default: previous step)',
+            ),
+            onChanged: (v) => on(s.copyWith(branchReferenceStepId: v)),
+          ),
+          TextFormField(
+            initialValue: s.branchTrueGoToStepId,
+            decoration: const InputDecoration(
+              labelText: 'branchTrueGoToStepId (jump on match)',
+            ),
+            onChanged: (v) => on(s.copyWith(branchTrueGoToStepId: v)),
+          ),
+          TextFormField(
+            initialValue: s.branchFalseGoToStepId,
+            decoration: const InputDecoration(
+              labelText: 'branchFalseGoToStepId (jump on no match)',
+            ),
+            onChanged: (v) => on(s.copyWith(branchFalseGoToStepId: v)),
           ),
         ];
     }

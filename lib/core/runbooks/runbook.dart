@@ -5,15 +5,24 @@ import 'package:meta/meta.dart';
 /// drafted runbooks fail loudly on unknown values instead of silently
 /// being treated as a no-op.
 enum RunbookStepType {
-  command,
-  promptUser,
-  waitFor,
-  aiSummarize,
-  notify;
+  command('command'),
+  promptUser('prompt-user'),
+  waitFor('wait-for'),
+  branch('branch'),
+  aiSummarize('ai-summarize'),
+  notify('notify');
+
+  const RunbookStepType(this.wireName);
+
+  /// Canonical hyphenated discriminator written to (and read from)
+  /// the runbook JSON. The Dart enum name (camelCase) is also
+  /// accepted for back-compat with already-saved blobs from earlier
+  /// builds and for AI drafts that prefer the camelCase form.
+  final String wireName;
 
   static RunbookStepType? tryParse(String raw) {
     for (final v in RunbookStepType.values) {
-      if (v.name == raw) return v;
+      if (v.wireName == raw || v.name == raw) return v;
     }
     return null;
   }
@@ -75,6 +84,10 @@ class RunbookStep {
     this.aiPrompt,
     this.aiReferenceStepId,
     this.notifyMessage,
+    this.branchRegex,
+    this.branchReferenceStepId,
+    this.branchTrueGoToStepId,
+    this.branchFalseGoToStepId,
   });
 
   final String id;
@@ -108,6 +121,17 @@ class RunbookStep {
   // notify
   final String? notifyMessage;
 
+  // branch — evaluates [branchRegex] (multiline) against the stdout
+  // of [branchReferenceStepId] (or the previous step if unset). On
+  // match the runner jumps to [branchTrueGoToStepId]; otherwise it
+  // jumps to [branchFalseGoToStepId]. A null target falls through
+  // to the next step in the list, so a one-armed `if` is a single
+  // jump target with the other left null.
+  final String? branchRegex;
+  final String? branchReferenceStepId;
+  final String? branchTrueGoToStepId;
+  final String? branchFalseGoToStepId;
+
   RunbookStep copyWith({
     String? id,
     String? label,
@@ -127,6 +151,10 @@ class RunbookStep {
     String? aiPrompt,
     String? aiReferenceStepId,
     String? notifyMessage,
+    String? branchRegex,
+    String? branchReferenceStepId,
+    String? branchTrueGoToStepId,
+    String? branchFalseGoToStepId,
   }) {
     return RunbookStep(
       id: id ?? this.id,
@@ -148,6 +176,13 @@ class RunbookStep {
       aiPrompt: aiPrompt ?? this.aiPrompt,
       aiReferenceStepId: aiReferenceStepId ?? this.aiReferenceStepId,
       notifyMessage: notifyMessage ?? this.notifyMessage,
+      branchRegex: branchRegex ?? this.branchRegex,
+      branchReferenceStepId:
+          branchReferenceStepId ?? this.branchReferenceStepId,
+      branchTrueGoToStepId:
+          branchTrueGoToStepId ?? this.branchTrueGoToStepId,
+      branchFalseGoToStepId:
+          branchFalseGoToStepId ?? this.branchFalseGoToStepId,
     );
   }
 
@@ -155,7 +190,7 @@ class RunbookStep {
     final out = <String, dynamic>{
       'id': id,
       'label': label,
-      'type': type.name,
+      'type': type.wireName,
       'continueOnError': continueOnError,
     };
     void put(String k, Object? v) {
@@ -177,6 +212,10 @@ class RunbookStep {
     put('aiPrompt', aiPrompt);
     put('aiReferenceStepId', aiReferenceStepId);
     put('notifyMessage', notifyMessage);
+    put('branchRegex', branchRegex);
+    put('branchReferenceStepId', branchReferenceStepId);
+    put('branchTrueGoToStepId', branchTrueGoToStepId);
+    put('branchFalseGoToStepId', branchFalseGoToStepId);
     return out;
   }
 
@@ -208,6 +247,10 @@ class RunbookStep {
       aiPrompt: json['aiPrompt']?.toString(),
       aiReferenceStepId: json['aiReferenceStepId']?.toString(),
       notifyMessage: json['notifyMessage']?.toString(),
+      branchRegex: json['branchRegex']?.toString(),
+      branchReferenceStepId: json['branchReferenceStepId']?.toString(),
+      branchTrueGoToStepId: json['branchTrueGoToStepId']?.toString(),
+      branchFalseGoToStepId: json['branchFalseGoToStepId']?.toString(),
     );
   }
 
@@ -411,6 +454,25 @@ class Runbook {
             problems.add('$tag: notify step needs notifyMessage.');
           }
           break;
+        case RunbookStepType.branch:
+          final bre = s.branchRegex ?? '';
+          if (bre.isEmpty) {
+            problems.add('$tag: branch step needs branchRegex.');
+          } else {
+            try {
+              RegExp(bre);
+            } catch (_) {
+              problems.add('$tag: branchRegex is not a valid regex.');
+            }
+          }
+          if ((s.branchTrueGoToStepId ?? '').isEmpty &&
+              (s.branchFalseGoToStepId ?? '').isEmpty) {
+            problems.add(
+              '$tag: branch needs branchTrueGoToStepId or '
+              'branchFalseGoToStepId (otherwise the branch is a no-op).',
+            );
+          }
+          break;
       }
 
       if (s.skipIfRegex != null) {
@@ -440,6 +502,23 @@ class Runbook {
       checkRef(s.skipIfReferenceStepId, 'skipIfReferenceStepId');
       checkRef(s.waitReferenceStepId, 'waitReferenceStepId');
       checkRef(s.aiReferenceStepId, 'aiReferenceStepId');
+      checkRef(s.branchReferenceStepId, 'branchReferenceStepId');
+
+      // Branch jump targets may point FORWARD as well as backward
+      // (an if/else can skip ahead) so they only need to refer to
+      // some real step id anywhere in the runbook.
+      final allIds = steps.map((e) => e.id).toSet();
+      void checkJump(String? id, String fieldName) {
+        if (id == null || id.isEmpty) return;
+        if (!allIds.contains(id)) {
+          problems.add(
+            '$tag: $fieldName "$id" does not match any step id in this runbook.',
+          );
+        }
+      }
+
+      checkJump(s.branchTrueGoToStepId, 'branchTrueGoToStepId');
+      checkJump(s.branchFalseGoToStepId, 'branchFalseGoToStepId');
     }
 
     return problems;

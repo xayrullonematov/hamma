@@ -7,7 +7,7 @@ class _FakeSsh {
   final Map<String, String> responses;
   final List<String> calls = [];
 
-  Future<String> execute(String command) async {
+  Future<String> execute(String command, RunbookCancellation _) async {
     calls.add(command);
     if (responses.containsKey(command)) return responses[command]!;
     return '';
@@ -152,7 +152,7 @@ void main() {
       final runner = RunbookRunner(
         runbook: rb,
         params: const {},
-        executeCommand: (_) async => throw StateError('boom'),
+        executeCommand: (_, __) async => throw StateError('boom'),
       );
       final result = await runner.run();
       expect(result.results[0].status, RunbookStepStatus.failed);
@@ -199,7 +199,7 @@ void main() {
         () => RunbookRunner(
           runbook: rb,
           params: const {},
-          executeCommand: (_) async => '',
+          executeCommand: (_, __) async => '',
         ),
         throwsA(isA<RunbookSchemaException>()),
       );
@@ -243,6 +243,130 @@ void main() {
       expect(result.results.last.summary, 'ALL CLEAR');
     });
 
+    test('branch step jumps to true target on regex match', () async {
+      final ssh = _FakeSsh({'check': 'STATUS=ok healthy'});
+      final rb = Runbook(
+        id: 'rb',
+        name: 'Branch',
+        steps: const [
+          RunbookStep(
+            id: 'check',
+            label: 'check',
+            type: RunbookStepType.command,
+            command: 'check',
+          ),
+          RunbookStep(
+            id: 'gate',
+            label: 'gate',
+            type: RunbookStepType.branch,
+            branchRegex: r'STATUS=ok',
+            branchReferenceStepId: 'check',
+            branchTrueGoToStepId: 'finish',
+          ),
+          RunbookStep(
+            id: 'recover',
+            label: 'recover',
+            type: RunbookStepType.command,
+            command: 'recover',
+          ),
+          RunbookStep(
+            id: 'finish',
+            label: 'finish',
+            type: RunbookStepType.notify,
+            notifyMessage: 'done',
+          ),
+        ],
+      );
+      final runner = RunbookRunner(
+        runbook: rb,
+        params: const {},
+        executeCommand: ssh.execute,
+      );
+      final result = await runner.run();
+      // recover must be SKIPPED entirely (never executed because we
+      // jumped over it).
+      expect(ssh.calls, ['check']);
+      expect(
+        result.results.map((r) => r.step.id),
+        ['check', 'gate', 'finish'],
+      );
+      expect(result.results.last.status, RunbookStepStatus.succeeded);
+    });
+
+    test('JSON round-trip uses hyphenated step type discriminators', () {
+      final rb = Runbook(
+        id: 'rb',
+        name: 'Wire',
+        steps: const [
+          RunbookStep(
+            id: 'a',
+            label: 'a',
+            type: RunbookStepType.promptUser,
+            paramName: 'x',
+            question: 'X?',
+          ),
+          RunbookStep(
+            id: 'b',
+            label: 'b',
+            type: RunbookStepType.waitFor,
+            waitMode: 'time',
+            waitSeconds: 1,
+          ),
+          RunbookStep(
+            id: 'c',
+            label: 'c',
+            type: RunbookStepType.aiSummarize,
+            aiPrompt: 'tldr',
+          ),
+          RunbookStep(
+            id: 'd',
+            label: 'd',
+            type: RunbookStepType.branch,
+            branchRegex: 'ok',
+            branchTrueGoToStepId: 'a',
+          ),
+        ],
+      );
+      final json = rb.toJson();
+      final stepTypes = (json['steps'] as List)
+          .map((s) => (s as Map)['type'] as String)
+          .toList();
+      expect(
+        stepTypes,
+        ['prompt-user', 'wait-for', 'ai-summarize', 'branch'],
+      );
+      // Round-trip back through the parser, including a back-compat
+      // entry that uses the old camelCase name.
+      final mutated = Map<String, dynamic>.from(json);
+      final mutatedSteps = (mutated['steps'] as List)
+          .map((s) => Map<String, dynamic>.from(s as Map))
+          .toList();
+      mutatedSteps[0]['type'] = 'promptUser'; // legacy name
+      mutated['steps'] = mutatedSteps;
+      final parsed = Runbook.fromJson(mutated);
+      expect(parsed.steps.map((s) => s.type), [
+        RunbookStepType.promptUser,
+        RunbookStepType.waitFor,
+        RunbookStepType.aiSummarize,
+        RunbookStepType.branch,
+      ]);
+    });
+
+    test('cancellation onCancel listener fires when STOP is pressed',
+        () async {
+      final cancel = RunbookCancellation();
+      var fired = 0;
+      cancel.onCancel(() => fired++);
+      cancel.onCancel(() => fired++);
+      cancel.cancel();
+      cancel.cancel(); // idempotent
+      expect(cancel.isCancelled, isTrue);
+      expect(fired, 2);
+      // listener registered AFTER cancel still fires immediately
+      cancel.onCancel(() => fired++);
+      expect(fired, 3);
+    });
+
     test('cancellation between steps marks subsequent steps cancelled',
         () async {
       final ssh = _FakeSsh({'a': 'one', 'b': 'two'});
@@ -266,9 +390,9 @@ void main() {
       runner = RunbookRunner(
         runbook: rb,
         params: const {},
-        executeCommand: (cmd) async {
+        executeCommand: (cmd, cancel) async {
           if (cmd == 'a') runner.cancellation.cancel();
-          return ssh.execute(cmd);
+          return ssh.execute(cmd, cancel);
         },
       );
       final result = await runner.run();
