@@ -18,6 +18,7 @@ class AppPrefsStorage {
   static const _localAiOnboardingSeenKey = 'local_ai_onboarding_seen';
   static const _sidebarCollapsedKey = 'dashboard_sidebar_collapsed';
   static const _sidebarWidthKey = 'dashboard_sidebar_width';
+  static const _copilotDockTipSeenKey = 'copilot_dock_tip_seen';
 
   /// Sensible bounds for the dashboard sidebar drag-to-resize handle.
   /// Anything tighter than [sidebarMinWidth] crowds the labels; wider
@@ -162,5 +163,18 @@ class AppPrefsStorage {
       key: _sidebarWidthKey,
       value: clamped.toString(),
     );
+  }
+
+  /// Whether the user has already seen (or dismissed) the one-time
+  /// onboarding tip shown the first time the AI Copilot opens in its
+  /// docked desktop layout. Used by the dashboard to surface a coach
+  /// mark pointing at the sidebar toggle and close button.
+  Future<bool> isCopilotDockTipSeen() async {
+    final value = await _secureStorage.read(key: _copilotDockTipSeenKey);
+    return value == 'true';
+  }
+
+  Future<void> setCopilotDockTipSeen() async {
+    await _secureStorage.write(key: _copilotDockTipSeenKey, value: 'true');
   }
 }

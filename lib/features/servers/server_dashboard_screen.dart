@@ -74,6 +74,10 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   double? _sidebarWidthPref;
   // Transient width during an active drag; persisted only on drag end.
   double? _draggingSidebarWidth;
+  // One-time onboarding tip shown the first time the docked copilot
+  // appears on desktop. Default to `true` (suppressed) until the
+  // persisted value loads, so we never flash the tip for repeat users.
+  bool _copilotDockTipSeen = true;
   List<HammaPlugin> _enabledPlugins = const [];
   final Map<String, Future<HammaApi>> _pluginApis = {};
   final CopilotDockController _copilotDock = CopilotDockController();
@@ -110,6 +114,10 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     _appPrefs.getSidebarWidth().then((value) {
       if (!mounted) return;
       setState(() => _sidebarWidthPref = value);
+    });
+    _appPrefs.isCopilotDockTipSeen().then((seen) {
+      if (!mounted) return;
+      setState(() => _copilotDockTipSeen = seen);
     });
 
     if (_sshService.currentStatus.isDisconnected ||
@@ -500,6 +508,12 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         ],
       ),
     );
+  }
+
+  void _dismissCopilotDockTip() {
+    if (_copilotDockTipSeen) return;
+    setState(() => _copilotDockTipSeen = true);
+    _appPrefs.setCopilotDockTipSeen();
   }
 
   /// Opens the Copilot from the sidebar — docks at desktop widths,
@@ -893,6 +907,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                           contentKey: req.key,
                           builder: req.builder,
                           onClose: _copilotDock.close,
+                          showOnboardingTip: !_copilotDockTipSeen,
+                          onDismissTip: _dismissCopilotDockTip,
                         );
                       },
                     ),
@@ -1338,12 +1354,16 @@ class _DockedCopilotPane extends StatelessWidget {
     required this.contentKey,
     required this.builder,
     required this.onClose,
+    this.showOnboardingTip = false,
+    this.onDismissTip,
   });
 
   final String title;
   final Key contentKey;
   final WidgetBuilder builder;
   final VoidCallback onClose;
+  final bool showOnboardingTip;
+  final VoidCallback? onDismissTip;
 
   @override
   Widget build(BuildContext context) {
@@ -1355,49 +1375,188 @@ class _DockedCopilotPane extends StatelessWidget {
           left: BorderSide(color: AppColors.border, width: 1),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-            decoration: const BoxDecoration(
-              color: AppColors.panel,
-              border: Border(
-                bottom: BorderSide(color: AppColors.border, width: 1),
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 11,
-                      letterSpacing: 1.4,
-                      fontWeight: FontWeight.w700,
-                      fontFamily: AppColors.monoFamily,
-                      fontFamilyFallback: AppColors.monoFallback,
-                    ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+                decoration: const BoxDecoration(
+                  color: AppColors.panel,
+                  border: Border(
+                    bottom: BorderSide(color: AppColors.border, width: 1),
                   ),
                 ),
-                IconButton(
-                  onPressed: onClose,
-                  icon: const Icon(Icons.close, size: 16),
-                  tooltip: 'Close copilot',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 11,
+                          letterSpacing: 1.4,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: AppColors.monoFamily,
+                          fontFamilyFallback: AppColors.monoFallback,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: onClose,
+                      icon: const Icon(Icons.close, size: 16),
+                      tooltip: 'Close copilot',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: KeyedSubtree(key: contentKey, child: builder(context)),
+              ),
+            ],
+          ),
+          if (showOnboardingTip)
+            Positioned(
+              top: 44,
+              right: 12,
+              left: 12,
+              child: _CopilotDockOnboardingTip(
+                onDismiss: onDismissTip ?? () {},
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One-time coach mark surfaced the first time the AI Copilot opens
+/// in its docked desktop layout. Points users at the new sidebar
+/// toggle and the close button so they can find both later. Mobile
+/// and tablet still use the modal bottom sheet, so this never shows
+/// there.
+class _CopilotDockOnboardingTip extends StatelessWidget {
+  const _CopilotDockOnboardingTip({required this.onDismiss});
+
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Arrow pointing up at the close button in the pane chrome.
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
+            child: Icon(
+              Icons.arrow_drop_up,
+              color: AppColors.accent,
+              size: 28,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            decoration: BoxDecoration(
+              color: AppColors.panel,
+              border: Border.all(color: AppColors.accent, width: 1),
+              borderRadius: BorderRadius.circular(6),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x66000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'NEW: COPILOT IS DOCKED HERE',
+                  style: TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 10,
+                    letterSpacing: 1.4,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'On wide screens the AI Copilot now lives next to '
+                  'your terminal. Use ✕ above to close it, or the '
+                  '“AI Copilot” button in the sidebar to bring it '
+                  'back anytime.',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    Icon(
+                      Icons.arrow_back,
+                      color: AppColors.accent,
+                      size: 16,
+                    ),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Sidebar toggle: “AI Copilot”',
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                          fontFamily: AppColors.monoFamily,
+                          fontFamilyFallback: AppColors.monoFallback,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: onDismiss,
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.accent,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 4,
+                      ),
+                      minimumSize: const Size(0, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'GOT IT',
+                      style: TextStyle(
+                        fontSize: 11,
+                        letterSpacing: 1.4,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: AppColors.monoFamily,
+                        fontFamilyFallback: AppColors.monoFallback,
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          Expanded(
-            child: KeyedSubtree(key: contentKey, child: builder(context)),
           ),
         ],
       ),
