@@ -232,27 +232,16 @@ class RunbookSyncService {
       final localMeta = await _storage.loadMeta();
       final deviceId = await _syncStorage.getOrCreateDeviceId();
 
-      // Only team-tagged runbooks leave this device. The sync meta
-      // we ship MUST be filtered to the same id-set so a non-team
-      // tombstone can never delete a teammate's team runbook.
+      // Only team-tagged runbooks leave this device.
       final localTeam = localAll.where((r) => r.team).toList();
       final localTeamIds = localTeam.map((r) => r.id).toSet();
 
-      // Load the persistent record of every id this device has ever
-      // shared as team. This is what lets us propagate deletes and
-      // "untag team" demotions: without it, the id falls out of
-      // localTeamIds and the tombstone would be filtered out, so
-      // peers would silently resurrect the deleted entry.
+      // Includes ids previously shared so deletes/untags propagate.
       final previouslyShared =
           await _syncStorage.loadSharedTeamRunbookIds();
       final eligibleIds = {...previouslyShared, ...localTeamIds};
 
-      // Synthesise tombstones for ids that were previously shared
-      // as team but are no longer team-tagged AND still exist
-      // locally (i.e. the user flipped `team` from true → false).
-      // We use the runbook's last updatedAt (or "now" as a floor)
-      // so newer-wins merging deletes the team copy on peers
-      // without clobbering a more recent legitimate update.
+      // Synthesise tombstones for ids the user untagged team:false.
       final now = DateTime.now().toUtc();
       final liveIdsById = {for (final r in localAll) r.id: r};
       final synthesizedTombstones = <String, DateTime>{};
@@ -292,11 +281,7 @@ class RunbookSyncService {
             remoteRunbooks: remote.runbooks,
             remoteMeta: remote.meta,
           );
-          // Re-attach any non-team local runbooks. If an id collides
-          // (e.g. a teammate accidentally reused an id), the merged
-          // team copy wins — we drop the local non-team duplicate
-          // rather than letting two entries with the same id land on
-          // disk.
+          // Team copy wins on id collisions.
           final mergedIds = merged.runbooks.map((r) => r.id).toSet();
           final nonTeam = localAll
               .where((r) => !r.team && !mergedIds.contains(r.id))
@@ -319,11 +304,8 @@ class RunbookSyncService {
       final outCipher = BackupCrypto.encrypt(password, blob.encode());
       await adapter.put(runbooksObjectKey, outCipher);
 
-      // Record everything that just rode the wire as team. This
-      // includes live team runbooks AND any tombstone we just
-      // uploaded — the latter must keep being uploaded until the
-      // tombstone ages out so a peer that's been offline for a
-      // long time still observes the delete on its next pull.
+      // Persist team ids + tombstones so offline peers still see the
+      // delete on their next pull.
       final newShared = <String>{
         ...previouslyShared,
         ...localTeamIds,
@@ -331,8 +313,7 @@ class RunbookSyncService {
       };
       await _syncStorage.saveSharedTeamRunbookIds(newShared);
     } catch (_) {
-      // Swallow — failures are reported via `SnippetSyncService`'s
-      // history feed; runbook sync runs as a sidecar.
+      // Sidecar; failures surface via SnippetSyncService history.
     }
   }
 

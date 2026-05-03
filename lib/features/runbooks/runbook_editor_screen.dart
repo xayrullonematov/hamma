@@ -5,10 +5,7 @@ import '../../core/runbooks/runbook_runner.dart';
 import '../../core/runbooks/runbook_storage.dart';
 import '../../core/theme/app_colors.dart';
 
-/// Form-driven editor for a single [Runbook]. Brutalist UI: every
-/// step is its own panel; reordering uses the long-press handle on a
-/// [ReorderableListView]; the dry-run button shows the would-be SSH
-/// commands without sending them.
+/// Form-driven editor for a single [Runbook].
 class RunbookEditorScreen extends StatefulWidget {
   const RunbookEditorScreen({
     super.key,

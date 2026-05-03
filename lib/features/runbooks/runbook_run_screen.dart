@@ -14,11 +14,6 @@ import '../../core/theme/app_colors.dart';
 import '../../features/quick_actions/quick_actions.dart';
 
 /// Live progress view for a single runbook execution.
-///
-/// Step rows show green/amber/red status, collapsible stdout, AI
-/// summary callouts, and a big STOP button at the bottom. The
-/// post-run summary screen offers a one-tap "Save outputs as snippet"
-/// that wraps the rendered commands as a [QuickAction].
 class RunbookRunScreen extends StatefulWidget {
   const RunbookRunScreen({
     super.key,
@@ -39,16 +34,12 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
   RunbookRunner? _runner;
   StreamSubscription<RunbookEvent>? _eventSub;
 
-  /// Collected param values, seeded from defaults and updated by
-  /// `promptUser` steps.
   late Map<String, String> _params;
 
-  /// Current state of each step row, by step id.
   final Map<String, _StepRow> _rows = {};
 
-  /// Id of the step currently being executed, so `_executeWithCancel`
-  /// (which doesn't otherwise know which step it's running) can stream
-  /// stdout chunks live into that row's buffer.
+  /// Id of the step the executor is currently running, so live
+  /// stdout chunks land in the right row.
   String? _currentStepId;
 
   bool _running = false;
@@ -68,8 +59,7 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
 
   @override
   void dispose() {
-    // Cancel any in-flight runner so leaving this screen doesn't
-    // leave an SSH command stream firing into a disposed listener.
+    // Avoid leaking an SSH stream into a disposed listener.
     _runner?.cancellation.cancel();
     _eventSub?.cancel();
     super.dispose();
@@ -157,28 +147,18 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     _runner?.cancellation.cancel();
   }
 
-  /// Runs a single command via [SshService.streamCommand] (which
-  /// returns an [SSHSession] we can `close()`), registers an
-  /// `onCancel` listener with the runner's cancellation token so
-  /// pressing STOP terminates the in-flight session immediately,
-  /// streams stdout/stderr chunks live into the current step row,
-  /// and inspects `session.exitCode` / `session.exitSignal` after
-  /// the channel closes — `dartssh2`'s `done` future does NOT fail
-  /// on a non-zero remote exit, so without an explicit check we'd
-  /// silently mark failed deploys / restarts as succeeded.
+  /// Streams a command, wires STOP -> session.close, surfaces live
+  /// chunks, and throws RunbookCommandFailed on non-zero exit.
   Future<String> _executeWithCancel(
     String command,
     RunbookCancellation cancellation,
   ) async {
     final SSHSession session = await widget.sshService.streamCommand(command);
 
-    // Wire STOP -> kill this session. The listener fires
-    // immediately if STOP was already pressed before the session
-    // came up.
     cancellation.onCancel(() {
       try {
         session.close();
-      } catch (_) {/* already closed */}
+      } catch (_) {}
     });
 
     final stdoutBuf = <int>[];
@@ -214,14 +194,11 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
       throw const RunbookCommandCancelled();
     }
 
-    final stdoutStr =
-        utf8.decode(stdoutBuf, allowMalformed: true);
-    final stderrStr =
-        utf8.decode(stderrBuf, allowMalformed: true);
+    final stdoutStr = utf8.decode(stdoutBuf, allowMalformed: true);
+    final stderrStr = utf8.decode(stderrBuf, allowMalformed: true);
     final exitCode = session.exitCode;
     final exitSignal = session.exitSignal?.signalName;
-    final failed = exitSignal != null || (exitCode != null && exitCode != 0);
-    if (failed) {
+    if (exitSignal != null || (exitCode != null && exitCode != 0)) {
       throw RunbookCommandFailed(
         stdout: stdoutStr,
         stderr: stderrStr,
@@ -229,9 +206,6 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
         exitSignal: exitSignal,
       );
     }
-    // Success: combined stdout+stderr (matches prior contract so
-    // skipIfRegex / waitFor / aiSummarize keep working against the
-    // full stream, not just stdout).
     return stderrStr.isEmpty ? stdoutStr : '$stdoutStr$stderrStr';
   }
 
@@ -338,8 +312,6 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
         _rows[event.step.id]?.status = _RowStatus.running;
         _currentStepId = event.step.id;
       } else if (event is StepStdout) {
-        // Final stdout from the runner replaces the live-streamed
-        // buffer so we keep one canonical copy (no duplication).
         _rows[event.step.id]?.stdout = event.chunk;
       } else if (event is StepNotify) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -9,9 +9,7 @@ import 'package:meta/meta.dart';
 import 'runbook.dart';
 import 'runbook_change_bus.dart';
 
-/// Per-id metadata used by [RunbookSyncService]'s newest-wins merge.
-/// Same shape as `SnippetSyncMeta` — kept in a separate type so the
-/// snippet and runbook sync paths can evolve independently.
+/// Per-id metadata for newest-wins merging.
 @immutable
 class RunbookSyncMeta {
   const RunbookSyncMeta({required this.updatedAt, required this.tombstones});
@@ -50,15 +48,7 @@ class RunbookSyncMeta {
 }
 
 /// Encrypted secure-storage backed runbook persistence.
-///
-/// Layout:
-/// * `runbooks_v1` — JSON array of every runbook (global + per-server).
-/// * `runbooks_v1_meta` — per-id `updatedAt` + tombstones map for
-///   newest-wins sync merges.
-///
-/// Per-server scoping is achieved by a runbook's `serverId` field
-/// rather than a separate keyspace; the storage exposes filtered
-/// loaders (`loadForServer`) for the UI.
+/// Keys: `runbooks_v1` (JSON array) and `runbooks_v1_meta`.
 class RunbookStorage {
   static const _androidOptions = AndroidOptions(
     encryptedSharedPreferences: true,
@@ -73,19 +63,14 @@ class RunbookStorage {
 
   final FlutterSecureStorage _secureStorage;
 
-  /// Returns every persisted runbook, in insertion order. Throws
-  /// [RunbookStorageException] when the on-disk JSON is malformed
-  /// — caller is expected to surface this rather than silently
-  /// drop user data.
+  /// Throws [RunbookStorageException] on malformed JSON.
   Future<List<Runbook>> loadAll() async {
     final snapshot = await _readSnapshot();
     return List<Runbook>.from(snapshot.parsed);
   }
 
-  /// Internal: returns BOTH the parsed runbooks AND any raw JSON
-  /// entries we could not decode. Pass-through preservation lets
-  /// [saveAll] re-emit opaque entries instead of permanently
-  /// dropping them (data-loss bug).
+  /// Returns parsed runbooks plus undecodable raw entries so
+  /// [saveAll] can preserve them on round-trip.
   Future<_StorageSnapshot> _readSnapshot() async {
     final raw = await _secureStorage.read(key: _runbooksKey);
     if (raw == null || raw.trim().isEmpty) {
@@ -116,9 +101,7 @@ class RunbookStorage {
     return _StorageSnapshot(parsed: parsed, opaque: opaque);
   }
 
-  /// Returns runbooks visible to the given server id — that is, every
-  /// runbook with `serverId == serverId` plus all global runbooks
-  /// (`serverId == null`).
+  /// Returns runbooks pinned to this server plus all global ones.
   Future<List<Runbook>> loadForServer(String serverId) async {
     final all = await loadAll();
     return all
@@ -126,12 +109,8 @@ class RunbookStorage {
         .toList();
   }
 
-  /// Replaces the entire runbook list. Updates per-id metadata
-  /// (updatedAt for new/changed entries, tombstones for missing
-  /// ones) and notifies [RunbookChangeBus] so subscribers (UI +
-  /// sync service) react. Any opaque (un-decodable) entries that
-  /// were already on disk are preserved so we never permanently
-  /// drop user data we couldn't parse.
+  /// Replaces the runbook list, updates meta, and notifies
+  /// [RunbookChangeBus]. Preserves opaque on-disk entries.
   Future<void> saveAll(List<Runbook> runbooks) async {
     final snapshot = await _readSnapshot();
     final encoded = jsonEncode([
@@ -143,7 +122,7 @@ class RunbookStorage {
     RunbookChangeBus.instance.notify();
   }
 
-  /// Convenience: insert or replace a single runbook by id.
+  /// Insert or replace a single runbook by id.
   Future<void> upsert(Runbook runbook) async {
     final all = await loadAll();
     final idx = all.indexWhere((r) => r.id == runbook.id);
@@ -155,7 +134,7 @@ class RunbookStorage {
     await saveAll(all);
   }
 
-  /// Convenience: drop a single runbook by id.
+  /// Drop a single runbook by id.
   Future<void> delete(String runbookId) async {
     final all = await loadAll();
     all.removeWhere((r) => r.id == runbookId);
@@ -174,11 +153,8 @@ class RunbookStorage {
     }
   }
 
-  /// Replaces the entire runbook list and metadata in a single call.
-  /// Used by [RunbookSyncService] after a pull-and-merge so the next
-  /// [loadAll] sees the merged result. Does NOT notify the change
-  /// bus — pulls must not trigger a re-upload loop. Opaque on-disk
-  /// entries are preserved.
+  /// Used by [RunbookSyncService] after a merge. Does NOT notify the
+  /// change bus (avoids re-upload loops). Preserves opaque entries.
   Future<void> applyMergedState({
     required List<Runbook> runbooks,
     required RunbookSyncMeta meta,
@@ -234,9 +210,7 @@ class RunbookStorage {
     );
   }
 
-  /// Generate a stable random runbook id. Exposed as a static helper
-  /// so the editor / starter pack can mint ids without instantiating
-  /// the storage.
+  /// Random runbook id. Static so callers needn't instantiate storage.
   static String generateId() {
     final rand = Random.secure().nextInt(1 << 32);
     return 'rb-${DateTime.now().microsecondsSinceEpoch}-$rand';

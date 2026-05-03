@@ -13,9 +13,7 @@ import '../../core/theme/app_colors.dart';
 import 'runbook_editor_screen.dart';
 import 'runbook_run_screen.dart';
 
-/// Per-server Runbooks tab. Lists the user's saved runbooks, the
-/// curated starter pack, plus a CTA to draft a new runbook from a
-/// natural-language goal via the local LLM.
+/// Per-server Runbooks tab.
 class RunbooksScreen extends StatefulWidget {
   const RunbooksScreen({
     super.key,

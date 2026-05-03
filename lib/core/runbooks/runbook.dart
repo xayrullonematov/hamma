@@ -1,9 +1,6 @@
 import 'package:meta/meta.dart';
 
-/// Discriminator for [RunbookStep]. Kept as a flat enum (rather than a
-/// sealed-class hierarchy) so the JSON schema stays trivial and AI-
-/// drafted runbooks fail loudly on unknown values instead of silently
-/// being treated as a no-op.
+/// Discriminator for [RunbookStep].
 enum RunbookStepType {
   command('command'),
   promptUser('prompt-user'),
@@ -14,10 +11,8 @@ enum RunbookStepType {
 
   const RunbookStepType(this.wireName);
 
-  /// Canonical hyphenated discriminator written to (and read from)
-  /// the runbook JSON. The Dart enum name (camelCase) is also
-  /// accepted for back-compat with already-saved blobs from earlier
-  /// builds and for AI drafts that prefer the camelCase form.
+  /// Hyphenated JSON discriminator (camelCase enum name also accepted
+  /// for back-compat).
   final String wireName;
 
   static RunbookStepType? tryParse(String raw) {
@@ -28,9 +23,7 @@ enum RunbookStepType {
   }
 }
 
-/// A single user-supplied parameter collected at run start (or via a
-/// `promptUser` step at runtime). Parameter values are interpolated
-/// into command strings using `{{name}}` syntax.
+/// A user-supplied parameter, interpolated into commands as `{{name}}`.
 @immutable
 class RunbookParam {
   const RunbookParam({
@@ -60,9 +53,7 @@ class RunbookParam {
       );
 }
 
-/// One node in a runbook. Kept as a flat record (not subclasses) so the
-/// JSON wire format is stable and so the editor / runner can branch on
-/// [type] without runtime-type tricks.
+/// One node in a runbook. Flat record keyed by [type].
 @immutable
 class RunbookStep {
   const RunbookStep({
@@ -261,9 +252,7 @@ class RunbookStep {
   }
 }
 
-/// A user-authored or AI-drafted runbook. Persisted by
-/// [RunbookStorage]; executed by [RunbookRunner]; shared via
-/// [RunbookSyncService] when [team] is true.
+/// A persisted runbook.
 @immutable
 class Runbook {
   const Runbook({
@@ -277,8 +266,7 @@ class Runbook {
     this.starter = false,
   });
 
-  /// Stable id. Reused as the snippet-sync map key for newest-wins
-  /// merges, so a runbook's id MUST NOT be mutated after creation.
+  /// Stable id; sync uses it as the merge key.
   final String id;
 
   final String name;
@@ -286,19 +274,13 @@ class Runbook {
   final List<RunbookParam> params;
   final List<RunbookStep> steps;
 
-  /// `null` means the runbook is **global** (visible from every
-  /// server's Runbooks tab). A non-null id pins it to a single
-  /// server profile.
+  /// `null` = global; otherwise pinned to a server profile.
   final String? serverId;
 
-  /// `true` makes this runbook eligible for cross-device sync via
-  /// [RunbookSyncService]. Defaults to `false` so users opt in
-  /// per-runbook to share with their team.
+  /// Eligible for cross-device sync. Opt-in.
   final bool team;
 
-  /// Read-only flag set on entries from [starterPackRunbooks]. The
-  /// editor uses it to gate destructive edits and to mark the row
-  /// in the list view.
+  /// Read-only entries from the starter pack.
   final bool starter;
 
   Runbook copyWith({
@@ -372,11 +354,7 @@ class Runbook {
     );
   }
 
-  /// Schema validation done up-front so AI-drafted runbooks fail
-  /// loudly the moment they land — never half-way through a run.
-  ///
-  /// Returns the list of validation problems; an empty list means
-  /// the runbook is safe to persist + execute.
+  /// Returns validation problems; empty list = safe to run.
   List<String> validate() {
     final problems = <String>[];
     if (id.trim().isEmpty) problems.add('id is required.');

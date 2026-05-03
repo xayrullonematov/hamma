@@ -5,10 +5,7 @@ import '../storage/api_key_storage.dart';
 import 'runbook.dart';
 import 'runbook_storage.dart';
 
-/// Translates a free-text operator goal ("rotate the letsencrypt cert
-/// on this host") into a draft [Runbook] the user can review in the
-/// editor. The local LLM is the preferred backend (zero-trust) but
-/// any configured provider works.
+/// Translates a free-text goal into a draft [Runbook] for review.
 class RunbookAiDrafter {
   RunbookAiDrafter({
     required this.aiSettings,
@@ -18,12 +15,8 @@ class RunbookAiDrafter {
   final AiSettings aiSettings;
   final Future<String> Function(String prompt)? _overrideCall;
 
-  /// Produce a draft [Runbook] from a one-line goal. The returned
-  /// runbook has a fresh id and `team:false`; the caller decides
-  /// where to scope it (server-pinned vs global) before saving.
-  ///
-  /// Throws [RunbookDrafterException] when the model returns a
-  /// non-JSON or schema-invalid response.
+  /// Returns a fresh-id, team:false draft. Throws
+  /// [RunbookDrafterException] on non-JSON / schema-invalid output.
   Future<Runbook> draftFromGoal(String goal, {String? serverContext}) async {
     final raw = await _call(_buildPrompt(goal, serverContext));
     final json = _extractJsonObject(raw);
@@ -94,9 +87,7 @@ Goal: $goal
 ''';
   }
 
-  /// Tolerant JSON extractor: many LLMs wrap output in ```json fences
-  /// or add a leading sentence. We strip fences and then take the
-  /// substring between the first `{` and the last `}`.
+  /// Strips ```json fences and trims to the outermost `{...}`.
   static Map<String, dynamic>? _extractJsonObject(String raw) {
     var s = raw.trim();
     s = s.replaceAll(RegExp(r'^```(?:json)?', multiLine: true), '');

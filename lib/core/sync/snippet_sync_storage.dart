@@ -181,12 +181,8 @@ class SnippetSyncStorage {
     );
   }
 
-  /// Stable record of every runbook id this device has ever uploaded
-  /// as `team:true`. Needed by `RunbookSyncService` so a deletion or
-  /// "untag team" of a previously-shared runbook still emits a
-  /// tombstone on the team channel — without this set, the id would
-  /// vanish from the live team-id list and other devices would
-  /// silently resurrect the deleted entry on the next merge.
+  /// Ids this device has uploaded as team. Used by RunbookSyncService
+  /// to keep emitting tombstones for deletes/untags.
   Future<Set<String>> loadSharedTeamRunbookIds() async {
     final raw = await _secureStorage.read(key: _sharedTeamRunbookIdsKey);
     if (raw == null || raw.trim().isEmpty) return <String>{};
