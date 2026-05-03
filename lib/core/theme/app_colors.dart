@@ -39,6 +39,16 @@ class AppColors {
   // Brand cyan — extracted from the Hamma logo (H mark).
   // 11:1 contrast on pure black — WCAG AAA.
   static const accent = Color(0xFF4ECDC4);
+
+  // Per-category brutalist accents used by the settings row tiles so each
+  // category card has a visually distinct icon swatch while keeping the
+  // overall monochrome surface.
+  static const accentAi = Color(0xFF4ECDC4);
+  static const accentTriage = Color(0xFFE0B33C);
+  static const accentHealth = Color(0xFF6BCB77);
+  static const accentSecurity = Color(0xFFFF5C5C);
+  static const accentBackup = Color(0xFF4D96FF);
+  static const accentSupport = Color(0xFFB084EB);
   // Dimmer variant for subtle accent surfaces (borders, inactive tints).
   static const accentDim = Color(0xFF1A4A47);
 

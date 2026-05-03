@@ -1054,19 +1054,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
       _openRouterModelController.text = _openRouterModel ?? '';
     } on TimeoutException {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-      });
+      // Silently fall through: the OpenRouter model row remains
+      // editable as a free-text chevron, which is the documented
+      // fallback when the model index is unreachable.
+    } catch (_) {
+      // Same fallback as the timeout path above.
     } finally {
       if (mounted) {
         setState(() {
@@ -1359,6 +1351,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('ai', 'Default Provider'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_ai_provider'),
+                              iconColor: AppColors.accentAi,
                               icon: Icons.bolt_rounded,
                               label: 'Default Provider',
                               value: _selectedProvider.label,
@@ -1374,6 +1367,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('ai', 'OpenAI Key'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_openai_key'),
+                              iconColor: AppColors.accentAi,
                               icon: Icons.vpn_key_rounded,
                               label: 'OpenAI Key',
                               value: _secretValueLabel(
@@ -1391,6 +1385,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('ai', 'Gemini Key'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_gemini_key'),
+                              iconColor: AppColors.accentAi,
                               icon: Icons.vpn_key_rounded,
                               label: 'Gemini Key',
                               value: _secretValueLabel(
@@ -1409,6 +1404,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             SettingsRow.chevron(
                               key: const ValueKey(
                                   'settings_row_openrouter_key'),
+                              iconColor: AppColors.accentAi,
                               icon: Icons.vpn_key_rounded,
                               label: 'OpenRouter Key',
                               value: _secretValueLabel(
@@ -1435,6 +1431,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_openrouter_model'),
+                                iconColor: AppColors.accentAi,
                                 icon: Icons.memory_rounded,
                                 label: 'OpenRouter Model',
                                 value: _openRouterModel ?? 'Default',
@@ -1454,6 +1451,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_local_endpoint'),
+                                iconColor: AppColors.accentAi,
                                 icon: Icons.dns_rounded,
                                 label: 'Engine Endpoint',
                                 value: _localEndpointController.text.isEmpty
@@ -1466,6 +1464,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_local_model'),
+                                iconColor: AppColors.accentAi,
                                 icon: Icons.memory_rounded,
                                 label: 'Local Model',
                                 value: _localModelController.text.isEmpty
@@ -1478,6 +1477,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_test_local_connection'),
+                                iconColor: AppColors.accentAi,
                                 icon: Icons.electrical_services_rounded,
                                 label: 'Test Connection',
                                 value: _localConnectionTestResult ??
@@ -1491,6 +1491,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_detect_engines'),
+                                iconColor: AppColors.accentAi,
                                 icon: Icons.radar_rounded,
                                 label: 'Detect Engines',
                                 value: _detectError ??
@@ -1504,6 +1505,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_manage_models'),
+                                iconColor: AppColors.accentAi,
                                 icon: Icons.dns_rounded,
                                 label: 'Manage Models',
                                 value: 'Pull, list, or remove local models',
@@ -1514,6 +1516,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_first_run_setup'),
+                                iconColor: AppColors.accentAi,
                                 icon: Icons.auto_fix_high_rounded,
                                 label: 'First-Run Setup',
                                 value: 'Walk through install + initial pull',
@@ -1545,6 +1548,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             SettingsRow.chevron(
                               key: const ValueKey(
                                   'settings_row_triage_batch_size'),
+                              iconColor: AppColors.accentTriage,
                               icon: Icons.tune_rounded,
                               label: 'Batch Size',
                               value: _isLogTriageBatchSizeLoaded
@@ -1578,6 +1582,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             SettingsRow.toggle(
                               key: const ValueKey(
                                   'settings_row_health_enabled'),
+                              iconColor: AppColors.accentHealth,
                               icon: Icons.monitor_heart_rounded,
                               label: 'Enable Background Monitoring',
                               value:
@@ -1593,6 +1598,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             SettingsRow.chevron(
                               key: const ValueKey(
                                   'settings_row_health_interval'),
+                              iconColor: AppColors.accentHealth,
                               icon: Icons.timer_rounded,
                               label: 'Check Interval',
                               value: '$_healthCheckInterval minutes',
@@ -1622,6 +1628,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('security', 'App PIN'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_app_pin'),
+                              iconColor: AppColors.accentSecurity,
                               icon: _hasAppPin == true
                                   ? Icons.lock_open_outlined
                                   : Icons.pin_outlined,
@@ -1660,6 +1667,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             SettingsRow.chevron(
                               key: const ValueKey(
                                   'settings_row_backup_destination'),
+                              iconColor: AppColors.accentBackup,
                               icon: Icons.folder_zip_rounded,
                               label: 'Backup Destination',
                               value: _backupConfig.destination.name
@@ -1679,6 +1687,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (_rowMatches('backup', 'SFTP Host'))
                               SettingsRow.chevron(
                                 key: const ValueKey('settings_row_sftp_host'),
+                                iconColor: AppColors.accentBackup,
                                 icon: Icons.dns_rounded,
                                 label: 'SFTP Host',
                                 value: _sftpHostController.text.isEmpty
@@ -1695,6 +1704,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_sftp_username'),
+                                iconColor: AppColors.accentBackup,
                                 icon: Icons.person_outline_rounded,
                                 label: 'Username',
                                 value: _sftpUsernameController.text.isEmpty
@@ -1709,6 +1719,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (_rowMatches('backup', 'SFTP Port'))
                               SettingsRow.chevron(
                                 key: const ValueKey('settings_row_sftp_port'),
+                                iconColor: AppColors.accentBackup,
                                 icon: Icons.numbers_rounded,
                                 label: 'Port',
                                 value: _sftpPortController.text.isEmpty
@@ -1725,6 +1736,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_sftp_password'),
+                                iconColor: AppColors.accentBackup,
                                 icon: Icons.password_rounded,
                                 label: 'Password',
                                 value: _secretValueLabel(
@@ -1740,6 +1752,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             if (_rowMatches('backup', 'SFTP Backup Directory'))
                               SettingsRow.chevron(
                                 key: const ValueKey('settings_row_sftp_path'),
+                                iconColor: AppColors.accentBackup,
                                 icon: Icons.folder_outlined,
                                 label: 'Backup Directory',
                                 value: _sftpPathController.text.isEmpty
@@ -1766,6 +1779,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_webdav_url'),
+                                iconColor: AppColors.accentBackup,
                                 icon: Icons.link_rounded,
                                 label: 'WebDAV URL',
                                 value: _webdavUrlController.text.isEmpty
@@ -1784,6 +1798,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_webdav_username'),
+                                iconColor: AppColors.accentBackup,
                                 icon: Icons.person_outline_rounded,
                                 label: 'Username',
                                 value: _webdavUsernameController.text.isEmpty
@@ -1799,6 +1814,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_webdav_password'),
+                                iconColor: AppColors.accentBackup,
                                 icon: Icons.password_rounded,
                                 label: 'Password / App Token',
                                 value: _secretValueLabel(
@@ -1823,6 +1839,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               SettingsRow.chevron(
                                 key: const ValueKey(
                                     'settings_row_syncthing_path'),
+                                iconColor: AppColors.accentBackup,
                                 icon: Icons.folder_outlined,
                                 label: 'Syncthing Local Path',
                                 value: _syncthingPathController.text.isEmpty
@@ -1848,6 +1865,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             SettingsRow.toggle(
                               key: const ValueKey(
                                   'settings_row_daily_auto_backup'),
+                              iconColor: AppColors.accentBackup,
                               icon: Icons.schedule_rounded,
                               label: 'Daily Automatic Backup',
                               value: 'Background backup over Wi-Fi',
@@ -1864,6 +1882,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('backup', 'Backup Now'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_backup_now'),
+                              iconColor: AppColors.accentBackup,
                               icon: Icons.backup_outlined,
                               label: 'Backup Now',
                               value: _backupConfig.lastBackupTime != null
@@ -1876,6 +1895,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('backup', 'Restore'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_restore'),
+                              iconColor: AppColors.accentBackup,
                               icon: Icons.restore_outlined,
                               label: 'Restore',
                               value: 'Import a previous backup file',
@@ -1891,6 +1911,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('backup', 'Cloud Sync (Encrypted)'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_cloud_sync'),
+                              iconColor: AppColors.accentBackup,
                               icon: Icons.cloud_outlined,
                               label: 'Cloud Sync (Encrypted)',
                               value: 'End-to-end encrypted device sync',
@@ -1909,6 +1930,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('backup', 'Snippet Sync (Cross-Device)'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_snippet_sync'),
+                              iconColor: AppColors.accentBackup,
                               icon: Icons.sync_alt_outlined,
                               label: 'Snippet Sync (Cross-Device)',
                               value: 'Share command snippets between devices',
@@ -1945,6 +1967,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('support', 'Help Center'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_help_center'),
+                              iconColor: AppColors.accentSupport,
                               icon: Icons.help_center_outlined,
                               label: 'Help Center',
                               value: 'Guides, FAQs, and troubleshooting',
@@ -1959,6 +1982,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('support', 'Extensions'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_extensions'),
+                              iconColor: AppColors.accentSupport,
                               icon: Icons.extension_outlined,
                               label: 'Extensions',
                               value: 'Manage installed Hamma extensions',
@@ -1973,6 +1997,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('support', 'Vault'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_vault'),
+                              iconColor: AppColors.accentSupport,
                               icon: Icons.lock_outline,
                               label: 'Vault',
                               value: 'Secrets and encrypted credentials',
@@ -1993,6 +2018,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           if (_rowMatches('support', 'Contact Support'))
                             SettingsRow.chevron(
                               key: const ValueKey('settings_row_contact'),
+                              iconColor: AppColors.accentSupport,
                               icon: Icons.mail_outline,
                               label: 'Contact Support',
                               value: 'Email the Hamma team',
