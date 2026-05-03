@@ -41,6 +41,27 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   late final TextEditingController _privateKeyPasswordController;
   late AuthMethod _authMethod;
 
+  // ── Sticky save-bar state ────────────────────────────────────────
+  // Mirrors the dirty-tracking pattern Task #44 introduced in the
+  // settings screen so the brand-new form save bar feels identical
+  // (appears only when there are unsaved changes, double-tap is
+  // de-duped, surface failures via snackbar).
+  bool _dirty = false;
+  bool _isBusy = false;
+
+  // Snapshot of the controllers' values at mount so we can decide
+  // whether the form is genuinely dirty after each keystroke. If the
+  // user types and then types back the original value, we hide the
+  // save bar again — same UX guarantee the settings screen makes.
+  late String _initialName;
+  late String _initialHost;
+  late String _initialPort;
+  late String _initialUsername;
+  late String _initialPassword;
+  late String _initialPrivateKey;
+  late String _initialPrivateKeyPassword;
+  late AuthMethod _initialAuthMethod;
+
   bool get _isEditing => widget.initialServer != null;
 
   @override
@@ -64,44 +85,97 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
         server?.privateKey?.trim().isNotEmpty ?? false
             ? AuthMethod.sshKey
             : AuthMethod.password;
+
+    _initialName = _nameController.text;
+    _initialHost = _hostController.text;
+    _initialPort = _portController.text;
+    _initialUsername = _usernameController.text;
+    _initialPassword = _passwordController.text;
+    _initialPrivateKey = _privateKeyController.text;
+    _initialPrivateKeyPassword = _privateKeyPasswordController.text;
+    _initialAuthMethod = _authMethod;
+
+    for (final c in [
+      _nameController,
+      _hostController,
+      _portController,
+      _usernameController,
+      _passwordController,
+      _privateKeyController,
+      _privateKeyPasswordController,
+    ]) {
+      c.addListener(_recomputeDirty);
+    }
+  }
+
+  void _recomputeDirty() {
+    final next = _nameController.text != _initialName ||
+        _hostController.text != _initialHost ||
+        _portController.text != _initialPort ||
+        _usernameController.text != _initialUsername ||
+        _passwordController.text != _initialPassword ||
+        _privateKeyController.text != _initialPrivateKey ||
+        _privateKeyPasswordController.text != _initialPrivateKeyPassword ||
+        _authMethod != _initialAuthMethod;
+    if (next != _dirty) {
+      setState(() => _dirty = next);
+    }
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _hostController.dispose();
-    _portController.dispose();
-    _usernameController.dispose();
-    _passwordController.dispose();
-    _privateKeyController.dispose();
-    _privateKeyPasswordController.dispose();
+    for (final c in [
+      _nameController,
+      _hostController,
+      _portController,
+      _usernameController,
+      _passwordController,
+      _privateKeyController,
+      _privateKeyPasswordController,
+    ]) {
+      c.removeListener(_recomputeDirty);
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
+    // Re-entry guard — the sticky save bar's tap target is large enough
+    // that a fast double-tap on touch devices reliably fires twice. We
+    // never want to enqueue two saves of the same form.
+    if (_isBusy) return;
+
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
-    final port = int.parse(_portController.text.trim());
-    final privateKey = _privateKeyController.text;
-    final privateKeyPassword = _privateKeyPasswordController.text.trim();
-    final isPasswordAuth = _authMethod == AuthMethod.password;
-    final profile = ServerProfile(
-      id: widget.initialServer?.id ?? _generateServerId(),
-      name: _nameController.text.trim(),
-      host: _hostController.text.trim(),
-      port: port,
-      username: _usernameController.text.trim(),
-      password: isPasswordAuth ? _passwordController.text.trim() : '',
-      privateKey: isPasswordAuth || privateKey.isEmpty ? null : privateKey,
-      privateKeyPassword:
-          isPasswordAuth || privateKeyPassword.isEmpty
-              ? null
-              : privateKeyPassword,
-    );
+    setState(() => _isBusy = true);
+    try {
+      final port = int.parse(_portController.text.trim());
+      final privateKey = _privateKeyController.text;
+      final privateKeyPassword = _privateKeyPasswordController.text.trim();
+      final isPasswordAuth = _authMethod == AuthMethod.password;
+      final profile = ServerProfile(
+        id: widget.initialServer?.id ?? _generateServerId(),
+        name: _nameController.text.trim(),
+        host: _hostController.text.trim(),
+        port: port,
+        username: _usernameController.text.trim(),
+        password: isPasswordAuth ? _passwordController.text.trim() : '',
+        privateKey: isPasswordAuth || privateKey.isEmpty ? null : privateKey,
+        privateKeyPassword:
+            isPasswordAuth || privateKeyPassword.isEmpty
+                ? null
+                : privateKeyPassword,
+      );
 
-    Navigator.of(context).pop(profile);
+      if (!mounted) return;
+      Navigator.of(context).pop(profile);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isBusy = false);
+      _showSnackBar('Could not save server: $e');
+    }
   }
 
   String _generateServerId() {
@@ -371,6 +445,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                               setState(() {
                                 _authMethod = selection.first;
                               });
+                              _recomputeDirty();
                             },
                           ),
                         ),
@@ -490,27 +565,95 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                       serverName: widget.initialServer!.name,
                     ),
                   ],
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: _save,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                    ),
-                    child: Text(_isEditing ? 'Save Changes' : 'Save Server'),
-                  ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Text(
                     'Your saved server profile stays on this device.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall?.copyWith(color: _mutedColor),
                   ),
+                  // Reserve room so the sticky save bar never covers
+                  // the last form field on short viewports.
+                  const SizedBox(height: 96),
                 ],
               ),
             ),
           ),
+        ),
+      ),
+      bottomNavigationBar: _dirty
+          ? _ServerFormStickySaveBar(
+              key: const ValueKey('server_form_sticky_save_bar'),
+              isEditing: _isEditing,
+              isBusy: _isBusy,
+              onSave: _save,
+            )
+          : null,
+    );
+  }
+}
+
+/// Sticky save bar shown only when [_dirty] is true. Mirrors the
+/// settings screen's bar so the two surfaces feel like one product.
+class _ServerFormStickySaveBar extends StatelessWidget {
+  const _ServerFormStickySaveBar({
+    super.key,
+    required this.isEditing,
+    required this.isBusy,
+    required this.onSave,
+  });
+
+  final bool isEditing;
+  final bool isBusy;
+  final Future<void> Function() onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: AppColors.panel,
+          border: Border(
+            top: BorderSide(color: AppColors.borderStrong, width: 1),
+          ),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Unsaved changes',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 12,
+                  letterSpacing: 1.4,
+                  fontWeight: FontWeight.w600,
+                  fontFamily: AppColors.monoFamily,
+                  fontFamilyFallback: AppColors.monoFallback,
+                ),
+              ),
+            ),
+            FilledButton(
+              onPressed: isBusy ? null : onSave,
+              style: FilledButton.styleFrom(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.zero,
+                ),
+              ),
+              child: isBusy
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.onPrimary,
+                      ),
+                    )
+                  : Text(isEditing ? 'SAVE CHANGES' : 'SAVE'),
+            ),
+          ],
         ),
       ),
     );

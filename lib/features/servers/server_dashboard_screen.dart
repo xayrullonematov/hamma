@@ -12,6 +12,8 @@ import '../../core/theme/app_colors.dart';
 import '../../plugins/hamma_api.dart';
 import '../../plugins/hamma_plugin.dart';
 import '../../plugins/plugin_registry.dart';
+import '../ai_assistant/ai_copilot_sheet.dart';
+import '../ai_assistant/copilot_dock.dart';
 import '../docker/docker_manager_screen.dart';
 import '../logs/log_viewer_screen.dart';
 import '../observability/health_tab.dart';
@@ -68,8 +70,18 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   int _activeTabIndex = 0;
 
   bool? _sidebarCollapsedPref;
+  // User-chosen expanded sidebar width. Persisted across launches in
+  // [AppPrefsStorage] alongside the collapsed flag. Loaded async on
+  // mount; null until the read finishes so the first frame renders
+  // with the sensible default.
+  double? _sidebarWidthPref;
+  // Live width while the user is dragging the resize handle. Decoupled
+  // from [_sidebarWidthPref] so the in-flight drag never triggers an
+  // unnecessary write to secure storage on every pointer event.
+  double? _draggingSidebarWidth;
   List<HammaPlugin> _enabledPlugins = const [];
   final Map<String, Future<HammaApi>> _pluginApis = {};
+  final CopilotDockController _copilotDock = CopilotDockController();
 
   PluginRegistry get _pluginRegistry => PluginRegistry.instance;
 
@@ -100,6 +112,10 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
       if (!mounted) return;
       setState(() => _sidebarCollapsedPref = value);
     });
+    _appPrefs.getSidebarWidth().then((value) {
+      if (!mounted) return;
+      setState(() => _sidebarWidthPref = value);
+    });
 
     if (_sshService.currentStatus.isDisconnected ||
         _sshService.currentStatus.isFailed) {
@@ -122,7 +138,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   @override
   void dispose() {
     _pluginRegistry.removeListener(_onPluginRegistryChanged);
+    _copilotDock.dispose();
     super.dispose();
+  }
+
+  double get _expandedSidebarWidth {
+    return _draggingSidebarWidth ??
+        _sidebarWidthPref ??
+        AppPrefsStorage.sidebarDefaultWidth;
   }
 
   void _onPluginRegistryChanged() {
@@ -281,7 +304,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
 
   Widget _buildSidebar(ConnectionStatus status, {required bool collapsed}) {
     final isConnected = status.isConnected;
-    final width = collapsed ? 64.0 : 240.0;
+    final width = collapsed ? 64.0 : _expandedSidebarWidth;
 
     return Container(
       width: width,
@@ -443,6 +466,34 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             ),
           ),
           const Divider(height: 1, color: AppColors.border),
+          // Desktop-only AI Copilot dock toggle. Lives in the sidebar
+          // footer so it sits next to settings instead of floating.
+          // On mobile/tablet the existing per-pane FAB / button still
+          // opens the modal sheet.
+          AnimatedBuilder(
+            animation: _copilotDock,
+            builder: (context, _) {
+              final docked = _copilotDock.isOpen;
+              return _SidebarItem(
+                item: _NavItem(
+                  icon: docked
+                      ? Icons.smart_toy
+                      : Icons.smart_toy_outlined,
+                  label: docked ? 'Hide Copilot' : 'AI Copilot',
+                ),
+                isActive: docked,
+                isEnabled: isConnected,
+                collapsed: collapsed,
+                onTap: () {
+                  if (docked) {
+                    _copilotDock.close();
+                  } else {
+                    _openDockedCopilotForActiveTab();
+                  }
+                },
+              );
+            },
+          ),
           _SidebarItem(
             item: const _NavItem(
               icon: Icons.settings_outlined,
@@ -455,6 +506,49 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           ),
           const SizedBox(height: 12),
         ],
+      ),
+    );
+  }
+
+  /// Opens the AI Copilot inside the docked right-hand pane with a
+  /// generic prompt. Per-surface entry points (terminal, log viewer)
+  /// install richer execution callbacks via the [CopilotDock] inherited
+  /// widget; this sidebar shortcut is the "I just want to ask the
+  /// copilot something" path that always works.
+  ///
+  /// On tablet widths (700–1099) the dashboard still shows this
+  /// sidebar (it's a non-mobile layout), but the docked pane only
+  /// renders at desktop widths (≥1100) — otherwise it would crowd the
+  /// content pane. So at tablet widths we fall back to the existing
+  /// modal bottom sheet, matching what the terminal and log triage
+  /// surfaces already do at the same breakpoint.
+  Future<void> _openDockedCopilotForActiveTab() async {
+    Widget buildBody(BuildContext _) => _DockedCopilotShell(
+          server: _server,
+          aiProvider: _aiProvider,
+          apiKeyStorage: _apiKeyStorage,
+          openRouterModel: _openRouterModel,
+          localEndpoint: _localEndpoint,
+          localModel: _localModel,
+          sshService: _sshService,
+        );
+
+    if (Breakpoints.isDesktop(context)) {
+      _copilotDock.open(
+        CopilotDockRequest(
+          title: 'AI COPILOT — ${_server.name.toUpperCase()}',
+          builder: buildBody,
+        ),
+      );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.82,
+        child: buildBody(context),
       ),
     );
   }
@@ -521,45 +615,161 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         ),
       ),
       body: _buildActiveContent(status),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.panel,
-          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+      bottomNavigationBar: _buildMobileBottomNav(status),
+    );
+  }
+
+  /// Mobile bottom nav with overflow handling. The phone viewport
+  /// can only fit ~5 destinations comfortably, but the dashboard has
+  /// 8 built-ins plus an arbitrary number of plugin tabs. Beyond the
+  /// limit we collapse the tail into a "More" destination that opens
+  /// a bottom sheet listing the remaining tabs — driving the same
+  /// `_activeTabIndex` so the active selection stays in sync.
+  static const int _mobileVisibleNavLimit = 5;
+
+  Widget _buildMobileBottomNav(ConnectionStatus status) {
+    final isConnected = status.isConnected;
+    final totalCount = _totalNavCount;
+    final overflowing = totalCount > _mobileVisibleNavLimit;
+    // When overflowing we reserve the last slot for "More" — so only
+    // (limit - 1) real destinations are visible inline.
+    final visibleCount =
+        overflowing ? _mobileVisibleNavLimit - 1 : totalCount;
+    // If the active tab landed in the overflow set, we still want the
+    // bottom bar to highlight the "More" slot so the user can see
+    // which surface is showing above. Otherwise highlight the actual
+    // tab.
+    final selectedSlot = _activeTabIndex < visibleCount
+        ? _activeTabIndex
+        : (overflowing ? visibleCount : _activeTabIndex)
+            .clamp(0, visibleCount);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.panel,
+        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: NavigationBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          height: 64,
+          labelBehavior:
+              NavigationDestinationLabelBehavior.onlyShowSelected,
+          selectedIndex: selectedSlot,
+          onDestinationSelected: (i) {
+            if (overflowing && i == visibleCount) {
+              _showPluginOverflowSheet(
+                visibleCount: visibleCount,
+                isConnected: isConnected,
+              );
+              return;
+            }
+            if (i != 0 && !isConnected) return;
+            setState(() => _activeTabIndex = i);
+          },
+          destinations: [
+            for (var i = 0; i < visibleCount; i++)
+              NavigationDestination(
+                icon: Icon(
+                  _navItemAt(i).icon,
+                  size: 20,
+                  color: (i == 0 || isConnected)
+                      ? AppColors.textMuted
+                      : AppColors.textFaint,
+                ),
+                selectedIcon: Icon(
+                  _navItemAt(i).icon,
+                  size: 20,
+                  color: AppColors.textPrimary,
+                ),
+                label: _navItemAt(i).label,
+              ),
+            if (overflowing)
+              const NavigationDestination(
+                key: ValueKey('mobile_nav_more_destination'),
+                icon: Icon(
+                  Icons.more_horiz,
+                  size: 20,
+                  color: AppColors.textMuted,
+                ),
+                selectedIcon: Icon(
+                  Icons.more_horiz,
+                  size: 20,
+                  color: AppColors.textPrimary,
+                ),
+                label: 'More',
+              ),
+          ],
         ),
-        child: SafeArea(
+      ),
+    );
+  }
+
+  Future<void> _showPluginOverflowSheet({
+    required int visibleCount,
+    required bool isConnected,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+        side: BorderSide(color: AppColors.borderStrong, width: 1),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
           top: false,
-          child: NavigationBar(
-            backgroundColor: Colors.transparent,
-            elevation: 0,
-            height: 64,
-            labelBehavior:
-                NavigationDestinationLabelBehavior.onlyShowSelected,
-            selectedIndex: _activeTabIndex.clamp(0, _totalNavCount - 1),
-            onDestinationSelected: (i) {
-              if (i != 0 && !isConnected) return;
-              setState(() => _activeTabIndex = i);
-            },
-            destinations: [
-              for (var i = 0; i < _totalNavCount; i++)
-                NavigationDestination(
-                  icon: Icon(
-                    _navItemAt(i).icon,
-                    size: 20,
-                    color: (i == 0 || isConnected)
-                        ? AppColors.textMuted
-                        : AppColors.textFaint,
+          child: ListView(
+            key: const ValueKey('mobile_plugin_overflow_sheet'),
+            shrinkWrap: true,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  'MORE',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                    letterSpacing: 1.6,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
+                    fontWeight: FontWeight.w700,
                   ),
-                  selectedIcon: Icon(
-                    _navItemAt(i).icon,
-                    size: 20,
-                    color: AppColors.textPrimary,
+                ),
+              ),
+              for (var i = visibleCount; i < _totalNavCount; i++)
+                ListTile(
+                  leading: Icon(_navItemAt(i).icon,
+                      size: 20,
+                      color: isConnected
+                          ? AppColors.textPrimary
+                          : AppColors.textFaint),
+                  title: Text(
+                    _navItemAt(i).label.toUpperCase(),
+                    style: TextStyle(
+                      color: isConnected
+                          ? AppColors.textPrimary
+                          : AppColors.textFaint,
+                      fontSize: 12,
+                      letterSpacing: 1.4,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                    ),
                   ),
-                  label: _navItemAt(i).label,
+                  enabled: isConnected,
+                  selected: _activeTabIndex == i,
+                  onTap: () {
+                    Navigator.of(sheetContext).pop();
+                    setState(() => _activeTabIndex = i);
+                  },
                 ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -799,18 +1009,59 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           },
           child: Focus(
             autofocus: true,
-            child: Scaffold(
-              backgroundColor: AppColors.scaffoldBackground,
-              body: Row(
-                children: [
-                  _buildSidebar(status, collapsed: collapsed),
-                  Expanded(
-                    child: Container(
-                      color: AppColors.scaffoldBackground,
-                      child: _buildActiveContent(status),
+            child: CopilotDock(
+              controller: _copilotDock,
+              child: Scaffold(
+                backgroundColor: AppColors.scaffoldBackground,
+                body: Row(
+                  children: [
+                    _buildSidebar(status, collapsed: collapsed),
+                    if (!collapsed)
+                      _SidebarResizeHandle(
+                        key: const ValueKey('sidebar_resize_handle'),
+                        currentWidth: _expandedSidebarWidth,
+                        onDragUpdate: (width) {
+                          setState(() => _draggingSidebarWidth = width);
+                        },
+                        onDragEnd: () {
+                          final final_ = _draggingSidebarWidth;
+                          if (final_ == null) return;
+                          setState(() {
+                            _sidebarWidthPref = final_;
+                            _draggingSidebarWidth = null;
+                          });
+                          _appPrefs.setSidebarWidth(final_);
+                        },
+                      ),
+                    Expanded(
+                      child: Container(
+                        color: AppColors.scaffoldBackground,
+                        child: _buildActiveContent(status),
+                      ),
                     ),
-                  ),
-                ],
+                    AnimatedBuilder(
+                      animation: _copilotDock,
+                      builder: (context, _) {
+                        final req = _copilotDock.request;
+                        // Only render the dock at desktop widths
+                        // (≥1100). The Breakpoints check guards the
+                        // tablet edge case where the modal sheet is
+                        // still the right presentation.
+                        if (req == null ||
+                            !Breakpoints.isDesktop(context)) {
+                          return const SizedBox.shrink();
+                        }
+                        return _DockedCopilotPane(
+                          key: const ValueKey('docked_copilot_pane'),
+                          title: req.title,
+                          contentKey: req.key,
+                          builder: req.builder,
+                          onClose: _copilotDock.close,
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1036,3 +1287,178 @@ class _StatusPill extends StatelessWidget {
 }
 
 enum ConnectionTestState { idle, connected, failed }
+
+/// Vertical drag handle that lets the user resize the dashboard
+/// sidebar between [AppPrefsStorage.sidebarMinWidth] and
+/// [AppPrefsStorage.sidebarMaxWidth]. The handle itself is 6px wide;
+/// MouseRegion shows the resize cursor on desktop.
+class _SidebarResizeHandle extends StatelessWidget {
+  const _SidebarResizeHandle({
+    super.key,
+    required this.currentWidth,
+    required this.onDragUpdate,
+    required this.onDragEnd,
+  });
+
+  final double currentWidth;
+  final ValueChanged<double> onDragUpdate;
+  final VoidCallback onDragEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: (details) {
+          final next = (currentWidth + details.delta.dx).clamp(
+            AppPrefsStorage.sidebarMinWidth,
+            AppPrefsStorage.sidebarMaxWidth,
+          );
+          onDragUpdate(next);
+        },
+        onHorizontalDragEnd: (_) => onDragEnd(),
+        child: Container(
+          width: 6,
+          color: Colors.transparent,
+          child: const Center(
+            child: SizedBox(
+              width: 1,
+              child: ColoredBox(color: AppColors.border),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Right-hand pane chrome for the docked AI Copilot. Renders the
+/// brutalist border + close button and embeds the per-call content
+/// from [CopilotDockRequest.builder]. Width matches the typical
+/// IDE side-panel range.
+class _DockedCopilotPane extends StatelessWidget {
+  const _DockedCopilotPane({
+    super.key,
+    required this.title,
+    required this.contentKey,
+    required this.builder,
+    required this.onClose,
+  });
+
+  final String title;
+  final Key contentKey;
+  final WidgetBuilder builder;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 420,
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          left: BorderSide(color: AppColors.border, width: 1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+            decoration: const BoxDecoration(
+              color: AppColors.panel,
+              border: Border(
+                bottom: BorderSide(color: AppColors.border, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 11,
+                      letterSpacing: 1.4,
+                      fontWeight: FontWeight.w700,
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close, size: 16),
+                  tooltip: 'Close copilot',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: KeyedSubtree(key: contentKey, child: builder(context)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Default docked-copilot body used by the sidebar's "AI Copilot"
+/// shortcut. Reuses [AiCopilotSheet] so chat history, voice mode, and
+/// the OpenRouter model picker behave identically to the modal sheet.
+/// Per-surface entry points (terminal, log viewer) install their own
+/// builder with the right execution callback via [CopilotDock].
+class _DockedCopilotShell extends StatelessWidget {
+  const _DockedCopilotShell({
+    required this.server,
+    required this.aiProvider,
+    required this.apiKeyStorage,
+    required this.openRouterModel,
+    required this.localEndpoint,
+    required this.localModel,
+    required this.sshService,
+  });
+
+  final ServerProfile server;
+  final AiProvider aiProvider;
+  final ApiKeyStorage apiKeyStorage;
+  final String? openRouterModel;
+  final String localEndpoint;
+  final String localModel;
+  final SshService sshService;
+
+  @override
+  Widget build(BuildContext context) {
+    return AiCopilotSheet(
+      serverId: server.id,
+      provider: aiProvider,
+      apiKeyStorage: apiKeyStorage,
+      openRouterModel: openRouterModel,
+      localEndpoint: localEndpoint,
+      localModel: localModel,
+      executionTarget: AiCopilotExecutionTarget.terminal,
+      canRunCommands: () => sshService.isConnected,
+      // The docked shortcut does not have access to a live xterm
+      // buffer, so context is intentionally empty — the user can
+      // always type the relevant snippet into the prompt.
+      getContext: () => '',
+      onRunCommand: (String cmd) async {
+        try {
+          return await sshService.execute(cmd);
+        } catch (e) {
+          return '[error: $e]';
+        }
+      },
+      executionUnavailableMessage:
+          'Connect to the server to run suggested commands.',
+    );
+  }
+}

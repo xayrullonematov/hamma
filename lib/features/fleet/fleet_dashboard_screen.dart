@@ -311,7 +311,7 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
                 Text(
                   'FLEET COMMAND CENTER',
                   style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.6,
                     fontFamily: AppColors.monoFamily,
@@ -442,7 +442,7 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
                     border: InputBorder.none,
                     hintStyle: TextStyle(color: _mutedColor),
                   ),
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 18),
                   onChanged: (value) {
                     setState(() {
                       _searchQuery = value;

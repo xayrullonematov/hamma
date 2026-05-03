@@ -17,6 +17,14 @@ class AppPrefsStorage {
   static const _serverLastStatesKey = 'server_last_states';
   static const _localAiOnboardingSeenKey = 'local_ai_onboarding_seen';
   static const _sidebarCollapsedKey = 'dashboard_sidebar_collapsed';
+  static const _sidebarWidthKey = 'dashboard_sidebar_width';
+
+  /// Sensible bounds for the dashboard sidebar drag-to-resize handle.
+  /// Anything tighter than [sidebarMinWidth] crowds the labels; wider
+  /// than [sidebarMaxWidth] starves the content pane on small desktops.
+  static const double sidebarMinWidth = 180;
+  static const double sidebarMaxWidth = 360;
+  static const double sidebarDefaultWidth = 240;
 
   final FlutterSecureStorage _secureStorage;
 
@@ -132,6 +140,27 @@ class AppPrefsStorage {
     await _secureStorage.write(
       key: _sidebarCollapsedKey,
       value: collapsed.toString(),
+    );
+  }
+
+  /// Persisted user-chosen width of the expanded dashboard sidebar.
+  /// `null` means "not yet set" — caller should fall back to
+  /// [sidebarDefaultWidth]. Always clamped to [sidebarMinWidth] and
+  /// [sidebarMaxWidth] on read so a corrupt or out-of-range stored
+  /// value never breaks layout.
+  Future<double?> getSidebarWidth() async {
+    final value = await _secureStorage.read(key: _sidebarWidthKey);
+    if (value == null) return null;
+    final parsed = double.tryParse(value);
+    if (parsed == null) return null;
+    return parsed.clamp(sidebarMinWidth, sidebarMaxWidth);
+  }
+
+  Future<void> setSidebarWidth(double width) async {
+    final clamped = width.clamp(sidebarMinWidth, sidebarMaxWidth);
+    await _secureStorage.write(
+      key: _sidebarWidthKey,
+      value: clamped.toString(),
     );
   }
 }

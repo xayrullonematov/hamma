@@ -335,7 +335,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
                     border: InputBorder.none,
                     hintStyle: TextStyle(color: _subtitleColor),
                   ),
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 18),
                   onChanged: (value) {
                     setState(() {
                       _searchQuery = value;
@@ -459,7 +459,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
                                 child: Text(
                                   '${filteredServers.length} ${_isSearching ? 'found' : 'saved'}',
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: AppColors.textPrimary,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -668,7 +668,7 @@ class _ServerDashboardCard extends StatelessWidget {
                       visualDensity: VisualDensity.compact,
                       style: IconButton.styleFrom(
                         backgroundColor: AppColors.panel,
-                        foregroundColor: Colors.white,
+                        foregroundColor: AppColors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 10),

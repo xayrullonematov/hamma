@@ -31,6 +31,11 @@ class AppColors {
   static const success = Color(0xFFFFFFFF);
   static const warning = Color(0xFFFF0000);
 
+  // Subtle 10%-white overlay used by Material highlight/hover states
+  // when we want a brutalist "just barely visible" press feedback. Kept
+  // here so we don't sprinkle Colors.white10 literals across the app.
+  static const overlayHover = Color(0x1AFFFFFF);
+
   // Brand cyan — extracted from the Hamma logo (H mark).
   // 11:1 contrast on pure black — WCAG AAA.
   static const accent = Color(0xFF4ECDC4);

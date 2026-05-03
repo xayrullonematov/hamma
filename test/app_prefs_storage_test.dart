@@ -125,6 +125,57 @@ void main() {
     });
   });
 
+  // ── Sidebar width ────────────────────────────────────────────────────────────
+
+  group('sidebarWidth', () {
+    test('defaults to null when never set', () async {
+      expect(await prefs.getSidebarWidth(), isNull);
+    });
+
+    test('setSidebarWidth persists a value within range', () async {
+      await prefs.setSidebarWidth(280);
+      expect(await prefs.getSidebarWidth(), 280);
+    });
+
+    test('setSidebarWidth clamps below the minimum', () async {
+      await prefs.setSidebarWidth(50);
+      expect(
+        await prefs.getSidebarWidth(),
+        AppPrefsStorage.sidebarMinWidth,
+      );
+    });
+
+    test('setSidebarWidth clamps above the maximum', () async {
+      await prefs.setSidebarWidth(9999);
+      expect(
+        await prefs.getSidebarWidth(),
+        AppPrefsStorage.sidebarMaxWidth,
+      );
+    });
+
+    test('getSidebarWidth re-clamps a corrupt out-of-range stored value',
+        () async {
+      // Simulate storage corruption: stored width far above max.
+      FlutterSecureStorage.setMockInitialValues({
+        'dashboard_sidebar_width': '10000',
+      });
+      final fresh = const AppPrefsStorage();
+      expect(
+        await fresh.getSidebarWidth(),
+        AppPrefsStorage.sidebarMaxWidth,
+      );
+    });
+
+    test('getSidebarWidth returns null for an unparseable stored value',
+        () async {
+      FlutterSecureStorage.setMockInitialValues({
+        'dashboard_sidebar_width': 'not-a-number',
+      });
+      final fresh = const AppPrefsStorage();
+      expect(await fresh.getSidebarWidth(), isNull);
+    });
+  });
+
   // ── Server last states ───────────────────────────────────────────────────────
 
   group('serverLastStates', () {

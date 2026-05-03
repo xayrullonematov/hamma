@@ -18,7 +18,9 @@ import '../../core/vault/vault_injector.dart';
 import '../../core/vault/vault_redactor.dart';
 import '../../core/vault/vault_secret.dart';
 import '../../core/vault/vault_storage.dart';
+import '../../core/responsive/breakpoints.dart';
 import '../ai_assistant/ai_copilot_sheet.dart';
+import '../ai_assistant/copilot_dock.dart';
 import '../../core/theme/app_colors.dart';
 
 class TerminalScreen extends StatefulWidget {
@@ -267,12 +269,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   Future<void> _openCopilot() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => FractionallySizedBox(
-        heightFactor: 0.82,
-        child: AiCopilotSheet(
+    Widget buildBody(BuildContext _) => AiCopilotSheet(
           serverId: widget.serverName,
           provider: widget.aiProvider,
           apiKeyStorage: widget.apiKeyStorage,
@@ -280,7 +277,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
           localEndpoint: widget.localEndpoint,
           localModel: widget.localModel,
           executionTarget: AiCopilotExecutionTarget.terminal,
-          canRunCommands: () => _session != null && widget.sshService.isConnected,
+          canRunCommands: () =>
+              _session != null && widget.sshService.isConnected,
           getContext: () => _recentTerminalOutput,
           onRunCommand: (cmd) async {
             // Route through the non-interactive exec path so the
@@ -305,7 +303,30 @@ class _TerminalScreenState extends State<TerminalScreen> {
           },
           executionUnavailableMessage:
               'Commands can only be run when the terminal is connected.',
+        );
+
+    // Desktop dashboards install a CopilotDock above the terminal. When
+    // present and the viewport is wide enough, dock the copilot as a
+    // right-hand pane instead of pushing a modal sheet over the
+    // terminal output. On every other form factor we fall back to the
+    // existing modal behavior — same call site, two presentations.
+    final dock = CopilotDock.maybeOf(context);
+    if (dock != null && Breakpoints.isDesktop(context)) {
+      dock.open(
+        CopilotDockRequest(
+          title: 'AI COPILOT — ${widget.serverName.toUpperCase()}',
+          builder: buildBody,
         ),
+      );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.82,
+        child: buildBody(context),
       ),
     );
   }

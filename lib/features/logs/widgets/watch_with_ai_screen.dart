@@ -16,7 +16,9 @@ import '../../../core/storage/api_key_storage.dart';
 import '../../../core/storage/custom_actions_storage.dart';
 import '../../../core/storage/log_triage_prefs.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/responsive/breakpoints.dart';
 import '../../ai_assistant/ai_copilot_sheet.dart';
+import '../../ai_assistant/copilot_dock.dart';
 import '../../quick_actions/quick_actions.dart';
 
 /// Brutalist split-pane "Watch with AI" view.
@@ -293,12 +295,7 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
       ..writeln('---')
       ..writeln('What is the root cause and how should I investigate next?');
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => FractionallySizedBox(
-        heightFactor: 0.85,
-        child: AiCopilotSheet(
+    Widget buildBody(BuildContext _) => AiCopilotSheet(
           serverId: widget.title,
           provider: settings.provider,
           apiKeyStorage: const ApiKeyStorage(),
@@ -314,7 +311,29 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
           onRunCommand: (_) async => null,
           executionUnavailableMessage:
               'Open the terminal to run commands; this view only inspects logs.',
+        );
+
+    // When a CopilotDock is installed (desktop dashboard ≥1100px),
+    // dock the triage copilot in the right-hand pane instead of the
+    // modal sheet so the log stream stays visible while the user
+    // chats with the AI. Mobile/tablet still get the bottom sheet.
+    final dock = CopilotDock.maybeOf(context);
+    if (dock != null && Breakpoints.isDesktop(context)) {
+      dock.open(
+        CopilotDockRequest(
+          title: 'AI TRIAGE — ${widget.title.toUpperCase()}',
+          builder: buildBody,
         ),
+      );
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: buildBody(context),
       ),
     );
   }
