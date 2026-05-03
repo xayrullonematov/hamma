@@ -16,6 +16,7 @@ class AppPrefsStorage {
   static const _healthCheckIntervalKey = 'health_check_interval';
   static const _serverLastStatesKey = 'server_last_states';
   static const _localAiOnboardingSeenKey = 'local_ai_onboarding_seen';
+  static const _sidebarCollapsedKey = 'dashboard_sidebar_collapsed';
 
   final FlutterSecureStorage _secureStorage;
 
@@ -115,6 +116,22 @@ class AppPrefsStorage {
     await _secureStorage.write(
       key: _serverLastStatesKey,
       value: jsonEncode(states),
+    );
+  }
+
+  /// User preference for the desktop dashboard sidebar.
+  /// `null` means "not yet set" — caller should pick a sensible default
+  /// based on current viewport width (rail on tablet, full on desktop).
+  Future<bool?> getSidebarCollapsed() async {
+    final value = await _secureStorage.read(key: _sidebarCollapsedKey);
+    if (value == null) return null;
+    return value == 'true';
+  }
+
+  Future<void> setSidebarCollapsed(bool collapsed) async {
+    await _secureStorage.write(
+      key: _sidebarCollapsedKey,
+      value: collapsed.toString(),
     );
   }
 }

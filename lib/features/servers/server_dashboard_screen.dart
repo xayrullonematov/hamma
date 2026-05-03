@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
@@ -6,6 +7,7 @@ import '../../core/responsive/breakpoints.dart';
 import '../../core/ssh/connection_status.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/api_key_storage.dart';
+import '../../core/storage/app_prefs_storage.dart';
 import '../../core/theme/app_colors.dart';
 import '../../plugins/hamma_api.dart';
 import '../../plugins/hamma_plugin.dart';
@@ -56,6 +58,7 @@ class ServerDashboardScreen extends StatefulWidget {
 class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   late final SshService _sshService;
   final ApiKeyStorage _apiKeyStorage = const ApiKeyStorage();
+  final AppPrefsStorage _appPrefs = const AppPrefsStorage();
   late AiProvider _aiProvider;
   late String _apiKey;
   late String? _openRouterModel;
@@ -63,6 +66,11 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   late String _localModel;
 
   int _activeTabIndex = 0;
+
+  /// `null` until the persisted preference loads. After load, this
+  /// reflects the user's last toggle. Defaults are picked per-viewport
+  /// in [_effectiveSidebarCollapsed] when this is still null.
+  bool? _sidebarCollapsedPref;
 
   /// Snapshot of the enabled plugins at last rebuild. Refreshed via
   /// [_onPluginRegistryChanged] when the user toggles a plugin in
@@ -108,10 +116,31 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     _enabledPlugins = _pluginRegistry.enabled;
     _pluginRegistry.addListener(_onPluginRegistryChanged);
 
+    _appPrefs.getSidebarCollapsed().then((value) {
+      if (!mounted) return;
+      setState(() => _sidebarCollapsedPref = value);
+    });
+
     if (_sshService.currentStatus.isDisconnected ||
         _sshService.currentStatus.isFailed) {
       _connect();
     }
+  }
+
+  /// Resolved sidebar mode for the current viewport.
+  /// Honours the persisted preference once loaded; otherwise defaults
+  /// to rail (collapsed) on tablet widths and full on desktop widths.
+  bool _effectiveSidebarCollapsed(BuildContext context) {
+    final pref = _sidebarCollapsedPref;
+    if (pref != null) return pref;
+    return Breakpoints.isTablet(context);
+  }
+
+  void _toggleSidebar(BuildContext context) {
+    final next = !_effectiveSidebarCollapsed(context);
+    setState(() => _sidebarCollapsedPref = next);
+    // Fire-and-forget; persistence failure must not block the UI toggle.
+    _appPrefs.setSidebarCollapsed(next);
   }
 
   @override
@@ -288,13 +317,19 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   }
 
   // ---------------------------------------------------------------------------
-  // Wide-screen sidebar (>=700px)
+  // Wide-screen sidebar (>=700px). Two modes:
+  //   * Full (240px) — labels visible, header with server name + status pill.
+  //   * Rail (64px)  — icons-only, tooltips on hover, hides labels & header
+  //     details. Default for tablet widths; toggleable everywhere via the
+  //     top button or Ctrl+B (Cmd+B on macOS, handled by [LogicalKeyboardKey
+  //     .meta] in the shortcut map).
   // ---------------------------------------------------------------------------
-  Widget _buildSidebar(ConnectionStatus status) {
+  Widget _buildSidebar(ConnectionStatus status, {required bool collapsed}) {
     final isConnected = status.isConnected;
+    final width = collapsed ? 64.0 : 240.0;
 
     return Container(
-      width: 240,
+      width: width,
       decoration: const BoxDecoration(
         color: AppColors.panel,
         border: Border(
@@ -305,51 +340,96 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(
-                    Icons.arrow_back_rounded,
-                    color: AppColors.textPrimary,
-                    size: 18,
-                  ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Back to servers',
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _server.name.toUpperCase(),
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.2,
-                    fontFamily: AppColors.monoFamily,
-                    fontFamilyFallback: AppColors.monoFallback,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _StatusPill(status: status),
-                if (status.lastSuccessfulConnection != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      'LAST ${_formatTime(status.lastSuccessfulConnection)}',
-                      style: const TextStyle(
-                        color: AppColors.textFaint,
-                        fontSize: 9,
-                        letterSpacing: 1.2,
-                        fontFamily: AppColors.monoFamily,
-                        fontFamilyFallback: AppColors.monoFallback,
+            padding: collapsed
+                ? const EdgeInsets.fromLTRB(8, 16, 8, 12)
+                : const EdgeInsets.fromLTRB(16, 20, 16, 16),
+            child: collapsed
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(
+                          Icons.arrow_back_rounded,
+                          color: AppColors.textPrimary,
+                          size: 18,
+                        ),
+                        tooltip: 'Back to servers',
                       ),
-                    ),
+                      const SizedBox(height: 4),
+                      IconButton(
+                        onPressed: () => _toggleSidebar(context),
+                        icon: const Icon(
+                          Icons.keyboard_double_arrow_right_rounded,
+                          color: AppColors.textMuted,
+                          size: 18,
+                        ),
+                        tooltip: 'Expand sidebar (Ctrl+B)',
+                      ),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(
+                              Icons.arrow_back_rounded,
+                              color: AppColors.textPrimary,
+                              size: 18,
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Back to servers',
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () => _toggleSidebar(context),
+                            icon: const Icon(
+                              Icons.keyboard_double_arrow_left_rounded,
+                              color: AppColors.textMuted,
+                              size: 16,
+                            ),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            tooltip: 'Collapse sidebar (Ctrl+B)',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _server.name.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                          fontFamily: AppColors.monoFamily,
+                          fontFamilyFallback: AppColors.monoFallback,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _StatusPill(status: status),
+                      if (status.lastSuccessfulConnection != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            'LAST ${_formatTime(status.lastSuccessfulConnection)}',
+                            style: const TextStyle(
+                              color: AppColors.textFaint,
+                              fontSize: 9,
+                              letterSpacing: 1.2,
+                              fontFamily: AppColors.monoFamily,
+                              fontFamilyFallback: AppColors.monoFallback,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
           ),
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 8),
@@ -358,33 +438,52 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
               item: _navItemAt(i),
               isActive: _activeTabIndex == i,
               isEnabled: i == 0 || isConnected,
+              collapsed: collapsed,
               onTap: () => setState(() => _activeTabIndex = i),
             ),
           const Spacer(),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: collapsed
+                ? const EdgeInsets.symmetric(horizontal: 8, vertical: 8)
+                : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (!isConnected && !status.isConnecting)
-                  OutlinedButton.icon(
-                    onPressed: _connect,
-                    icon: const Icon(Icons.refresh_rounded, size: 16),
-                    label: const Text('RECONNECT'),
-                  ),
+                  collapsed
+                      ? IconButton(
+                          onPressed: _connect,
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          tooltip: 'Reconnect',
+                        )
+                      : OutlinedButton.icon(
+                          onPressed: _connect,
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: const Text('RECONNECT'),
+                        ),
                 if (isConnected || status.isConnecting)
-                  OutlinedButton.icon(
-                    onPressed: () => _sshService.disconnect(),
-                    icon: const Icon(Icons.link_off_rounded, size: 16),
-                    label: const Text('DISCONNECT'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.danger,
-                      side: const BorderSide(
-                        color: AppColors.danger,
-                        width: 1,
-                      ),
-                    ),
-                  ),
+                  collapsed
+                      ? IconButton(
+                          onPressed: () => _sshService.disconnect(),
+                          icon: const Icon(
+                            Icons.link_off_rounded,
+                            size: 18,
+                            color: AppColors.danger,
+                          ),
+                          tooltip: 'Disconnect',
+                        )
+                      : OutlinedButton.icon(
+                          onPressed: () => _sshService.disconnect(),
+                          icon: const Icon(Icons.link_off_rounded, size: 16),
+                          label: const Text('DISCONNECT'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.danger,
+                            side: const BorderSide(
+                              color: AppColors.danger,
+                              width: 1,
+                            ),
+                          ),
+                        ),
               ],
             ),
           ),
@@ -396,6 +495,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             ),
             isActive: false,
             isEnabled: true,
+            collapsed: collapsed,
             onTap: _openSettings,
           ),
           const SizedBox(height: 12),
@@ -683,18 +783,32 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         if (Breakpoints.isMobile(context)) {
           return _buildMobileShell(status);
         }
-        return Scaffold(
-          backgroundColor: AppColors.scaffoldBackground,
-          body: Row(
-            children: [
-              _buildSidebar(status),
-              Expanded(
-                child: Container(
-                  color: AppColors.scaffoldBackground,
-                  child: _buildActiveContent(status),
-                ),
+        final collapsed = _effectiveSidebarCollapsed(context);
+        // Ctrl+B (and Cmd+B on macOS) toggles the sidebar between rail
+        // and full mode, mirroring conventions in VS Code / IntelliJ.
+        return CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyB, control: true):
+                () => _toggleSidebar(context),
+            const SingleActivator(LogicalKeyboardKey.keyB, meta: true):
+                () => _toggleSidebar(context),
+          },
+          child: Focus(
+            autofocus: true,
+            child: Scaffold(
+              backgroundColor: AppColors.scaffoldBackground,
+              body: Row(
+                children: [
+                  _buildSidebar(status, collapsed: collapsed),
+                  Expanded(
+                    child: Container(
+                      color: AppColors.scaffoldBackground,
+                      child: _buildActiveContent(status),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },
@@ -807,12 +921,14 @@ class _SidebarItem extends StatelessWidget {
     required this.isActive,
     required this.onTap,
     this.isEnabled = true,
+    this.collapsed = false,
   });
 
   final _NavItem item;
   final bool isActive;
   final VoidCallback onTap;
   final bool isEnabled;
+  final bool collapsed;
 
   @override
   Widget build(BuildContext context) {
@@ -820,7 +936,7 @@ class _SidebarItem extends StatelessWidget {
         ? AppColors.textFaint
         : (isActive ? AppColors.textPrimary : AppColors.textMuted);
 
-    return InkWell(
+    final tile = InkWell(
       onTap: isEnabled ? onTap : null,
       child: Container(
         decoration: BoxDecoration(
@@ -832,26 +948,40 @@ class _SidebarItem extends StatelessWidget {
             ),
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            Icon(item.icon, size: 18, color: color),
-            const SizedBox(width: 12),
-            Text(
-              item.label.toUpperCase(),
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                letterSpacing: 1.4,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                fontFamily: AppColors.monoFamily,
-                fontFamilyFallback: AppColors.monoFallback,
+        padding: collapsed
+            ? const EdgeInsets.symmetric(horizontal: 0, vertical: 14)
+            : const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: collapsed
+            ? Center(child: Icon(item.icon, size: 20, color: color))
+            : Row(
+                children: [
+                  Icon(item.icon, size: 18, color: color),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      item.label.toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 11,
+                        letterSpacing: 1.4,
+                        fontWeight:
+                            isActive ? FontWeight.w700 : FontWeight.w500,
+                        fontFamily: AppColors.monoFamily,
+                        fontFamilyFallback: AppColors.monoFallback,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
-        ),
       ),
     );
+
+    if (collapsed) {
+      return Tooltip(message: item.label, child: tile);
+    }
+    return tile;
   }
 }
 

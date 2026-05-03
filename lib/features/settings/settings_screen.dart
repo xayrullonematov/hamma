@@ -284,6 +284,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _save() async {
+    // Re-entry guard. Both the inline `Save` button and the new sticky
+    // bottom save bar bind to this method, and a rapid double-tap (or
+    // near-simultaneous press across both targets) could otherwise
+    // launch overlapping save flows before the disabled state from
+    // `_isBusy` propagates through a rebuild. Bailing out here keeps
+    // saves strictly serial without depending on the widget tree.
+    if (_isBusy) {
+      return;
+    }
     // Hard-stop on non-loopback Local AI endpoints. The button is gated
     // by `_isLocalEndpointValid`, but a determined caller could still
     // reach this code path — refuse and surface a snackbar.
@@ -1303,6 +1312,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.of(context).pop(),
           tooltip: 'Back to servers',
+        ),
+      ),
+      // Persistent save bar pinned to the bottom of the screen so the
+      // user always knows where to commit their pending changes.
+      // Keeps the existing inline `Save` button further up working as a
+      // fallback so we don't break the muscle memory of long-time users.
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Container(
+          decoration: const BoxDecoration(
+            color: AppColors.panel,
+            border: Border(
+              top: BorderSide(color: AppColors.border, width: 1),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _isSaving
+                      ? 'Saving…'
+                      : (_status.isNotEmpty ? _status : 'Tap save to apply'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: _mutedColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: _isBusy ? null : _save,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                  ),
+                ),
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save_rounded, size: 16),
+                label: const Text('SAVE'),
+              ),
+            ],
+          ),
         ),
       ),
       body: SafeArea(

@@ -519,81 +519,9 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       backgroundColor: _surfaceColor,
       isScrollControlled: true,
       builder: (context) {
-        return SafeArea(
-          top: false,
-          child: SizedBox(
-            height: MediaQuery.of(context).size.height * 0.68,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'OpenRouter Models',
-                          style: Theme.of(
-                            context,
-                          ).textTheme.titleMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close_rounded),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                    children: [
-                      ListTile(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        title: const Text('Use Default Model'),
-                        subtitle: const Text('meta-llama/llama-3-8b-instruct'),
-                        trailing:
-                            _activeOpenRouterModel == null
-                                ? const Icon(
-                                  Icons.check_rounded,
-                                  color: _primaryColor,
-                                )
-                                : null,
-                        onTap: () => Navigator.of(context).pop(''),
-                      ),
-                      const SizedBox(height: 8),
-                      ..._openRouterModels.map((modelId) {
-                        final isSelected = modelId == _activeOpenRouterModel;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: ListTile(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
-                            ),
-                            tileColor: _panelColor,
-                            title: Text(modelId),
-                            trailing:
-                                isSelected
-                                    ? const Icon(
-                                      Icons.check_rounded,
-                                      color: _primaryColor,
-                                    )
-                                    : null,
-                            onTap: () => Navigator.of(context).pop(modelId),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+        return _OpenRouterModelPickerSheet(
+          models: _openRouterModels,
+          activeModel: _activeOpenRouterModel,
         );
       },
     );
@@ -2183,4 +2111,176 @@ class _ChatMessage {
   final String role;
   final String content;
   final CommandAnalysis? analysis;
+}
+
+/// Modal bottom-sheet picker for OpenRouter models.
+///
+/// Splits the long flat list with a top search field that filters by
+/// substring match against the model id (case-insensitive). The
+/// "Use Default Model" row sits above the filterable list and is
+/// always visible regardless of the query so users can fall back to
+/// the bundled default with one tap.
+class _OpenRouterModelPickerSheet extends StatefulWidget {
+  const _OpenRouterModelPickerSheet({
+    required this.models,
+    required this.activeModel,
+  });
+
+  final List<String> models;
+  final String? activeModel;
+
+  @override
+  State<_OpenRouterModelPickerSheet> createState() =>
+      _OpenRouterModelPickerSheetState();
+}
+
+class _OpenRouterModelPickerSheetState
+    extends State<_OpenRouterModelPickerSheet> {
+  static const _surfaceColor = AppColors.surface;
+  static const _panelColor = AppColors.panel;
+  static const _primaryColor = AppColors.primary;
+
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  List<String> get _filtered {
+    if (_query.isEmpty) return widget.models;
+    final q = _query.toLowerCase();
+    return widget.models
+        .where((id) => id.toLowerCase().contains(q))
+        .toList(growable: false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      top: false,
+      child: SizedBox(
+        height: MediaQuery.of(context).size.height * 0.78,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'OpenRouter Models',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: TextField(
+                controller: _searchController,
+                autofocus: false,
+                decoration: InputDecoration(
+                  hintText: 'Search models',
+                  prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                  filled: true,
+                  fillColor: _panelColor,
+                  border: const OutlineInputBorder(
+                    borderRadius: BorderRadius.zero,
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close_rounded, size: 16),
+                          tooltip: 'Clear search',
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _query = '');
+                          },
+                        ),
+                ),
+                onChanged: (value) => setState(() => _query = value.trim()),
+              ),
+            ),
+            Expanded(
+              child: Builder(
+                builder: (context) {
+                  final filtered = _filtered;
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                    children: [
+                      ListTile(
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                        tileColor: _surfaceColor,
+                        title: const Text('Use Default Model'),
+                        subtitle: const Text('meta-llama/llama-3-8b-instruct'),
+                        trailing: widget.activeModel == null
+                            ? const Icon(
+                                Icons.check_rounded,
+                                color: _primaryColor,
+                              )
+                            : null,
+                        onTap: () => Navigator.of(context).pop(''),
+                      ),
+                      const SizedBox(height: 8),
+                      if (filtered.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 24,
+                          ),
+                          child: Text(
+                            'No models match "$_query"',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        )
+                      else
+                        ...filtered.map((modelId) {
+                          final isSelected = modelId == widget.activeModel;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: ListTile(
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                              tileColor: _panelColor,
+                              title: Text(modelId),
+                              trailing: isSelected
+                                  ? const Icon(
+                                      Icons.check_rounded,
+                                      color: _primaryColor,
+                                    )
+                                  : null,
+                              onTap: () => Navigator.of(context).pop(modelId),
+                            ),
+                          );
+                        }),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
