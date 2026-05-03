@@ -46,6 +46,11 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
   /// Current state of each step row, by step id.
   final Map<String, _StepRow> _rows = {};
 
+  /// Id of the step currently being executed, so `_executeWithCancel`
+  /// (which doesn't otherwise know which step it's running) can stream
+  /// stdout chunks live into that row's buffer.
+  String? _currentStepId;
+
   bool _running = false;
   bool _paramsCollected = false;
   RunbookRunResult? _result;
@@ -153,15 +158,19 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
   }
 
   /// Runs a single command via [SshService.streamCommand] (which
-  /// returns an [SSHSession] we can `close()`), and registers an
+  /// returns an [SSHSession] we can `close()`), registers an
   /// `onCancel` listener with the runner's cancellation token so
-  /// pressing STOP terminates the in-flight session immediately —
-  /// not just the next-step gate. Returns combined stdout+stderr.
+  /// pressing STOP terminates the in-flight session immediately,
+  /// streams stdout/stderr chunks live into the current step row,
+  /// and inspects `session.exitCode` / `session.exitSignal` after
+  /// the channel closes — `dartssh2`'s `done` future does NOT fail
+  /// on a non-zero remote exit, so without an explicit check we'd
+  /// silently mark failed deploys / restarts as succeeded.
   Future<String> _executeWithCancel(
     String command,
     RunbookCancellation cancellation,
   ) async {
-    final session = await widget.sshService.streamCommand(command);
+    final SSHSession session = await widget.sshService.streamCommand(command);
 
     // Wire STOP -> kill this session. The listener fires
     // immediately if STOP was already pressed before the session
@@ -174,8 +183,25 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
 
     final stdoutBuf = <int>[];
     final stderrBuf = <int>[];
-    final stdoutSub = session.stdout.listen(stdoutBuf.addAll);
-    final stderrSub = session.stderr.listen(stderrBuf.addAll);
+
+    void appendChunk(String chunk) {
+      if (chunk.isEmpty || !mounted) return;
+      final id = _currentStepId;
+      if (id == null) return;
+      setState(() {
+        final row = _rows[id];
+        if (row != null) row.stdout = '${row.stdout}$chunk';
+      });
+    }
+
+    final stdoutSub = session.stdout.listen((bytes) {
+      stdoutBuf.addAll(bytes);
+      appendChunk(utf8.decode(bytes, allowMalformed: true));
+    });
+    final stderrSub = session.stderr.listen((bytes) {
+      stderrBuf.addAll(bytes);
+      appendChunk(utf8.decode(bytes, allowMalformed: true));
+    });
 
     try {
       await session.done;
@@ -187,7 +213,26 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     if (cancellation.isCancelled) {
       throw const RunbookCommandCancelled();
     }
-    return utf8.decode([...stdoutBuf, ...stderrBuf], allowMalformed: true);
+
+    final stdoutStr =
+        utf8.decode(stdoutBuf, allowMalformed: true);
+    final stderrStr =
+        utf8.decode(stderrBuf, allowMalformed: true);
+    final exitCode = session.exitCode;
+    final exitSignal = session.exitSignal?.signalName;
+    final failed = exitSignal != null || (exitCode != null && exitCode != 0);
+    if (failed) {
+      throw RunbookCommandFailed(
+        stdout: stdoutStr,
+        stderr: stderrStr,
+        exitCode: exitCode,
+        exitSignal: exitSignal,
+      );
+    }
+    // Success: combined stdout+stderr (matches prior contract so
+    // skipIfRegex / waitFor / aiSummarize keep working against the
+    // full stream, not just stdout).
+    return stderrStr.isEmpty ? stdoutStr : '$stdoutStr$stderrStr';
   }
 
   Future<bool> _confirmRiskGate(
@@ -291,13 +336,17 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     setState(() {
       if (event is StepStarted) {
         _rows[event.step.id]?.status = _RowStatus.running;
+        _currentStepId = event.step.id;
       } else if (event is StepStdout) {
+        // Final stdout from the runner replaces the live-streamed
+        // buffer so we keep one canonical copy (no duplication).
         _rows[event.step.id]?.stdout = event.chunk;
       } else if (event is StepNotify) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(event.message)),
         );
       } else if (event is StepFinished) {
+        if (_currentStepId == event.result.step.id) _currentStepId = null;
         final r = _rows[event.result.step.id];
         if (r == null) return;
         r.status = switch (event.result.status) {

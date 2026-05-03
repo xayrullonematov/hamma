@@ -159,6 +159,44 @@ class RunbookCommandCancelled implements Exception {
   String toString() => 'RunbookCommandCancelled';
 }
 
+/// Thrown by an [RunbookCommandExecutor] when the underlying remote
+/// command exited with a non-zero status (or was killed by a signal).
+/// `dartssh2`'s `SSHSession.done` future completes on channel close
+/// and does NOT fail on a non-zero exit, so the SSH adapter must
+/// inspect `session.exitCode` / `session.exitSignal` itself and raise
+/// this exception on failure — without it the runner would mark
+/// failed deploys / restarts as succeeded and continue running
+/// subsequent steps. The runner maps this to
+/// [RunbookStepStatus.failed] (subject to `continueOnError`) and
+/// preserves [stdout] / [stderr] in the resulting
+/// [RunbookStepResult] so the UI can show the operator exactly what
+/// the remote produced before failing.
+class RunbookCommandFailed implements Exception {
+  const RunbookCommandFailed({
+    required this.stdout,
+    required this.stderr,
+    this.exitCode,
+    this.exitSignal,
+  });
+
+  final String stdout;
+  final String stderr;
+  final int? exitCode;
+  final String? exitSignal;
+
+  @override
+  String toString() {
+    final code = exitCode != null ? 'exit $exitCode' : null;
+    final sig = exitSignal != null ? 'signal $exitSignal' : null;
+    final reason = [code, sig].whereType<String>().join(' / ');
+    final tail = stderr.trim().isNotEmpty
+        ? stderr.trim()
+        : stdout.trim();
+    return 'Command failed (${reason.isEmpty ? 'non-zero exit' : reason})'
+        '${tail.isEmpty ? '' : ': $tail'}';
+  }
+}
+
 /// Function signature the runner uses to execute a command. The
 /// second argument is the runner's [RunbookCancellation] so the
 /// adapter can register a teardown callback (see
@@ -499,6 +537,21 @@ class RunbookRunner {
         startedAt: startedAt,
         finishedAt: DateTime.now().toUtc(),
         summary: 'Command cancelled by STOP.',
+      );
+    } on RunbookCommandFailed catch (e) {
+      // Remote command exited non-zero. Preserve whatever stdout
+      // we DID collect so the operator can see how far the script
+      // got before failing — this is critical context for runbook
+      // recovery branches that key off prior output.
+      _stepStdout[step.id] = e.stdout;
+      if (e.stdout.isNotEmpty) _events.add(StepStdout(step, e.stdout));
+      return RunbookStepResult(
+        step: step,
+        status: RunbookStepStatus.failed,
+        startedAt: startedAt,
+        finishedAt: DateTime.now().toUtc(),
+        stdout: e.stdout,
+        error: e.toString(),
       );
     } on TimeoutException {
       return RunbookStepResult(

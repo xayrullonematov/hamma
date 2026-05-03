@@ -367,6 +367,100 @@ void main() {
       expect(fired, 3);
     });
 
+    test(
+      'non-zero exit (RunbookCommandFailed) marks step failed, preserves stdout, stops the run',
+      () async {
+        final rb = Runbook(
+          id: 'rb',
+          name: 'Deploy',
+          steps: const [
+            RunbookStep(
+              id: 'pull',
+              label: 'git pull',
+              type: RunbookStepType.command,
+              command: 'git pull',
+            ),
+            RunbookStep(
+              id: 'restart',
+              label: 'systemctl restart',
+              type: RunbookStepType.command,
+              command: 'systemctl restart app',
+            ),
+          ],
+        );
+        final runner = RunbookRunner(
+          runbook: rb,
+          params: const {},
+          executeCommand: (cmd, _) async {
+            // Simulates the real SSH adapter: dartssh2's
+            // session.done resolves on close, the adapter checks
+            // session.exitCode and throws this on non-zero.
+            throw const RunbookCommandFailed(
+              stdout: 'fetching origin/main...\n',
+              stderr: 'fatal: not a git repository\n',
+              exitCode: 128,
+            );
+          },
+        );
+        final result = await runner.run();
+        expect(result.results[0].status, RunbookStepStatus.failed);
+        expect(result.results[0].stdout,
+            'fetching origin/main...\n');
+        expect(result.results[0].error, contains('exit 128'));
+        expect(result.results[0].error, contains('not a git repository'));
+        // Critical safety property: the second command MUST NOT
+        // execute after a failed precondition unless
+        // continueOnError is set.
+        expect(result.results[1].status, RunbookStepStatus.cancelled);
+        expect(result.hasFailures, isTrue);
+      },
+    );
+
+    test(
+      'non-zero exit with continueOnError keeps going to subsequent steps',
+      () async {
+        var calls = 0;
+        final rb = Runbook(
+          id: 'rb',
+          name: 'Soft',
+          steps: const [
+            RunbookStep(
+              id: 'a',
+              label: 'a',
+              type: RunbookStepType.command,
+              command: 'a',
+              continueOnError: true,
+            ),
+            RunbookStep(
+              id: 'b',
+              label: 'b',
+              type: RunbookStepType.command,
+              command: 'b',
+            ),
+          ],
+        );
+        final runner = RunbookRunner(
+          runbook: rb,
+          params: const {},
+          executeCommand: (cmd, _) async {
+            calls++;
+            if (cmd == 'a') {
+              throw const RunbookCommandFailed(
+                stdout: '',
+                stderr: 'oops',
+                exitCode: 1,
+              );
+            }
+            return 'b-out';
+          },
+        );
+        final result = await runner.run();
+        expect(calls, 2);
+        expect(result.results[0].status, RunbookStepStatus.failed);
+        expect(result.results[1].status, RunbookStepStatus.succeeded);
+      },
+    );
+
     test('cancellation between steps marks subsequent steps cancelled',
         () async {
       final ssh = _FakeSsh({'a': 'one', 'b': 'two'});
