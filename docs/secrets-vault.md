@@ -65,10 +65,12 @@ It is wired into:
 
 | Site | Call path |
 |---|---|
-| Sentry transport | `Sentry.beforeSend` → `ErrorScrubber.scrub` → vault pre-pass |
+| Sentry transport | `Sentry.beforeSend` recursively scrubs `message`, `exceptions[].value`, every `breadcrumb` (message + data map), `tags`, and the surviving keys in every `contexts` map — each value flows through `ErrorScrubber.scrub` which runs the vault pre-pass. |
 | In-process error capture | `ErrorReporter._capture` → `ErrorScrubber.scrub` |
 | In-widget error panel & crash screen | both call `ErrorScrubber.scrub` |
 | AI Assistant prompt builder | `AiCommandService._chatWith*` redacts both the user message and prepended history before the request body is built |
+| Terminal stdout / stderr | `TerminalScreen._openShell` redacts every chunk before `_terminal.write` and before it lands in the AI-context scrollback buffer |
+| Server edit screen | "Linked Secrets" card lets the user flip a secret between global and `scope == server.id`; values are never shown here. |
 
 The redactor enforces a **6-character minimum** value length — anything
 shorter would generate too many false positives (a 2-char "secret"
@@ -107,15 +109,25 @@ a value the user copied themselves between copy and timeout.
 
 ## Known limitations
 
-- A user who types a secret into the terminal directly (not through
-  the inject syntax) still sees it in the local terminal pane until
-  the redactor catches up on the next render. Auto-redaction
-  applies on the **next render pass**, but a screen recording of the
-  exact frame where the user pressed Enter would still show the
-  value.
+- **Interactive keystrokes are not intercepted.** The terminal
+  forwards every character you type to the remote shell verbatim.
+  If you literally type your password into a TTY, the local xterm
+  display will show what you typed up until the remote shell echoes
+  something back (at which point our stdout redactor takes over).
+  Use `${vault:NAME}` via the AI Assistant's "Run" button to avoid
+  this entirely — the substitution happens before the bytes leave
+  the device.
+- **Docker / Services / Process managers do not yet pass
+  `vaultSecrets` into `SshService.execute`.** Placeholders typed
+  in those forms reach the remote shell literally. Tracked as a
+  follow-up.
 - The redactor cannot know about secrets you have not registered —
   if you paste a token without using `${vault:NAME}`, only the
   generic `ErrorScrubber` regexes apply.
+- The cloud blob is keyed off the master PIN. Rotating the PIN
+  today requires a manual sync push from one device before peers
+  can decrypt the new blob. Auto re-encrypt on PIN rotation is a
+  tracked follow-up.
 - Secret rotation reminders, OS keychain export/import, sharing a
   single secret with a teammate, and HSM/Yubikey-derived vault keys
   are all out of scope for this version. They are tracked as v2

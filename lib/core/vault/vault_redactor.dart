@@ -5,9 +5,22 @@ import 'vault_secret.dart';
 /// Pure-Dart, side-effect-free redactor that replaces every literal
 /// occurrence of a vault secret's value with `••••••• (vault: NAME)`.
 ///
-/// **Wired into**: terminal command echo, command-history pane,
-/// AI prompt builder (both user message and history), [ErrorScrubber]
-/// pass, and the Sentry `beforeSend` transport hook.
+/// **Wired into**: terminal stdout/stderr stream (before xterm.write
+/// and the AI-context scrollback buffer), AI prompt builder (both
+/// user message and conversation history), the [ErrorScrubber]
+/// pre-pass that feeds the in-app crash screen and the in-widget
+/// error panel, and Sentry's `beforeSend` transport hook
+/// (message + breadcrumbs + exception values + extra/tags/contexts).
+///
+/// Known gaps that are deliberately NOT covered here:
+///  - Interactive keystrokes the user types into the terminal are
+///    forwarded to the remote shell verbatim. If you literally type
+///    your real password into a TTY, this redactor cannot recover
+///    it. Use the `${vault:NAME}` form via the AI Assistant's "Run"
+///    button instead.
+///  - The Docker / Services / Process manager screens do not yet
+///    pass `vaultSecrets` into `SshService.execute`; placeholders
+///    typed in those forms reach the shell literally.
 ///
 /// Design notes:
 ///  - **Multi-occurrence**: a value that appears N times in a string is

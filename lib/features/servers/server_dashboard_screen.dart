@@ -604,6 +604,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         return TerminalScreen(
           sshService: _sshService,
           serverName: _server.name,
+          serverId: _server.id,
           aiProvider: _aiProvider,
           apiKeyStorage: _apiKeyStorage,
           openRouterModel: _openRouterModel,
@@ -664,6 +665,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
         return TerminalScreen(
           sshService: _sshService,
           serverName: _server.name,
+          serverId: _server.id,
           aiProvider: _aiProvider,
           apiKeyStorage: _apiKeyStorage,
           openRouterModel: _openRouterModel,

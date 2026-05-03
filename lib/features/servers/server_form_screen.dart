@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -9,6 +10,9 @@ import 'package:flutter/services.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/vault/vault_change_bus.dart';
+import '../../core/vault/vault_secret.dart';
+import '../../core/vault/vault_storage.dart';
 
 enum AuthMethod { password, sshKey }
 
@@ -435,6 +439,13 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
                       ],
                     ),
                   ),
+                  if (_isEditing) ...[
+                    const SizedBox(height: 16),
+                    _LinkedSecretsSection(
+                      serverId: widget.initialServer!.id,
+                      serverName: widget.initialServer!.name,
+                    ),
+                  ],
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: _save,
@@ -540,6 +551,160 @@ class _ObscuredMultilineTextFormField extends StatelessWidget {
       }
     }
     return buffer.toString();
+  }
+}
+
+/// Lists every vault secret this server can see and lets the user
+/// move a secret between **global** scope (visible to all servers)
+/// and **scoped to this server only**. The secret value is never
+/// shown here — that lives behind the PIN-gated reveal in the main
+/// Vault settings screen. This card only edits the (scope, name)
+/// binding, which the inject layer uses to resolve `${vault:NAME}`.
+class _LinkedSecretsSection extends StatefulWidget {
+  const _LinkedSecretsSection({
+    required this.serverId,
+    required this.serverName,
+  });
+
+  final String serverId;
+  final String serverName;
+
+  @override
+  State<_LinkedSecretsSection> createState() => _LinkedSecretsSectionState();
+}
+
+class _LinkedSecretsSectionState extends State<_LinkedSecretsSection> {
+  late final VaultStorage _storage;
+  StreamSubscription<void>? _sub;
+  List<VaultSecret> _visible = const [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _storage = VaultStorage();
+    _sub = VaultChangeBus.instance.changes.listen((_) => _reload());
+    _reload();
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _reload() async {
+    try {
+      final loaded = await _storage.loadVisibleTo(widget.serverId);
+      if (!mounted) return;
+      setState(() {
+        _visible = loaded;
+        _loading = false;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Could not load vault: $e';
+      });
+    }
+  }
+
+  Future<void> _setScope(VaultSecret secret, String? newScope) async {
+    try {
+      await _storage.upsert(secret.copyWith(scope: newScope));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update scope: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return _FormSectionCard(
+      title: 'Linked Secrets',
+      subtitle:
+          'Bind vault secrets to this server. Reference them in commands as '
+          '\${vault:NAME}. Values stay hidden — manage them in Settings → Vault.',
+      icon: Icons.shield_outlined,
+      child: Builder(
+        builder: (context) {
+          if (_loading) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            );
+          }
+          if (_error != null) {
+            return Text(
+              _error!,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
+            );
+          }
+          if (_visible.isEmpty) {
+            return Text(
+              'No secrets yet. Open Settings → Vault to add one, then come '
+              'back here to bind it to this server.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: _ServerFormScreenState._mutedColor),
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final secret in _visible)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '\${vault:${secret.name}}',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                fontFamily: 'monospace',
+                                color: Colors.white,
+                              ),
+                            ),
+                            Text(
+                              secret.isGlobal
+                                  ? 'Global — visible to every server'
+                                  : 'Scoped to ${widget.serverName}',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: _ServerFormScreenState._mutedColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      if (secret.isGlobal)
+                        OutlinedButton(
+                          onPressed: () =>
+                              _setScope(secret, widget.serverId),
+                          child: const Text('Restrict here'),
+                        )
+                      else
+                        OutlinedButton(
+                          onPressed: () => _setScope(secret, null),
+                          child: const Text('Make global'),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
   }
 }
 

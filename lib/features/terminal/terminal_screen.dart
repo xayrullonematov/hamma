@@ -13,6 +13,11 @@ import '../../core/ai/ai_provider.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/ssh/connection_status.dart';
 import '../../core/storage/api_key_storage.dart';
+import '../../core/vault/vault_change_bus.dart';
+import '../../core/vault/vault_injector.dart';
+import '../../core/vault/vault_redactor.dart';
+import '../../core/vault/vault_secret.dart';
+import '../../core/vault/vault_storage.dart';
 import '../ai_assistant/ai_copilot_sheet.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -26,6 +31,8 @@ class TerminalScreen extends StatefulWidget {
     required this.openRouterModel,
     this.localEndpoint,
     this.localModel,
+    this.serverId,
+    this.vaultStorage,
   });
 
   final SshService sshService;
@@ -35,6 +42,13 @@ class TerminalScreen extends StatefulWidget {
   final String? openRouterModel;
   final String? localEndpoint;
   final String? localModel;
+
+  /// Used to scope vault-secret lookup. When null, only global
+  /// (unscoped) secrets are visible to this terminal.
+  final String? serverId;
+
+  /// Injectable for tests. Defaults to `VaultStorage()` at runtime.
+  final VaultStorage? vaultStorage;
 
   @override
   State<TerminalScreen> createState() => _TerminalScreenState();
@@ -55,6 +69,13 @@ class _TerminalScreenState extends State<TerminalScreen> {
   String _recentTerminalOutput = '';
   bool _isFullScreen = false;
 
+  late final VaultStorage _vaultStorage;
+  // Snapshot of secrets visible to this server (global + scoped).
+  // Refreshed whenever VaultChangeBus fires.
+  List<VaultSecret> _vaultSecrets = const [];
+  VaultRedactor _vaultRedactor = VaultRedactor.empty;
+  StreamSubscription<void>? _vaultSub;
+
   bool get _isDesktop => !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
   @override
@@ -65,6 +86,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _terminal.onResize = _handleTerminalResize;
 
     widget.sshService.statusNotifier.addListener(_handleStatusChange);
+
+    _vaultStorage = widget.vaultStorage ?? VaultStorage();
+    _vaultSub = VaultChangeBus.instance.changes.listen(
+      (_) => _refreshVaultSnapshot(),
+    );
+    // Best-effort: prime the snapshot. Failure here only means the
+    // first few keystrokes won't be redacted; the change bus fires
+    // again as soon as the vault loads.
+    _refreshVaultSnapshot();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.sshService.isConnected) {
@@ -81,11 +111,25 @@ class _TerminalScreenState extends State<TerminalScreen> {
   @override
   void dispose() {
     widget.sshService.statusNotifier.removeListener(_handleStatusChange);
+    _vaultSub?.cancel();
     _stdoutSubscription?.cancel();
     _stderrSubscription?.cancel();
     _session?.close();
     _terminalFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _refreshVaultSnapshot() async {
+    try {
+      final loaded = await _vaultStorage.loadVisibleTo(widget.serverId);
+      if (!mounted) return;
+      _vaultSecrets = List.unmodifiable(loaded);
+      _vaultRedactor = VaultRedactor.from(_vaultSecrets);
+    } catch (_) {
+      // Vault unavailable (e.g. test harness with no secure-storage
+      // plugin). Leave the empty redactor in place and carry on —
+      // the terminal must keep working even if the vault is broken.
+    }
   }
 
   void _handleStatusChange() {
@@ -125,14 +169,21 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
       _stdoutSubscription?.cancel();
       _stdoutSubscription = session.stdout.listen((data) {
-        final text = utf8.decode(data, allowMalformed: true);
+        final raw = utf8.decode(data, allowMalformed: true);
+        // Redact BEFORE the bytes touch xterm or the AI-context
+        // scrollback. If the remote shell echoes a known vault value
+        // (e.g. via `echo $DB_PASS`), the user sees the marker, not
+        // the literal secret, and screenshots/copies of the terminal
+        // pane are safe by construction.
+        final text = _vaultRedactor.redact(raw);
         _terminal.write(text);
         _trackOutput(text);
       });
 
       _stderrSubscription?.cancel();
       _stderrSubscription = session.stderr.listen((data) {
-        final text = utf8.decode(data, allowMalformed: true);
+        final raw = utf8.decode(data, allowMalformed: true);
+        final text = _vaultRedactor.redact(raw);
         _terminal.write(text);
         _trackOutput(text);
       });
@@ -208,7 +259,19 @@ class _TerminalScreenState extends State<TerminalScreen> {
           canRunCommands: () => _session != null && widget.sshService.isConnected,
           getContext: () => _recentTerminalOutput,
           onRunCommand: (cmd) async {
-            _handleTerminalOutput('$cmd\n');
+            // Substitute ${vault:NAME} placeholders before the bytes
+            // hit the wire. The AI assistant only ever sees the
+            // placeholder form (it built the command); the remote
+            // shell receives the resolved value; the local scrollback
+            // gets the placeholder echoed back via _handleTerminalOutput.
+            String resolved;
+            try {
+              resolved = VaultInjector(_vaultSecrets).inject(cmd);
+            } on VaultInjectionException catch (e) {
+              _terminal.write('\r\n[vault: ${e.message}]\r\n');
+              return null;
+            }
+            _handleTerminalOutput('$resolved\n');
             return null;
           },
           executionUnavailableMessage:

@@ -269,25 +269,79 @@ Future<void> _bootstrapAndRun() async {
       // Transport-side scrubbing: every event leaving the device
       // passes through the same scrubber the in-app crash screen uses
       // so the two views of an error stay consistent.
+      //
+      // ErrorScrubber.scrub already runs the GlobalVaultRedactor as a
+      // pre-pass, so calling it once on every string-shaped field
+      // gets us regex-pattern scrubbing AND vault-value redaction in
+      // one go.
       options.beforeSend = (SentryEvent event, Hint hint) {
-        // ErrorScrubber already runs the GlobalVaultRedactor as a
-        // pre-pass, so calling scrub() here covers both the regex
-        // patterns and any in-memory vault secret values.
+        String s(String? input) => ErrorScrubber.scrub(input ?? '');
+        Object? scrubAny(Object? value) {
+          if (value == null) return null;
+          if (value is String) return s(value);
+          if (value is num || value is bool) return value;
+          if (value is Map) {
+            return value.map(
+              (k, v) => MapEntry(k, scrubAny(v)),
+            );
+          }
+          if (value is List) return value.map(scrubAny).toList();
+          return s(value.toString());
+        }
+
+        // 1. message (formatted + template + params)
         if (event.message != null) {
           event.message = SentryMessage(
-            ErrorScrubber.scrub(event.message!.formatted),
+            s(event.message!.formatted),
+            template: event.message!.template == null
+                ? null
+                : s(event.message!.template),
+            params: event.message!.params
+                ?.map((p) => scrubAny(p))
+                .toList(growable: false),
           );
         }
 
-        // Remove sensitive keys from contexts if they exist
-        for (final context in event.contexts.values) {
-          if (context is Map) {
-            context.removeWhere(
-              (key, value) =>
-                  key.toString().toLowerCase().contains('password') ||
-                  key.toString().toLowerCase().contains('key') ||
-                  key.toString().toLowerCase().contains('secret'),
+        // 2. exception values (the human-readable thrown text)
+        if (event.exceptions != null) {
+          for (final ex in event.exceptions!) {
+            ex.value = s(ex.value);
+          }
+        }
+
+        // 3. breadcrumbs (message + the entire data map). These are
+        //    the worst leak surface in practice — every navigation,
+        //    HTTP call, and console log lands here.
+        if (event.breadcrumbs != null) {
+          for (final b in event.breadcrumbs!) {
+            b.message = b.message == null ? null : s(b.message);
+            if (b.data != null) {
+              b.data = (scrubAny(b.data) as Map).cast<String, dynamic>();
+            }
+          }
+        }
+
+        // 4. tags: short labels but they CAN contain user input.
+        if (event.tags != null) {
+          event.tags = event.tags!.map((k, v) => MapEntry(k, s(v)));
+        }
+
+        // 6. contexts: drop obviously sensitive keys outright, then
+        //    recursively scrub everything that survives.
+        for (final entry in event.contexts.entries.toList()) {
+          final value = entry.value;
+          if (value is Map) {
+            value.removeWhere(
+              (k, _) =>
+                  k.toString().toLowerCase().contains('password') ||
+                  k.toString().toLowerCase().contains('key') ||
+                  k.toString().toLowerCase().contains('secret') ||
+                  k.toString().toLowerCase().contains('token'),
             );
+            // Now scrub the surviving values in place.
+            value.forEach((k, v) {
+              value[k] = scrubAny(v);
+            });
           }
         }
 
