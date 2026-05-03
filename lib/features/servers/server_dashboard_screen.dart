@@ -67,34 +67,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
 
   int _activeTabIndex = 0;
 
-  /// `null` until the persisted preference loads. After load, this
-  /// reflects the user's last toggle. Defaults are picked per-viewport
-  /// in [_effectiveSidebarCollapsed] when this is still null.
   bool? _sidebarCollapsedPref;
-
-  /// Snapshot of the enabled plugins at last rebuild. Refreshed via
-  /// [_onPluginRegistryChanged] when the user toggles a plugin in
-  /// Settings → Extensions; the dashboard nav adds / removes tabs to
-  /// match without requiring a server reconnect.
   List<HammaPlugin> _enabledPlugins = const [];
-
-  /// Per-plugin cached [HammaApi] futures, keyed by plugin id. We
-  /// build the API handle lazily the first time a plugin's tab is
-  /// opened so disabled plugins never pay the cost. The cache is
-  /// dropped when a plugin is toggled off or when the server changes.
   final Map<String, Future<HammaApi>> _pluginApis = {};
 
   PluginRegistry get _pluginRegistry => PluginRegistry.instance;
 
   ServerProfile get _server => widget.server;
 
-  /// Snapshot of the currently-active AI configuration, suitable for
-  /// passing into screens that lazily build an [AiCommandService] on
-  /// demand (e.g. the Docker logs sheet → Watch with AI).
-  ///
-  /// We only know the active-provider's API key in this widget (the
-  /// other slots aren't loaded into memory), so the resulting map only
-  /// includes that one entry.
   AiSettings get _currentAiSettings => AiSettings(
         provider: _aiProvider,
         apiKeys: {_aiProvider: _apiKey},
@@ -127,9 +107,6 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     }
   }
 
-  /// Resolved sidebar mode for the current viewport.
-  /// Honours the persisted preference once loaded; otherwise defaults
-  /// to rail (collapsed) on tablet widths and full on desktop widths.
   bool _effectiveSidebarCollapsed(BuildContext context) {
     final pref = _sidebarCollapsedPref;
     if (pref != null) return pref;
@@ -139,7 +116,6 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   void _toggleSidebar(BuildContext context) {
     final next = !_effectiveSidebarCollapsed(context);
     setState(() => _sidebarCollapsedPref = next);
-    // Fire-and-forget; persistence failure must not block the UI toggle.
     _appPrefs.setSidebarCollapsed(next);
   }
 
@@ -149,11 +125,6 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     super.dispose();
   }
 
-  /// Refresh the dashboard's plugin tab list when the user toggles a
-  /// plugin in Settings → Extensions. We drop the cached [HammaApi]
-  /// futures for any plugin that just left the enabled set so a
-  /// re-enable later builds a fresh handle (capabilities, allow-list,
-  /// dynamic hosts can all have changed underneath us).
   void _onPluginRegistryChanged() {
     if (!mounted) return;
     final next = _pluginRegistry.enabled;
@@ -166,9 +137,6 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     });
   }
 
-  /// Lazily build (and cache) the [HammaApi] handle for [plugin]
-  /// against the current server session. Cleared by
-  /// [_onPluginRegistryChanged] when the plugin is toggled off.
   Future<HammaApi> _apiFor(HammaPlugin plugin) {
     return _pluginApis.putIfAbsent(
       plugin.manifest.id,
@@ -181,13 +149,8 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     );
   }
 
-  /// Total nav items shown in the sidebar / bottom bar — built-in
-  /// tabs first, plugin tabs appended in registration order.
   int get _totalNavCount => _NavItems.items.length + _enabledPlugins.length;
 
-  /// Return the icon + label pair for nav slot [i], whether it's a
-  /// built-in or a plugin entry. Mirrors the `_NavItem` shape so the
-  /// existing sidebar / bottom-bar widgets need no changes.
   _NavItem _navItemAt(int i) {
     if (i < _NavItems.items.length) return _NavItems.items[i];
     final plugin = _enabledPlugins[i - _NavItems.items.length];
@@ -316,14 +279,6 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Wide-screen sidebar (>=700px). Two modes:
-  //   * Full (240px) — labels visible, header with server name + status pill.
-  //   * Rail (64px)  — icons-only, tooltips on hover, hides labels & header
-  //     details. Default for tablet widths; toggleable everywhere via the
-  //     top button or Ctrl+B (Cmd+B on macOS, handled by [LogicalKeyboardKey
-  //     .meta] in the shortcut map).
-  // ---------------------------------------------------------------------------
   Widget _buildSidebar(ConnectionStatus status, {required bool collapsed}) {
     final isConnected = status.isConnected;
     final width = collapsed ? 64.0 : 240.0;
@@ -608,10 +563,46 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Active content area (shared)
-  // ---------------------------------------------------------------------------
   Widget _buildActiveContent(ConnectionStatus status) {
+    if (status.state == SshConnectionState.reconnecting) {
+      return Column(
+        children: [
+          Container(
+            key: const ValueKey('dashboard_reconnect_banner'),
+            width: double.infinity,
+            color: AppColors.panel,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.accent,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'RECONNECTING (${status.reconnectAttempts}/${status.maxReconnectAttempts})',
+                    style: const TextStyle(
+                      color: AppColors.accent,
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                      fontSize: 11,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1, color: AppColors.border),
+          Expanded(child: _buildTabContent()),
+        ],
+      );
+    }
     if (status.isConnecting && !status.isConnected) {
       return Center(
         child: Column(
@@ -627,9 +618,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              status.state == SshConnectionState.reconnecting
-                  ? 'RECONNECTING (${status.reconnectAttempts}/${status.maxReconnectAttempts})'
-                  : 'ESTABLISHING SSH CONNECTION',
+              'ESTABLISHING SSH CONNECTION',
               style: const TextStyle(
                 color: AppColors.textMuted,
                 fontFamily: AppColors.monoFamily,
@@ -699,6 +688,10 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
       );
     }
 
+    return _buildTabContent();
+  }
+
+  Widget _buildTabContent() {
     switch (_activeTabIndex) {
       case 0:
         return TerminalScreen(

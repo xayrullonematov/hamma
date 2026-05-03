@@ -106,6 +106,25 @@ void main() {
     });
   });
 
+  // ── Sidebar collapsed ────────────────────────────────────────────────────────
+
+  group('sidebarCollapsed', () {
+    test('defaults to null when never set', () async {
+      expect(await prefs.getSidebarCollapsed(), isNull);
+    });
+
+    test('setSidebarCollapsed(true) persists', () async {
+      await prefs.setSidebarCollapsed(true);
+      expect(await prefs.getSidebarCollapsed(), isTrue);
+    });
+
+    test('setSidebarCollapsed(false) persists and overrides true', () async {
+      await prefs.setSidebarCollapsed(true);
+      await prefs.setSidebarCollapsed(false);
+      expect(await prefs.getSidebarCollapsed(), isFalse);
+    });
+  });
+
   // ── Server last states ───────────────────────────────────────────────────────
 
   group('serverLastStates', () {

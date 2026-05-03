@@ -116,10 +116,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _hasLoadedOpenRouterModels = false;
   String? _openRouterModelsError;
   List<String> _openRouterModels = const [];
-  String _status = '';
 
   bool _healthMonitoringEnabled = false;
   int _healthCheckInterval = 30;
+
+  bool _isDirty = false;
+  bool _loadingFromStorage = true;
+
+  void _markDirty() {
+    if (_loadingFromStorage || _isDirty || !mounted) return;
+    setState(() => _isDirty = true);
+  }
 
   /// "Watch with AI" lines-per-batch cadence. Loaded from
   /// [LogTriagePrefs] on init, persisted on slider change.
@@ -173,11 +180,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _webdavPasswordController = TextEditingController();
     _syncthingPathController = TextEditingController();
 
-    _loadStoredApiKeys();
+    final allControllers = <TextEditingController>[
+      _openAiApiKeyController,
+      _geminiApiKeyController,
+      _openRouterApiKeyController,
+      _openRouterModelController,
+      _localEndpointController,
+      _localModelController,
+      _sftpHostController,
+      _sftpPortController,
+      _sftpUsernameController,
+      _sftpPasswordController,
+      _sftpPathController,
+      _webdavUrlController,
+      _webdavUsernameController,
+      _webdavPasswordController,
+      _syncthingPathController,
+    ];
+    for (final c in allControllers) {
+      c.addListener(_markDirty);
+    }
+
     _loadAppPinStatus();
-    _loadHealthMonitoringSettings();
-    _loadBackupSettings();
     _loadLogTriageSettings();
+    _loadHealthMonitoringSettings();
+    Future.wait([
+      _loadStoredApiKeys(),
+      _loadBackupSettings(),
+    ]).whenComplete(() {
+      if (mounted) _loadingFromStorage = false;
+    });
     if (_selectedProvider == AiProvider.openRouter) {
       _loadOpenRouterModels();
     }
@@ -284,18 +316,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _save() async {
-    // Re-entry guard. Both the inline `Save` button and the new sticky
-    // bottom save bar bind to this method, and a rapid double-tap (or
-    // near-simultaneous press across both targets) could otherwise
-    // launch overlapping save flows before the disabled state from
-    // `_isBusy` propagates through a rebuild. Bailing out here keeps
-    // saves strictly serial without depending on the widget tree.
-    if (_isBusy) {
-      return;
-    }
-    // Hard-stop on non-loopback Local AI endpoints. The button is gated
-    // by `_isLocalEndpointValid`, but a determined caller could still
-    // reach this code path — refuse and surface a snackbar.
+    if (_isBusy) return;
     if (_selectedProvider == AiProvider.local && !_isLocalEndpointValid) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -316,7 +337,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() {
       _isSaving = true;
-      _status = 'Saving settings';
       _openRouterModel = resolvedOpenRouterModel;
     });
 
@@ -379,16 +399,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
 
       setState(() {
-        _status = 'Settings saved.';
+        _isDirty = false;
       });
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      setState(() {
-        _status = 'Failed to save settings: $error';
-      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save settings: $error')),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -685,6 +705,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _handleProviderChanged(AiProvider provider) {
+    final changed = provider != _selectedProvider;
     setState(() {
       _selectedProvider = provider;
       _openRouterModel = _normalizeOpenRouterModel(
@@ -692,6 +713,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       _localConnectionTestResult = null;
       _localConnectionTestSuccess = null;
+      if (changed) _isDirty = true;
     });
 
     if (provider == AiProvider.openRouter) {
@@ -1217,6 +1239,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () {
                   setState(() {
                     _localEndpointController.text = e.endpoint;
+                    _isDirty = true;
                   });
                 },
                 child: Container(
@@ -1314,13 +1337,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           tooltip: 'Back to servers',
         ),
       ),
-      // Persistent save bar pinned to the bottom of the screen so the
-      // user always knows where to commit their pending changes.
-      // Keeps the existing inline `Save` button further up working as a
-      // fallback so we don't break the muscle memory of long-time users.
-      bottomNavigationBar: SafeArea(
+      bottomNavigationBar: (!_isDirty && !_isSaving) ? null : SafeArea(
         top: false,
         child: Container(
+          key: const ValueKey('settings_sticky_save_bar'),
           decoration: const BoxDecoration(
             color: AppColors.panel,
             border: Border(
@@ -1332,9 +1352,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             children: [
               Expanded(
                 child: Text(
-                  _isSaving
-                      ? 'Saving…'
-                      : (_status.isNotEmpty ? _status : 'Tap save to apply'),
+                  _isSaving ? 'Saving…' : 'Unsaved changes',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -1502,10 +1520,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         label: '$_logTriageBatchSize lines',
                         onChanged: !_isLogTriageBatchSizeLoaded || _isBusy
                             ? null
-                            : (v) => setState(
-                                  () => _logTriageBatchSize =
-                                      LogTriagePrefs.clampBatchSize(v.round()),
-                                ),
+                            : (v) => setState(() {
+                                  _logTriageBatchSize =
+                                      LogTriagePrefs.clampBatchSize(v.round());
+                                  _isDirty = true;
+                                }),
                         onChangeEnd: !_isLogTriageBatchSizeLoaded || _isBusy
                             ? null
                             : (v) => _saveLogTriageBatchSize(v.round()),
@@ -1543,6 +1562,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 : (value) {
                                   setState(() {
                                     _healthMonitoringEnabled = value;
+                                    _isDirty = true;
                                   });
                                 },
                         contentPadding: EdgeInsets.zero,
@@ -1565,6 +1585,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   : (value) {
                                     setState(() {
                                       _healthCheckInterval = value.toInt();
+                                      _isDirty = true;
                                     });
                                   },
                         ),
@@ -1572,35 +1593,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
-                FilledButton(
-                  onPressed: _isBusy ? null : _save,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                  ),
-                  child:
-                      _isSaving
-                          ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : const Text('Save'),
-                ),
-                if (_status.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _status,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: _mutedColor,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 20),
                 SettingsSectionCard(
                   title: 'Security',
@@ -1679,6 +1671,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onChanged: (value) {
                           if (value != null) {
                             setState(() {
+                              _isDirty = true;
                               _backupConfig = BackupConfig(
                                 destination: value,
                                 sftpHost: _backupConfig.sftpHost,
@@ -1775,6 +1768,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         value: _backupConfig.autoBackupEnabled,
                         onChanged: (value) {
                           setState(() {
+                            _isDirty = true;
                             _backupConfig = BackupConfig(
                               destination: _backupConfig.destination,
                               sftpHost: _backupConfig.sftpHost,

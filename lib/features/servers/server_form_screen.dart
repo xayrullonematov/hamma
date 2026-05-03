@@ -473,7 +473,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   }
 }
 
-class _ObscuredMultilineTextFormField extends StatelessWidget {
+class _ObscuredMultilineTextFormField extends StatefulWidget {
   const _ObscuredMultilineTextFormField({
     required this.controller,
     required this.decoration,
@@ -485,11 +485,63 @@ class _ObscuredMultilineTextFormField extends StatelessWidget {
   final FormFieldValidator<String>? validator;
 
   @override
+  State<_ObscuredMultilineTextFormField> createState() =>
+      _ObscuredMultilineTextFormFieldState();
+}
+
+class _ObscuredMultilineTextFormFieldState
+    extends State<_ObscuredMultilineTextFormField> {
+  bool _revealed = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textStyle =
         theme.textTheme.bodyLarge ?? const TextStyle(fontSize: 16);
-    const contentPadding = EdgeInsets.fromLTRB(12, 16, 12, 16);
+    const contentPadding = EdgeInsets.fromLTRB(12, 16, 44, 16);
+
+    final field = TextFormField(
+      controller: widget.controller,
+      keyboardType: TextInputType.multiline,
+      textInputAction: TextInputAction.newline,
+      minLines: 6,
+      maxLines: 8,
+      autocorrect: false,
+      enableSuggestions: false,
+      style: textStyle.copyWith(
+        color: _revealed ? textStyle.color : Colors.transparent,
+        height: 1.4,
+        fontFamily: AppColors.monoFamily,
+        fontFamilyFallback: AppColors.monoFallback,
+      ),
+      cursorColor: theme.colorScheme.primary,
+      decoration: widget.decoration.copyWith(
+        hintText: null,
+        contentPadding: contentPadding,
+      ),
+      validator: widget.validator,
+    );
+
+    final toggle = Positioned(
+      top: 6,
+      right: 4,
+      child: IconButton(
+        key: const ValueKey('private_key_visibility_toggle'),
+        tooltip: _revealed ? 'Hide private key' : 'Show private key',
+        icon: Icon(
+          _revealed
+              ? Icons.visibility_off_outlined
+              : Icons.visibility_outlined,
+          size: 18,
+          color: AppColors.textMuted,
+        ),
+        onPressed: () => setState(() => _revealed = !_revealed),
+      ),
+    );
+
+    if (_revealed) {
+      return Stack(children: [field, toggle]);
+    }
 
     return Stack(
       children: [
@@ -498,7 +550,7 @@ class _ObscuredMultilineTextFormField extends StatelessWidget {
             child: Padding(
               padding: contentPadding,
               child: ValueListenableBuilder<TextEditingValue>(
-                valueListenable: controller,
+                valueListenable: widget.controller,
                 builder: (context, value, _) {
                   final text = value.text;
                   final isEmpty = text.isEmpty;
@@ -507,11 +559,10 @@ class _ObscuredMultilineTextFormField extends StatelessWidget {
                         ? 'Paste or import a PEM private key.'
                         : _maskText(text),
                     style: textStyle.copyWith(
-                      color:
-                          isEmpty
-                              ? theme.inputDecorationTheme.hintStyle?.color ??
-                                  theme.hintColor
-                              : textStyle.color,
+                      color: isEmpty
+                          ? theme.inputDecorationTheme.hintStyle?.color ??
+                              theme.hintColor
+                          : textStyle.color,
                       height: 1.4,
                     ),
                   );
@@ -520,22 +571,8 @@ class _ObscuredMultilineTextFormField extends StatelessWidget {
             ),
           ),
         ),
-        TextFormField(
-          controller: controller,
-          keyboardType: TextInputType.multiline,
-          textInputAction: TextInputAction.newline,
-          minLines: 6,
-          maxLines: 8,
-          autocorrect: false,
-          enableSuggestions: false,
-          style: textStyle.copyWith(color: Colors.transparent, height: 1.4),
-          cursorColor: theme.colorScheme.primary,
-          decoration: decoration.copyWith(
-            hintText: null,
-            contentPadding: contentPadding,
-          ),
-          validator: validator,
-        ),
+        field,
+        toggle,
       ],
     );
   }
