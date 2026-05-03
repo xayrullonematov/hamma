@@ -6,33 +6,21 @@ import 'voice_recognizer.dart';
 
 /// Production [VoiceBackend] backed by the `speech_to_text` plugin.
 ///
-/// Configures the underlying recognizer for on-device-only operation:
-///   * iOS: `SFSpeechRecognizer.requiresOnDeviceRecognition = true`
-///     via `SpeechListenOptions(onDevice: true)`. iOS surfaces a hard
-///     error if the locale isn't installed on-device — that error
-///     bubbles into the recognizer's error state and the UI disables
-///     the mic. No cloud fallback ever runs.
-///   * Android: routes through `SpeechRecognizer` with
-///     `EXTRA_PREFER_OFFLINE = true`. **Known limitation:** Android's
-///     flag is a *preference*, not an absolute hardware contract.
-///     Some OEM recognizers still fall back to a cloud service if the
-///     offline language pack isn't installed. We surface every plugin
-///     error verbatim and document the limitation in
-///     `docs/voice-mode.md` so the user can verify their offline pack
-///     is installed before relying on the on-device guarantee.
+/// On-device guarantees per platform:
+///   * iOS: passes `SpeechListenOptions(onDevice: true)` which sets
+///     `SFSpeechRecognizer.requiresOnDeviceRecognition`. iOS hard-fails
+///     when the locale isn't installed on-device.
+///   * Android: passes `EXTRA_PREFER_OFFLINE`. This is the OS-level
+///     preference, not an absolute contract — see `docs/voice-mode.md`.
 ///
-/// All plugin errors are propagated to [VoiceRecognizer] via the
-/// `onError` callback supplied to [listen]; nothing is swallowed.
+/// All plugin errors propagate to [VoiceRecognizer] via the `onError`
+/// callback so the UI can flip to `unavailable` and disable the mic.
 class SpeechToTextBackend implements VoiceBackend {
   SpeechToTextBackend({SpeechToText? client}) : _stt = client ?? SpeechToText();
 
   final SpeechToText _stt;
   bool _initialized = false;
   bool _onDevice = false;
-  // Active session callbacks. The plugin emits errors via the
-  // statusListener installed at initialize() time — not via a
-  // per-listen callback — so we hold a reference to the recognizer's
-  // current error sink for the duration of the listen window.
   void Function(String error)? _activeOnError;
 
   @override
@@ -44,27 +32,29 @@ class SpeechToTextBackend implements VoiceBackend {
   @override
   Future<bool> initialize() async {
     final ok = await _stt.initialize(
-      // Forward every plugin-side error to whoever is currently
-      // listening. This is the *only* path through which on-device
-      // failure surfaces — swallowing it would mean the UI keeps the
-      // mic enabled while the platform silently bails or worse.
       onError: (notification) {
-        final sink = _activeOnError;
-        if (sink != null) sink(notification.errorMsg);
+        _activeOnError?.call(notification.errorMsg);
       },
       onStatus: (_) {},
     );
     _initialized = ok;
-    if (ok) {
-      // speech_to_text v7 doesn't expose a direct "is on-device
-      // supported" probe. We're conservative on a per-platform basis:
-      //   * iOS / Android: claim support and let the per-listen
-      //     `onDevice: true` flag enforce. Errors propagate via
-      //     `_activeOnError` so the recognizer transitions to
-      //     `error` and the UI disables the mic.
-      //   * everything else (desktop builds that somehow load this
-      //     backend, web): refuse outright.
-      _onDevice = Platform.isIOS || Platform.isAndroid;
+    if (!ok) return false;
+
+    // Refuse outside iOS / Android — desktop / web have no on-device
+    // SFSpeechRecognizer / SpeechRecognizer with an offline mode.
+    if (!(Platform.isIOS || Platform.isAndroid)) {
+      _onDevice = false;
+      return ok;
+    }
+
+    // Probe locales as a minimum-viability check: if the platform
+    // reports zero recognizable locales the recognizer is structurally
+    // unusable and we must not pretend on-device support exists.
+    try {
+      final locales = await _stt.locales();
+      _onDevice = locales.isNotEmpty;
+    } catch (_) {
+      _onDevice = false;
     }
     return ok;
   }

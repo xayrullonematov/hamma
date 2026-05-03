@@ -879,9 +879,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     });
 
     try {
-      // Streaming path: insert a placeholder assistant message and grow
-      // its content as deltas arrive. For non-local providers the stream
-      // yields once, so the behavior is functionally identical.
       final placeholder = _ChatMessage(role: 'assistant', content: '');
       setState(() {
         _chatMessages = [..._chatMessages, placeholder];
@@ -908,17 +905,19 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         return;
       }
 
-      // Persist final message.
       _saveChatHistory(_chatMessages);
       setState(() {
         _status = 'Response ready';
       });
+      final finalReply = buffer.toString();
+      if (finalReply.trim().isNotEmpty) {
+        unawaited(_maybeSpeakReply(finalReply));
+      }
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      // Drop the placeholder bubble if no tokens streamed in.
       if (_chatMessages.isNotEmpty &&
           _chatMessages.last.role == 'assistant' &&
           _chatMessages.last.content.isEmpty) {
@@ -2015,13 +2014,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                   ),
                 ),
               ),
-              if (_voiceRecognizer != null) ...[
+              if (_voiceRecognizer != null && _voiceSession.isVoiceEnabled) ...[
                 const SizedBox(width: 8),
-                // Hold-to-talk mic. Routes the final transcript
-                // through the same _submitPrompt() path as the send
-                // button, so risk-gated command generation, history
-                // persistence, and conversational TTS all apply
-                // identically.
                 VoiceInputButton(
                   recognizer: _voiceRecognizer!,
                   onTranscript: _onVoiceTranscript,
