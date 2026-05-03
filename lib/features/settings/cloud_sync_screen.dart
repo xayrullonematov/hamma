@@ -1,3 +1,6 @@
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../core/backup/backup_service.dart';
@@ -137,10 +140,15 @@ class _CloudSyncScreenState extends State<CloudSyncScreen> {
         children: [
           _ZeroTrustBanner(),
           const SizedBox(height: 16),
-          for (final dest in const [
+          for (final dest in <BackupDestination>[
             BackupDestination.s3Compat,
             BackupDestination.dropbox,
-            BackupDestination.iCloud,
+            // iCloud only makes sense on Apple platforms — the
+            // ubiquity-container APIs simply don't exist elsewhere.
+            // `kIsWeb` short-circuits before touching `Platform`,
+            // which would throw on web builds.
+            if (!kIsWeb && (Platform.isIOS || Platform.isMacOS))
+              BackupDestination.iCloud,
           ])
             _DestinationCard(
               destination: dest,

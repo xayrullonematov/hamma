@@ -48,6 +48,7 @@ class CloudSyncEngine {
     required this.deviceId,
     required this.prefix,
     required this.encrypter,
+    required this.decrypter,
     DateTime Function()? clock,
     Random? random,
   })  : _clock = clock ?? DateTime.now,
@@ -61,6 +62,12 @@ class CloudSyncEngine {
   /// closure rather than the password keeps the engine ignorant of the
   /// PIN and makes testing trivial.
   final Uint8List Function(Uint8List plaintext) encrypter;
+
+  /// Wraps `BackupCrypto.decrypt(password, ciphertext)`. Used to read
+  /// the encrypted manifest. The manifest itself is wrapped in HMBK
+  /// ciphertext so the cloud provider never sees device IDs, snapshot
+  /// timestamps, or blob hashes in the clear.
+  final Uint8List Function(Uint8List ciphertext) decrypter;
 
   final DateTime Function() _clock;
   final Random _random;
@@ -168,14 +175,33 @@ class CloudSyncEngine {
   Future<CloudSyncManifest> _readManifest() async {
     try {
       final bytes = await adapter.get(_manifestKey);
-      return CloudSyncManifest.decode(bytes);
+      if (!_isHmbk(bytes)) {
+        // Either the bucket is empty or someone wrote a plaintext
+        // manifest. Either way: do not trust it, return empty.
+        return const CloudSyncManifest(entries: []);
+      }
+      final plaintext = decrypter(bytes);
+      return CloudSyncManifest.decode(plaintext);
     } on CloudSyncException {
+      return const CloudSyncManifest(entries: []);
+    } catch (_) {
+      // Decrypt failure (wrong password, tampered) — surface as empty
+      // rather than crashing the sync. The HMBK guard above ensures
+      // we never accidentally treat plaintext as a manifest.
       return const CloudSyncManifest(entries: []);
     }
   }
 
   Future<void> _writeManifest(CloudSyncManifest m) async {
-    await adapter.put(_manifestKey, m.encode());
+    final encryptedManifest = encrypter(m.encode());
+    if (!_isHmbk(encryptedManifest)) {
+      throw const CloudSyncException(
+        'Refusing to upload manifest: encrypter did not produce a '
+        'valid HMBK ciphertext blob. This would have leaked device '
+        'IDs, snapshot keys, and blob hashes in plaintext.',
+      );
+    }
+    await adapter.put(_manifestKey, encryptedManifest);
   }
 
   String _newSnapshotKey(DateTime now) {
@@ -191,12 +217,16 @@ class CloudSyncEngine {
     return '${prefix}snapshot-$ts-$deviceId-$nonce.aes';
   }
 
+  /// Strict guard: matches the BackupCrypto v2 format header
+  /// (ASCII "HMBK" + version byte 0x02). Any future format bump
+  /// MUST update this constant in lockstep.
   static bool _isHmbk(List<int> bytes) {
     return bytes.length >= 5 &&
         bytes[0] == 0x48 &&
         bytes[1] == 0x4D &&
         bytes[2] == 0x42 &&
-        bytes[3] == 0x4B;
+        bytes[3] == 0x4B &&
+        bytes[4] == 0x02;
   }
 
   static String sha256Hex(List<int> bytes) {

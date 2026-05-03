@@ -157,7 +157,7 @@ class BackupService {
           case BackupDestination.s3Compat:
           case BackupDestination.iCloud:
           case BackupDestination.dropbox:
-            fileToRestore = await _downloadFromCloud(config);
+            fileToRestore = await _downloadFromCloud(config, password);
             break;
         }
       }
@@ -358,6 +358,7 @@ class BackupService {
       // sync gets a fresh IV/salt — the engine's HMBK guard catches
       // any code path that accidentally hands it plaintext.
       encrypter: (plaintext) => BackupCrypto.encrypt(password, plaintext),
+      decrypter: (ciphertext) => BackupCrypto.decrypt(password, ciphertext),
     );
 
     // Re-collect the plaintext snapshot from secure storage. We can't
@@ -371,7 +372,7 @@ class BackupService {
     await engine.sync(plaintext);
   }
 
-  Future<File> _downloadFromCloud(BackupConfig config) async {
+  Future<File> _downloadFromCloud(BackupConfig config, String password) async {
     final adapter = buildCloudAdapter(config);
     final engine = CloudSyncEngine(
       adapter: adapter,
@@ -379,10 +380,10 @@ class BackupService {
           ? 'restore'
           : config.cloudDeviceId,
       prefix: _cloudPrefixFor(config),
-      // Restore path doesn't call sync(), only fetchLatestSnapshot.
-      // The encrypter is unused; pass an identity that would still
-      // satisfy the HMBK guard if it ever fired.
+      // Restore path doesn't call sync(), only fetchLatestSnapshot,
+      // which still needs `decrypter` to read the encrypted manifest.
       encrypter: (p) => p,
+      decrypter: (c) => BackupCrypto.decrypt(password, c),
     );
     final result = await engine.fetchLatestSnapshot();
     final tempDir = await getTemporaryDirectory();

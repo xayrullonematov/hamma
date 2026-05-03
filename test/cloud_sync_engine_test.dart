@@ -66,6 +66,11 @@ Uint8List _fakeCiphertext(List<int> body) {
   return Uint8List.fromList([0x48, 0x4D, 0x42, 0x4B, 0x02, ...body]);
 }
 
+/// Inverse of [_fakeCiphertext]: strips the 5-byte HMBK header.
+Uint8List _fakeDecrypt(List<int> blob) {
+  return Uint8List.fromList(blob.sublist(5));
+}
+
 void main() {
   group('CloudSyncEngine.sync', () {
     test('uploads ciphertext, writes manifest, returns result', () async {
@@ -75,6 +80,7 @@ void main() {
         deviceId: 'dev-1',
         prefix: 'hamma/',
         encrypter: (p) => _fakeCiphertext(p),
+        decrypter: _fakeDecrypt,
         clock: () => DateTime.utc(2026, 5, 2, 12, 0, 0),
       );
 
@@ -86,9 +92,12 @@ void main() {
       final stored = adapter.store[result.uploadedKey]!;
       expect(stored.sublist(0, 4), [0x48, 0x4D, 0x42, 0x4B]);
 
-      // Manifest exists.
+      // Manifest exists — and it is HMBK-encrypted, not plaintext.
       final manifestBytes = adapter.store['hamma/manifest.json']!;
-      final manifest = CloudSyncManifest.decode(manifestBytes);
+      expect(manifestBytes.sublist(0, 5), [0x48, 0x4D, 0x42, 0x4B, 0x02],
+          reason: 'Manifest must be encrypted on the wire.');
+      final manifest =
+          CloudSyncManifest.decode(_fakeDecrypt(manifestBytes));
       expect(manifest.entries, hasLength(1));
       expect(manifest.entries.first.deviceId, 'dev-1');
       expect(manifest.entries.first.timestamp,
@@ -103,6 +112,7 @@ void main() {
         prefix: 'hamma/',
         // Bug: encrypter is a no-op — returns plaintext.
         encrypter: (p) => p,
+        decrypter: (c) => c,
         clock: () => DateTime.utc(2026, 5, 2, 12, 0, 0),
       );
 
@@ -123,6 +133,7 @@ void main() {
         deviceId: 'dev-1',
         prefix: 'hamma/',
         encrypter: _fakeCiphertext,
+        decrypter: _fakeDecrypt,
         clock: () => t,
       );
 
@@ -150,19 +161,20 @@ void main() {
           sizeBytes: 100,
         ),
       ]);
-      adapter.store['hamma/manifest.json'] = existing.encode();
+      adapter.store['hamma/manifest.json'] = _fakeCiphertext(existing.encode());
 
       final engine = CloudSyncEngine(
         adapter: adapter,
         deviceId: 'dev-1',
         prefix: 'hamma/',
         encrypter: _fakeCiphertext,
+        decrypter: _fakeDecrypt,
         clock: () => DateTime.utc(2026, 5, 2),
       );
       await engine.sync(Uint8List.fromList([1]));
 
       final manifest = CloudSyncManifest.decode(
-        adapter.store['hamma/manifest.json']!,
+        _fakeDecrypt(adapter.store['hamma/manifest.json']!),
       );
       expect(manifest.entries.map((e) => e.deviceId),
           containsAll(['dev-other', 'dev-1']));
@@ -177,12 +189,13 @@ void main() {
         deviceId: 'dev-1',
         prefix: 'hamma/',
         encrypter: _fakeCiphertext,
+        decrypter: _fakeDecrypt,
         clock: () => DateTime.utc(2026, 5, 2),
       );
       // Seed two snapshots at different times.
       adapter.store['hamma/old.aes'] = _fakeCiphertext([1]);
       adapter.store['hamma/new.aes'] = _fakeCiphertext([2]);
-      adapter.store['hamma/manifest.json'] = CloudSyncManifest(entries: [
+      adapter.store['hamma/manifest.json'] = _fakeCiphertext(CloudSyncManifest(entries: [
         CloudSyncManifestEntry(
           key: 'hamma/old.aes',
           deviceId: 'a',
@@ -197,7 +210,7 @@ void main() {
           blobHash: 'h2',
           sizeBytes: 6,
         ),
-      ]).encode();
+      ]).encode());
 
       final result = await engine.fetchLatestSnapshot();
       expect(result.entry.key, 'hamma/new.aes');
@@ -211,6 +224,7 @@ void main() {
         deviceId: 'dev-1',
         prefix: 'hamma/',
         encrypter: _fakeCiphertext,
+        decrypter: _fakeDecrypt,
       );
       expect(
         () => engine.fetchLatestSnapshot(),

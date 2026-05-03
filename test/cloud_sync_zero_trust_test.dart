@@ -78,6 +78,7 @@ void main() {
         deviceId: 'dev-1',
         prefix: 'hamma/',
         encrypter: (p) => BackupCrypto.encrypt('pw', p),
+        decrypter: (c) => BackupCrypto.decrypt('pw', c),
       );
 
       await engine.sync(
@@ -87,26 +88,15 @@ void main() {
       expect(captured, isNotEmpty,
           reason: 'Engine should have made at least one HTTP call.');
 
+      // Strict zero-trust: every PUT body — snapshot AND manifest —
+      // must be HMBK-encrypted. No whitelist.
       for (final c in captured.where((c) => c.method == 'PUT')) {
-        // Snapshot uploads must be HMBK ciphertext; manifest PUTs are
-        // public metadata (JSON listing of keys + hashes — never user
-        // plaintext) so we whitelist them by key suffix.
-        if (c.url.path.endsWith('/manifest.json')) {
-          // Manifest is plain JSON listing opaque keys, not secrets.
-          // Verify it does NOT contain the user's plaintext.
-          expect(
-            String.fromCharCodes(c.body).contains(_plaintextSecret),
-            isFalse,
-            reason: 'Manifest must not embed user plaintext.',
-          );
-          continue;
-        }
-        // Snapshot blob — must start with HMBK magic + version 0x02.
         expect(c.body.length >= 5, isTrue,
             reason: 'PUT body must be a non-trivial encrypted blob.');
         expect(c.body.sublist(0, 5), [0x48, 0x4D, 0x42, 0x4B, 0x02],
             reason:
-                'Every snapshot PUT must start with the HMBK ciphertext header.');
+                'Every PUT (snapshot AND manifest) must start with HMBK + 0x02. '
+                'Got: key=${c.url.path}');
         expect(
           String.fromCharCodes(c.body).contains(_plaintextSecret),
           isFalse,
@@ -128,6 +118,7 @@ void main() {
         deviceId: 'dev-2',
         prefix: '',
         encrypter: (p) => BackupCrypto.encrypt('pw', p),
+        decrypter: (c) => BackupCrypto.decrypt('pw', c),
       );
 
       await engine.sync(
@@ -139,18 +130,13 @@ void main() {
           .toList();
       expect(uploads, isNotEmpty);
 
+      // Strict zero-trust: every upload body — snapshot AND manifest —
+      // must be HMBK-encrypted.
       for (final u in uploads) {
-        // Pull the Dropbox-API-Arg path so we can tell snapshot from
-        // manifest uploads.
-        final isManifest = u.body.length < 5
-            ? false
-            : !(u.body[0] == 0x48 &&
-                u.body[1] == 0x4D &&
-                u.body[2] == 0x42 &&
-                u.body[3] == 0x4B);
-        if (!isManifest) {
-          expect(u.body.sublist(0, 5), [0x48, 0x4D, 0x42, 0x4B, 0x02]);
-        }
+        expect(u.body.length >= 5, isTrue);
+        expect(u.body.sublist(0, 5), [0x48, 0x4D, 0x42, 0x4B, 0x02],
+            reason:
+                'Every Dropbox upload (snapshot AND manifest) must be HMBK ciphertext.');
         expect(
           String.fromCharCodes(u.body).contains(_plaintextSecret),
           isFalse,
@@ -176,6 +162,7 @@ void main() {
         prefix: 'hamma/',
         // Bug-injection: identity "encrypter" — would leak plaintext.
         encrypter: (p) => p,
+        decrypter: (c) => c,
       );
 
       await expectLater(
