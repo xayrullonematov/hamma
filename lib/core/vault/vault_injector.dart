@@ -8,8 +8,35 @@ import 'vault_secret.dart';
 /// history retains, so the secret never lands in scrollback or
 /// breadcrumbs. See [SshService.execute] for the call site.
 class VaultInjector {
+  /// Builds a name → secret lookup with **deterministic scope
+  /// precedence**: a server-scoped secret always wins over a
+  /// global secret of the same name. Without this rule, the
+  /// caller's storage iteration order would silently decide which
+  /// credential leaves the device — which is exactly the kind of
+  /// "wrong secret to wrong host" failure the per-server vault
+  /// model exists to prevent.
   VaultInjector(List<VaultSecret> secrets)
-      : _byName = {for (final s in secrets) s.name: s};
+      : _byName = _buildLookup(secrets);
+
+  static Map<String, VaultSecret> _buildLookup(List<VaultSecret> secrets) {
+    final out = <String, VaultSecret>{};
+    for (final s in secrets) {
+      final existing = out[s.name];
+      if (existing == null) {
+        out[s.name] = s;
+        continue;
+      }
+      // Server-scoped beats global. If both are scoped (caller
+      // passed mixed scopes), the later non-global wins — but
+      // VaultStorage.loadVisibleTo only ever returns one scope
+      // bound to the active server, so this branch is a defensive
+      // no-op in production.
+      if (existing.isGlobal && !s.isGlobal) {
+        out[s.name] = s;
+      }
+    }
+    return out;
+  }
 
   final Map<String, VaultSecret> _byName;
 
@@ -87,10 +114,7 @@ class VaultInjector {
         env: const {},
       );
     }
-    final substituted = command.replaceAllMapped(
-      _placeholder,
-      (m) => '"\${${m.group(1)!}}"',
-    );
+    final substituted = _shellAwareSubstitute(command);
     final env = {for (final n in names) n: _byName[n]!.value};
     final exportPrefix = names
         .map((n) => '$n=${_singleQuote(env[n]!)}')
@@ -106,6 +130,80 @@ class VaultInjector {
 
   static String _singleQuote(String s) =>
       "'${s.replaceAll("'", r"'\''")}'";
+
+  /// Walks [command] tracking POSIX shell quoting state and emits
+  /// the right env-var reference for each `${vault:NAME}` it
+  /// encounters:
+  ///
+  /// - Outside any quotes: emit `"${NAME}"` so word-splitting and
+  ///   glob-expansion of the value are still suppressed.
+  /// - Inside double quotes: emit `${NAME}` (the surrounding `"` is
+  ///   already there, and shell expansion is already enabled).
+  /// - Inside single quotes: close the single quote, emit
+  ///   `"${NAME}"`, then reopen the single quote — the standard
+  ///   `'lit'"$VAR"'lit'` concatenation idiom. This is necessary
+  ///   because single quotes disable ALL expansion in POSIX shell,
+  ///   so the placeholder would otherwise reach the remote shell
+  ///   verbatim and the `${vault:…}` form would land in `argv` or
+  ///   in an HTTP header instead of the secret value.
+  ///
+  /// Backslash escaping is honoured outside single quotes so a
+  /// literal `\${vault:NAME}` is left alone — matching the rule
+  /// that single-quoted strings disable backslash too.
+  static String _shellAwareSubstitute(String command) {
+    final out = StringBuffer();
+    bool inSingle = false;
+    bool inDouble = false;
+    int i = 0;
+    while (i < command.length) {
+      final c = command[i];
+      if (!inSingle && c == r'\' && i + 1 < command.length) {
+        out.write(c);
+        out.write(command[i + 1]);
+        i += 2;
+        continue;
+      }
+      if (!inSingle && c == '"') {
+        inDouble = !inDouble;
+        out.write(c);
+        i++;
+        continue;
+      }
+      if (!inDouble && c == "'") {
+        inSingle = !inSingle;
+        out.write(c);
+        i++;
+        continue;
+      }
+      // Try to match `${vault:NAME}` starting at i.
+      if (c == r'$' &&
+          i + 1 < command.length &&
+          command[i + 1] == '{') {
+        final close = command.indexOf('}', i + 2);
+        if (close > 0) {
+          final inside = command.substring(i + 2, close);
+          if (inside.startsWith('vault:')) {
+            final name = inside.substring(6);
+            if (RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(name)) {
+              if (inSingle) {
+                // close ' then "${NAME}" then reopen '
+                out.write("'\"\${$name}\"'");
+              } else if (inDouble) {
+                out.write('\${$name}');
+              } else {
+                out.write('"\${$name}"');
+              }
+              i = close + 1;
+              continue;
+            }
+          }
+        }
+      }
+      out.write(c);
+      i++;
+    }
+    return out.toString();
+  }
 }
 
 /// Result of [VaultInjector.buildEnvCommand]. The wrapped command is

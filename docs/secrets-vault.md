@@ -73,6 +73,15 @@ It is wired into:
 | Server edit screen | "Linked Secrets" card lets the user flip a secret between global and `scope == server.id`; values are never shown here. |
 | AI Copilot "Run" button | Goes through `SshService.execute(cmd, vaultSecrets: …)` (non-interactive), NOT through the interactive TTY. The local terminal pane shows the placeholder form of the command and the (vault-redacted) output; the resolved secret value never enters the TTY echo stream and never lands in remote shell history. |
 
+### Scope precedence
+
+`VaultInjector` enforces deterministic precedence: a server-scoped
+secret with the same name as a global secret **always** overrides
+the global, regardless of the order in which `VaultStorage`
+returned them. This prevents a wrong-credential-to-wrong-host
+disclosure when a user keeps e.g. a global `TOKEN` plus a
+server-scoped `TOKEN` for one specific host.
+
 ### Wire-side injection: env vars, not literal substitution
 
 `SshService.execute` calls `VaultInjector.buildEnvCommand` which
@@ -100,7 +109,12 @@ the wrapper itself is prepended with a leading space for
 - shell metacharacters in the value cannot break out,
 - repeated placeholders dedupe in the env block,
 - unknown placeholders throw `VaultInjectionException` before any
-  bytes leave the device.
+  bytes leave the device,
+- placeholders inside single-quoted shell strings are rewritten
+  with the close-and-reopen idiom (`'lit'"${NAME}"'lit'`) so the
+  env var actually expands; placeholders inside double-quoted
+  strings emit a bare `${NAME}`; placeholders outside any quotes
+  are wrapped as `"${NAME}"` to suppress word-splitting.
 
 The redactor enforces a **6-character minimum** value length — anything
 shorter would generate too many false positives (a 2-char "secret"

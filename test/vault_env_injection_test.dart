@@ -90,6 +90,92 @@ void main() {
       );
     });
 
+    test('placeholder inside single-quoted string: closes-and-reopens '
+        'so the env var actually expands', () {
+      final injector = VaultInjector([_s('TOKEN', 'bearer-xyz-1234')]);
+      final wrapped = injector.buildEnvCommand(
+        "curl -H 'Authorization: Bearer \${vault:TOKEN}' https://api",
+      );
+      // The bash -lc body must contain the close+reopen idiom
+      // 'lit'"\${TOKEN}"'lit', NOT a literal `\${TOKEN}` left
+      // inside a single-quoted string (which would never expand).
+      final body = wrapped.wrappedCommand.split('bash -lc ').last;
+      expect(
+        body.contains("'\"\${TOKEN}\"'"),
+        isTrue,
+        reason:
+            'placeholder inside \'…\' must be rewritten as '
+            "'\"\${TOKEN}\"' so the env var expands at runtime",
+      );
+      expect(
+        body.contains('bearer-xyz-1234'),
+        isFalse,
+        reason: 'literal value must NOT appear inside the bash -lc body',
+      );
+    });
+
+    test('placeholder inside double-quoted string: bare \${NAME} '
+        '(no extra quotes — surrounding "…" already covers it)', () {
+      final injector = VaultInjector([_s('TOK', 'val-1234567')]);
+      final wrapped = injector.buildEnvCommand(
+        'echo "Bearer \${vault:TOK} done"',
+      );
+      final body = wrapped.wrappedCommand.split('bash -lc ').last;
+      expect(body.contains('"Bearer \${TOK} done"'), isTrue);
+      expect(body.contains('val-1234567'), isFalse);
+    });
+
+    test('mixed quoting in the same command', () {
+      final injector = VaultInjector([
+        _s('A', 'aaaaaa-secret'),
+        _s('B', 'bbbbbb-secret'),
+      ]);
+      final wrapped = injector.buildEnvCommand(
+        "echo \${vault:A} 'inside-\${vault:B}-end'",
+      );
+      final body = wrapped.wrappedCommand.split('bash -lc ').last;
+      expect(body.contains('"\${A}"'), isTrue,
+          reason: 'unquoted A becomes "\${A}"');
+      expect(body.contains("'\"\${B}\"'"), isTrue,
+          reason: "single-quoted B becomes 'lit'\"\${B}\"'lit'");
+      expect(body.contains('aaaaaa-secret'), isFalse);
+      expect(body.contains('bbbbbb-secret'), isFalse);
+    });
+
+    test('server-scoped secret wins over a global secret of the same name',
+        () {
+      final global = VaultSecret(
+        id: 'g',
+        name: 'TOKEN',
+        value: 'GLOBAL-VALUE-ZZZ',
+        scope: null,
+        updatedAt: DateTime.utc(2026, 1, 1),
+      );
+      final scoped = VaultSecret(
+        id: 's',
+        name: 'TOKEN',
+        value: 'SCOPED-VALUE-AAA',
+        scope: 'server-42',
+        updatedAt: DateTime.utc(2026, 1, 1),
+      );
+      // Pass them in either order — the scoped one MUST win.
+      for (final order in [
+        [global, scoped],
+        [scoped, global],
+      ]) {
+        final injector = VaultInjector(order);
+        final wrapped = injector.buildEnvCommand('echo \${vault:TOKEN}');
+        expect(wrapped.env['TOKEN'], 'SCOPED-VALUE-AAA',
+            reason: 'server-scoped secret must override global');
+        expect(
+          wrapped.wrappedCommand.contains('GLOBAL-VALUE-ZZZ'),
+          isFalse,
+          reason: 'wrong-host disclosure: global value must not leak '
+              'when a scoped one exists',
+        );
+      }
+    });
+
     test('deduplicates repeated placeholders in the env block', () {
       final injector = VaultInjector([_s('TOK', 'aaaaaa-token')]);
       final wrapped = injector.buildEnvCommand(
