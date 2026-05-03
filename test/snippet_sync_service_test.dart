@@ -1,7 +1,46 @@
+import 'dart:typed_data';
+
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hamma/core/backup/backup_crypto.dart';
+import 'package:hamma/core/backup/cloud_sync_adapter.dart';
+import 'package:hamma/core/storage/backup_storage.dart';
+import 'package:hamma/core/storage/custom_actions_storage.dart';
 import 'package:hamma/core/sync/snippet_sync_service.dart';
 import 'package:hamma/core/sync/snippet_sync_storage.dart';
 import 'package:hamma/features/quick_actions/quick_actions.dart';
+
+class _FakeAdapter extends CloudSyncAdapter {
+  _FakeAdapter({this.preset, this.failGetWith});
+
+  Uint8List? preset;
+  Object? failGetWith;
+  Uint8List? lastPut;
+  int putCount = 0;
+
+  @override
+  String get destinationLabel => 'Fake';
+  @override
+  bool get isConfigured => true;
+  @override
+  Future<List<CloudObject>> list() async => const [];
+  @override
+  Future<Uint8List> get(String key) async {
+    if (failGetWith != null) throw failGetWith!;
+    final p = preset;
+    if (p == null) throw const CloudNotFoundException('not found');
+    return p;
+  }
+
+  @override
+  Future<void> put(String key, Uint8List bytes) async {
+    putCount += 1;
+    lastPut = bytes;
+  }
+
+  @override
+  Future<void> delete(String key) async {}
+}
 
 void main() {
   group('mergeSnippets — pure newest-wins merge', () {
@@ -104,6 +143,103 @@ void main() {
         1,
       );
     });
+  });
+
+  group('pull-merge-push round-trip safety', () {
+    TestWidgetsFlutterBinding.ensureInitialized();
+
+    const pin = '123456';
+    const cloudConfig = BackupConfig(
+      destination: BackupDestination.s3Compat,
+    );
+
+    setUp(() async {
+      FlutterSecureStorage.setMockInitialValues({});
+      await const SnippetSyncStorage().setEnabled(true);
+      await const BackupStorage().saveConfig(cloudConfig);
+    });
+
+    test(
+      'stale-device push preserves a newer remote-only snippet '
+      '(does NOT clobber the cloud blob)',
+      () async {
+        // Seed remote with a snippet authored by some OTHER device
+        // that THIS device has never seen.
+        final remoteOnly = SnippetSyncBlob(
+          snippets: const [
+            QuickAction(
+              id: 'remote-only',
+              label: 'remote-label',
+              command: 'remote-cmd',
+              isCustom: true,
+            ),
+          ],
+          meta: SnippetSyncMeta(
+            updatedAt: {'remote-only': DateTime.utc(2026, 5, 1)},
+            tombstones: const {},
+          ),
+          deviceId: 'other-device',
+          generatedAt: DateTime.utc(2026, 5, 1, 12),
+        );
+        final preset = BackupCrypto.encrypt(pin, remoteOnly.encode());
+
+        final adapter = _FakeAdapter(preset: preset);
+        final service = SnippetSyncService(
+          adapterBuilder: (_) => adapter,
+          passwordResolver: () async => pin,
+        );
+
+        // Local has nothing → naive push would have wiped the remote
+        // snippet. The fix MUST pull-merge-push instead.
+        await service.pushNow();
+
+        expect(adapter.putCount, 1);
+        final pushed = SnippetSyncBlob.decode(
+          BackupCrypto.decrypt(pin, adapter.lastPut!),
+        );
+        expect(
+          pushed.snippets.map((s) => s.id).toSet(),
+          {'remote-only'},
+          reason:
+              'pushNow must merge remote into local before uploading; '
+              'the unseen remote snippet must survive.',
+        );
+        // Local store must also now contain the merged state.
+        final localAfter =
+            await const CustomActionsStorage().loadActions();
+        expect(localAfter.single.id, 'remote-only');
+      },
+    );
+
+    test(
+      'transient adapter download error must NOT trigger an upload '
+      '(prevents stale-overwrite on network/auth failure)',
+      () async {
+        final adapter = _FakeAdapter(
+          failGetWith: const CloudSyncException(
+            'simulated 503 from provider',
+          ),
+        );
+        final service = SnippetSyncService(
+          adapterBuilder: (_) => adapter,
+          passwordResolver: () async => pin,
+        );
+
+        await service.pushNow();
+
+        expect(
+          adapter.putCount,
+          0,
+          reason:
+              'A non-NotFound adapter error must abort the round-trip '
+              'before any upload, otherwise a transient outage could '
+              'overwrite a newer remote blob with stale local state.',
+        );
+        final history = await const SnippetSyncStorage().loadHistory();
+        expect(history, isNotEmpty);
+        expect(history.first.success, isFalse);
+      },
+    );
   });
 
   group('SnippetSyncBlob round-trip', () {

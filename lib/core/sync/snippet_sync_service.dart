@@ -240,9 +240,34 @@ class SnippetSyncService {
     });
   }
 
-  /// Force an immediate push (cancels any pending debounce). Returns
-  /// without throwing if sync is disabled / unconfigured / blocked.
-  Future<void> pushNow() async {
+  /// Force an immediate push (cancels any pending debounce). Performs
+  /// a pull-merge-push round-trip so that pushing from a stale local
+  /// state never clobbers a peer's unseen edit. No-op when sync is
+  /// disabled / unconfigured / blocked.
+  Future<void> pushNow() => _syncRoundTrip('push');
+
+  /// Pull the latest snippets blob (if any), merge it against local
+  /// state, persist the merged result, and re-upload so peers
+  /// converge. A no-op when sync is disabled or the cloud destination
+  /// is unconfigured.
+  Future<void> pullAndMerge() => _syncRoundTrip('pull');
+
+  /// Single source of truth for sync. Both `pushNow()` and
+  /// `pullAndMerge()` delegate here — the only difference is the
+  /// label written to the sync history. The flow is:
+  ///
+  ///   1. Download the current remote blob (treating only the typed
+  ///      `CloudNotFoundException` as a benign first-run state — any
+  ///      other failure aborts WITHOUT uploading, so a transient
+  ///      outage cannot cause us to overwrite a newer remote blob).
+  ///   2. Merge remote into local with `mergeSnippets()` (newest-wins
+  ///      with tombstone awareness). When the remote was last written
+  ///      by THIS device the merge is skipped as a fast-path.
+  ///   3. If the merge changed anything locally, persist it via
+  ///      `applyMergedState()` (which deliberately does NOT refire
+  ///      the change-bus, so we cannot loop).
+  ///   4. Encrypt + upload the merged blob.
+  Future<void> _syncRoundTrip(String op) async {
     _debounceTimer?.cancel();
     if (!await _syncStorage.isEnabled()) return;
 
@@ -252,94 +277,54 @@ class SnippetSyncService {
 
     final password = await _resolvePassword();
     if (password == null || password.isEmpty) {
-      await _appendHistory('push', false, 'Master password unavailable.');
+      await _appendHistory(op, false, 'Master password unavailable.');
       return;
     }
 
     try {
-      final snippets = await _actionsStorage.loadActions();
-      final meta = await _actionsStorage.loadMeta();
+      final Uint8List? ciphertext = await _safeDownload(adapter);
+      final localSnippets = await _actionsStorage.loadActions();
+      final localMeta = await _actionsStorage.loadMeta();
       final deviceId = await _syncStorage.getOrCreateDeviceId();
+
+      var snippetsToUpload = localSnippets;
+      var metaToUpload = localMeta;
+
+      if (ciphertext != null) {
+        final plaintext = BackupCrypto.decrypt(password, ciphertext);
+        final remote = SnippetSyncBlob.decode(plaintext);
+        if (remote.deviceId != deviceId) {
+          final merged = mergeSnippets(
+            localSnippets: localSnippets,
+            localMeta: localMeta,
+            remoteSnippets: remote.snippets,
+            remoteMeta: remote.meta,
+          );
+          await _actionsStorage.applyMergedState(
+            snippets: merged.snippets,
+            meta: merged.meta,
+          );
+          snippetsToUpload = merged.snippets;
+          metaToUpload = merged.meta;
+        }
+      }
+
       final blob = SnippetSyncBlob(
-        snippets: snippets,
-        meta: meta,
+        snippets: snippetsToUpload,
+        meta: metaToUpload,
         deviceId: deviceId,
         generatedAt: DateTime.now().toUtc(),
       );
-      final ciphertext = BackupCrypto.encrypt(password, blob.encode());
-      await adapter.put(snippetsObjectKey, ciphertext);
+      final outCipher = BackupCrypto.encrypt(password, blob.encode());
+      await adapter.put(snippetsObjectKey, outCipher);
       await _syncStorage.setLastSyncAt(DateTime.now().toUtc());
       await _appendHistory(
-        'push',
+        op,
         true,
-        '${snippets.length} snippet(s) uploaded.',
+        '${snippetsToUpload.length} snippet(s) synced.',
       );
     } catch (e) {
-      await _appendHistory('push', false, e.toString());
-    }
-  }
-
-  /// Pull the latest snippets blob (if any), merge it against local
-  /// state, and persist the merged result. A no-op when sync is
-  /// disabled or the cloud destination is unconfigured.
-  Future<void> pullAndMerge() async {
-    if (!await _syncStorage.isEnabled()) return;
-
-    final config = await _backupStorage.loadConfig();
-    final adapter = _adapterBuilder(config);
-    if (adapter == null || !adapter.isConfigured) return;
-
-    final password = await _resolvePassword();
-    if (password == null || password.isEmpty) {
-      await _appendHistory('pull', false, 'Master password unavailable.');
-      return;
-    }
-
-    try {
-      final ciphertext = await _safeDownload(adapter);
-      if (ciphertext == null) {
-        // No remote blob yet — push our state so peers can pull it.
-        await _appendHistory('pull', true, 'No remote snippets yet.');
-        await pushNow();
-        return;
-      }
-      final plaintext = BackupCrypto.decrypt(password, ciphertext);
-      final remote = SnippetSyncBlob.decode(plaintext);
-      final localSnippets = await _actionsStorage.loadActions();
-      final localMeta = await _actionsStorage.loadMeta();
-
-      final deviceId = await _syncStorage.getOrCreateDeviceId();
-      if (remote.deviceId == deviceId) {
-        // Our own last upload — nothing to merge.
-        await _syncStorage.setLastSyncAt(DateTime.now().toUtc());
-        await _appendHistory('pull', true, 'Already up to date.');
-        return;
-      }
-
-      final merged = mergeSnippets(
-        localSnippets: localSnippets,
-        localMeta: localMeta,
-        remoteSnippets: remote.snippets,
-        remoteMeta: remote.meta,
-      );
-
-      await _actionsStorage.applyMergedState(
-        snippets: merged.snippets,
-        meta: merged.meta,
-      );
-      await _syncStorage.setLastSyncAt(DateTime.now().toUtc());
-      await _appendHistory(
-        'pull',
-        true,
-        '${merged.snippets.length} snippet(s) after merge.',
-      );
-
-      // Re-upload the merged state so peers converge without an extra
-      // round-trip. Triggered immediately (the bus would also fire,
-      // but applyMergedState deliberately does not refire it).
-      await pushNow();
-    } catch (e) {
-      await _appendHistory('pull', false, e.toString());
+      await _appendHistory(op, false, e.toString());
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/backup/backup_service.dart';
 import '../../core/storage/backup_storage.dart';
 import '../../core/sync/snippet_sync_service.dart';
 import '../../core/sync/snippet_sync_storage.dart';
@@ -25,6 +26,7 @@ class _SnippetSyncScreenState extends State<SnippetSyncScreen> {
   bool _loading = true;
   bool _syncing = false;
   BackupConfig? _backupConfig;
+  bool _adapterReady = false;
   DateTime? _lastSyncAt;
   List<SnippetSyncHistoryEntry> _history = const [];
 
@@ -39,10 +41,24 @@ class _SnippetSyncScreenState extends State<SnippetSyncScreen> {
     final backup = await _backupStorage.loadConfig();
     final last = await _storage.getLastSyncAt();
     final history = await _storage.loadHistory();
+    // Gate enable on a *fully* configured adapter, not just the
+    // destination type — `isCloudDestination` returns true even when
+    // credentials are missing, which would let the user enable a
+    // no-op sync.
+    var adapterReady = false;
+    if (backup.isCloudDestination) {
+      try {
+        final adapter = BackupService.buildCloudAdapter(backup);
+        adapterReady = adapter.isConfigured;
+      } catch (_) {
+        adapterReady = false;
+      }
+    }
     if (!mounted) return;
     setState(() {
       _enabled = enabled;
       _backupConfig = backup;
+      _adapterReady = adapterReady;
       _lastSyncAt = last;
       _history = history;
       _loading = false;
@@ -75,7 +91,8 @@ class _SnippetSyncScreenState extends State<SnippetSyncScreen> {
     }
   }
 
-  bool get _cloudReady => _backupConfig?.isCloudDestination ?? false;
+  bool get _cloudReady =>
+      (_backupConfig?.isCloudDestination ?? false) && _adapterReady;
 
   @override
   Widget build(BuildContext context) {
@@ -157,11 +174,17 @@ class _SnippetSyncScreenState extends State<SnippetSyncScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Snippet sync rides on top of Cloud Sync. Configure a cloud '
-            'destination first (Settings → Backup & Restore → Cloud '
-            'Sync), then return here to flip the switch.',
-            style: TextStyle(color: AppColors.textMuted, height: 1.4),
+          Text(
+            (_backupConfig?.isCloudDestination ?? false)
+                ? 'Your cloud destination is selected but its credentials '
+                    'are incomplete. Open Settings → Backup & Restore → '
+                    'Cloud Sync and finish configuring it, then return '
+                    'here to flip the switch.'
+                : 'Snippet sync rides on top of Cloud Sync. Configure a '
+                    'cloud destination first (Settings → Backup & '
+                    'Restore → Cloud Sync), then return here to flip '
+                    'the switch.',
+            style: const TextStyle(color: AppColors.textMuted, height: 1.4),
           ),
         ],
       ),
@@ -176,7 +199,7 @@ class _SnippetSyncScreenState extends State<SnippetSyncScreen> {
       ),
       child: SwitchListTile(
         value: _enabled,
-        onChanged: _syncing ? null : _toggle,
+        onChanged: (_syncing || !_cloudReady) ? null : _toggle,
         activeColor: AppColors.accent,
         title: const Text(
           'Sync snippets across devices',
