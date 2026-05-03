@@ -12,6 +12,7 @@ import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/chat_history_storage.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/voice/voice_backend_speech_to_text.dart';
+import '../../core/voice/voice_mode_storage.dart';
 import '../../core/voice/voice_recognizer.dart';
 import '../../core/voice/voice_session.dart';
 import '../../core/voice/voice_speaker.dart';
@@ -78,6 +79,10 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   late final VoiceSession _voiceSession = VoiceSession();
   VoiceRecognizer? _voiceRecognizer;
   VoiceSpeaker? _voiceSpeaker;
+  // Per-server persistence of VoiceMode so on-call engineers who
+  // enable conversational mode for a critical server keep it on
+  // across app restarts.
+  final VoiceModeStorage _voiceModeStorage = const VoiceModeStorage();
   bool _voiceMicActive = false;
 
   @override
@@ -108,6 +113,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     _voiceRecognizer = VoiceRecognizer(backend: SpeechToTextBackend());
     _voiceSpeaker = VoiceSpeaker();
     _voiceSession.addListener(_onVoiceSessionChanged);
+    // Restore the user's last voice mode for this server.
+    unawaited(() async {
+      final saved = await _voiceModeStorage.load(widget.serverId);
+      if (mounted && saved != VoiceMode.off) {
+        _voiceSession.setMode(saved);
+      }
+    }());
   }
 
   void _onVoiceSessionChanged() {
@@ -573,6 +585,9 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
                 session: _voiceSession,
                 onChanged: (mode) {
                   _voiceSession.setMode(mode);
+                  unawaited(
+                    _voiceModeStorage.save(widget.serverId, mode),
+                  );
                   if (mode == VoiceMode.off) {
                     unawaited(_voiceSpeaker?.stop());
                     unawaited(_voiceRecognizer?.cancel());

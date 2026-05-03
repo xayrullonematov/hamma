@@ -142,6 +142,35 @@ void main() {
       expect(out, isNull);
     });
 
+    test('on-device-flavored backend errors flip state to unavailable',
+        () async {
+      // Errors that hint at network / offline-pack absence must
+      // disable the mic permanently (until retried) — not be treated
+      // as transient. This is the on-device guarantee enforcement.
+      final backend = _FakeBackend();
+      final r = VoiceRecognizer(backend: backend);
+
+      await r.startListening();
+      backend.emitError('error_network');
+      expect(r.state, VoiceRecognizerState.unavailable);
+
+      // A fresh start attempt should be refused (still unavailable
+      // because the backend.supportsOnDevice didn't change, but the
+      // recognizer must NOT silently fall back).
+      expect(r.errorMessage?.toLowerCase(), contains('on-device'));
+    });
+
+    test('transient backend errors stay in error state (retryable)',
+        () async {
+      final backend = _FakeBackend();
+      final r = VoiceRecognizer(backend: backend);
+
+      await r.startListening();
+      backend.emitError('error_speech_timeout');
+      expect(r.state, VoiceRecognizerState.error);
+      expect(r.state, isNot(VoiceRecognizerState.unavailable));
+    });
+
     test('backend onError propagates into recognizer error state',
         () async {
       // The on-device guarantee depends on backend errors flowing

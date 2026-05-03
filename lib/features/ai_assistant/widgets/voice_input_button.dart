@@ -35,6 +35,21 @@ class VoiceInputButton extends StatefulWidget {
 }
 
 class _VoiceInputButtonState extends State<VoiceInputButton> {
+  // True only between pointer-down and pointer-up. Used to detect the
+  // race where the user releases the mic *before* the async start
+  // chain (disclosure → permission → backend.initialize → listen) has
+  // finished — without this guard the recognizer would begin
+  // listening after release, leaving the microphone hot.
+  bool _pressActive = false;
+  // Monotonic id incremented on every pointer-down. _start() captures
+  // its id and bails out if a newer press has begun (or the same
+  // press has ended) before the async chain completes.
+  int _pressId = 0;
+  // Reflects whether the user is currently pressing the button (for
+  // the visual state). Distinct from `recognizer.isListening` so the
+  // button can show the held-down style during the brief window
+  // between pointer-down and the recognizer actually entering the
+  // listening state.
   bool _holding = false;
 
   @override
@@ -105,30 +120,75 @@ class _VoiceInputButtonState extends State<VoiceInputButton> {
     return false;
   }
 
-  Future<void> _start() async {
-    if (_holding) return;
-    if (!await _ensureDisclosure()) return;
-    if (!mounted) return;
-    setState(() => _holding = true);
+  Future<void> _start(int id) async {
+    // Visual feedback: show the held-down style immediately so the
+    // user sees the press registered even while disclosure /
+    // permission / initialize is still running.
+    if (mounted) setState(() => _holding = true);
+
+    final ok = await _ensureDisclosure();
+    if (!_isStillThisPress(id)) {
+      // User released (or started a new press) during the disclosure
+      // dialog. Never start the backend.
+      _resetHolding();
+      return;
+    }
+    if (!ok) {
+      _resetHolding();
+      return;
+    }
+
     await widget.recognizer.startListening();
+    if (!_isStillThisPress(id)) {
+      // The async start chain crossed the pointer-up boundary. The
+      // recognizer may now be listening — cancel it immediately so
+      // the microphone never stays hot after release.
+      await widget.recognizer.cancel();
+      _resetHolding();
+      return;
+    }
+
     if (widget.recognizer.state == VoiceRecognizerState.unavailable ||
         widget.recognizer.state == VoiceRecognizerState.error) {
-      if (mounted) setState(() => _holding = false);
+      _resetHolding();
       _showErrorSnack(widget.recognizer.errorMessage ?? 'Voice unavailable');
     }
   }
 
   Future<void> _finish({bool cancel = false}) async {
-    if (!_holding) return;
-    setState(() => _holding = false);
+    // _pressActive is flipped by the pointer handlers *before* this
+    // is called, so any concurrent _start() will see the press is no
+    // longer active and bail before invoking listen.
+    final wasHolding = _holding;
+    _resetHolding();
+
     if (cancel) {
+      // Always attempt cancel — covers the case where the recognizer
+      // started listening just before / during finish.
       await widget.recognizer.cancel();
+      return;
+    }
+
+    // Only forward a transcript if we ever actually held the button
+    // (avoids forwarding empty transcripts for a no-op tap).
+    if (!wasHolding) {
+      // Defensive: still ask the recognizer to stop in case _start
+      // raced past the guard.
+      if (widget.recognizer.isListening) {
+        await widget.recognizer.cancel();
+      }
       return;
     }
     final transcript = await widget.recognizer.stopListening();
     if (transcript != null && transcript.isNotEmpty) {
       widget.onTranscript(transcript);
     }
+  }
+
+  bool _isStillThisPress(int id) => mounted && _pressActive && _pressId == id;
+
+  void _resetHolding() {
+    if (mounted && _holding) setState(() => _holding = false);
   }
 
   void _showErrorSnack(String message) {
@@ -151,9 +211,24 @@ class _VoiceInputButtonState extends State<VoiceInputButton> {
     return Tooltip(
       message: tooltip,
       child: Listener(
-        onPointerDown: isUnavailable ? null : (_) => _start(),
-        onPointerUp: (_) => _finish(),
-        onPointerCancel: (_) => _finish(cancel: true),
+        // Pointer handlers flip _pressActive / _pressId synchronously
+        // so the async _start chain can detect a release that arrives
+        // before listen() completes.
+        onPointerDown: isUnavailable
+            ? null
+            : (_) {
+                _pressActive = true;
+                final id = ++_pressId;
+                unawaited(_start(id));
+              },
+        onPointerUp: (_) {
+          _pressActive = false;
+          unawaited(_finish());
+        },
+        onPointerCancel: (_) {
+          _pressActive = false;
+          unawaited(_finish(cancel: true));
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           width: 44,

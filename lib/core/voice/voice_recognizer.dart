@@ -113,7 +113,25 @@ class VoiceRecognizer extends ChangeNotifier {
           }
         },
         onError: (err) {
-          _setState(VoiceRecognizerState.error, error: err);
+          // Classify the plugin error: anything that suggests the
+          // platform fell back to (or required) network — or that
+          // on-device support is structurally missing — flips the
+          // recognizer to `unavailable`, which the UI uses to disable
+          // the mic with the explanatory tooltip. Transient errors
+          // (timeouts, no-match) stay as `error` so the user can
+          // simply press the mic again.
+          if (_isUnavailable(err)) {
+            _setState(
+              VoiceRecognizerState.unavailable,
+              error:
+                  'On-device speech recognition is not available '
+                  '($err). Hamma will not send audio off-device, so '
+                  'the microphone is disabled. Install your offline '
+                  'language pack in system settings to enable voice.',
+            );
+          } else {
+            _setState(VoiceRecognizerState.error, error: err);
+          }
         },
       );
     } catch (e) {
@@ -146,6 +164,24 @@ class VoiceRecognizer extends ChangeNotifier {
     } catch (_) {}
     _transcript = '';
     _setState(VoiceRecognizerState.idle);
+  }
+
+  /// Heuristic over plugin error codes that distinguish "on-device
+  /// recognition is not available on this device" from "speech wasn't
+  /// captured this time". The match is intentionally loose because
+  /// `speech_to_text` forwards platform-specific strings verbatim and
+  /// they vary across OEMs and OS versions; we err on the side of
+  /// disabling the mic when in doubt about the on-device guarantee.
+  bool _isUnavailable(String err) {
+    final e = err.toLowerCase();
+    return e.contains('network') ||
+        e.contains('server') ||
+        e.contains('language_not_supported') ||
+        e.contains('not supported') ||
+        e.contains('on-device') ||
+        e.contains('on_device') ||
+        e.contains('offline') ||
+        e.contains('unavailable');
   }
 
   void _setState(VoiceRecognizerState s, {String? error}) {
