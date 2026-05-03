@@ -4,8 +4,8 @@ import 'dart:convert';
 import 'package:meta/meta.dart';
 
 import '../ai/ai_command_service.dart';
+import '../ai/ai_provider.dart';
 import '../ai/command_risk_assessor.dart';
-import '../ssh/ssh_service.dart';
 import '../storage/api_key_storage.dart';
 import 'runbook.dart';
 
@@ -671,6 +671,13 @@ class RunbookRunner {
     if (settings == null) {
       throw const RunbookSchemaException(
         'No AI settings configured for aiSummarize step.',
+      );
+    }
+    if (!settings.provider.isLocal) {
+      throw const RunbookSchemaException(
+        'aiSummarize requires a local AI provider. Switch AI to Local '
+        '(Ollama / OpenAI-compatible local engine) in Settings — '
+        'command output is never sent to hosted providers.',
       );
     }
     final apiKey = settings.apiKeys[settings.provider] ?? '';

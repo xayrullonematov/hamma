@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../ai/ai_command_service.dart';
+import '../ai/ai_provider.dart';
 import '../storage/api_key_storage.dart';
 import 'runbook.dart';
 import 'runbook_storage.dart';
@@ -42,6 +43,13 @@ class RunbookAiDrafter {
 
   Future<String> _call(String prompt) async {
     if (_overrideCall != null) return _overrideCall(prompt);
+    if (!aiSettings.provider.isLocal) {
+      throw const RunbookDrafterException(
+        'Runbook drafting requires a local AI provider. Switch AI to '
+        'Local in Settings — goals and server context are never sent '
+        'to hosted providers.',
+      );
+    }
     final apiKey = aiSettings.apiKeys[aiSettings.provider] ?? '';
     final svc = AiCommandService.forProvider(
       provider: aiSettings.provider,
@@ -109,7 +117,7 @@ Goal: $goal
 }
 
 class RunbookDrafterException implements Exception {
-  RunbookDrafterException(this.message);
+  const RunbookDrafterException(this.message);
   final String message;
 
   @override

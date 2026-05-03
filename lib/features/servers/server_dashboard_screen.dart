@@ -644,8 +644,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           aiSettings: _currentAiSettings,
         );
       default:
-        // Plugin tabs sit after the built-in slots. Index translation:
-        // tab 6 → plugin 0, tab 7 → plugin 1, …
+        // Plugin tabs sit after the built-in slots.
         final pluginIndex = _activeTabIndex - _NavItems.items.length;
         if (pluginIndex >= 0 && pluginIndex < _enabledPlugins.length) {
           final plugin = _enabledPlugins[pluginIndex];
