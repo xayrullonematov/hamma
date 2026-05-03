@@ -8,6 +8,7 @@ import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/theme/app_colors.dart';
 import '../docker/docker_manager_screen.dart';
+import '../logs/log_viewer_screen.dart';
 import '../packages/package_manager_screen.dart';
 import '../sftp/file_explorer_screen.dart';
 import '../services/service_management_screen.dart';
@@ -554,6 +555,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           sshService: _sshService,
           serverName: _server.name,
         );
+      case 5:
+        // System / auth / custom file-tail log viewer with the
+        // "Watch with AI" entrypoint baked in.
+        return LogViewerScreen(
+          sshService: _sshService,
+          serverName: _server.name,
+          aiSettings: _currentAiSettings,
+        );
       default:
         return TerminalScreen(
           sshService: _sshService,
@@ -607,6 +616,7 @@ class _NavItems {
     _NavItem(icon: Icons.directions_boat_rounded, label: 'Docker'),
     _NavItem(icon: Icons.settings_input_component_rounded, label: 'Services'),
     _NavItem(icon: Icons.system_update_alt_rounded, label: 'Packages'),
+    _NavItem(icon: Icons.article_outlined, label: 'Logs'),
   ];
 }
 

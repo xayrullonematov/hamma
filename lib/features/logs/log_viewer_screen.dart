@@ -111,7 +111,13 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       case LogSource.custom:
         final path = _customPathController.text.trim();
         if (path.isEmpty) return null;
-        return 'sudo -S tail -f -n 100 $path';
+        // Shell-quote the user-supplied path so spaces, $VAR, ;,
+        // backticks, &&, etc. cannot break out of the tail invocation
+        // and execute arbitrary remote commands. Wrap in single quotes
+        // and escape any embedded single quote with the canonical
+        // POSIX `'\''` sequence.
+        final quoted = "'${path.replaceAll("'", r"'\''")}'";
+        return 'sudo -S tail -f -n 100 $quoted';
     }
   }
 
