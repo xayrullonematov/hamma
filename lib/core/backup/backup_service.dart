@@ -16,6 +16,11 @@ import '../ssh/sftp_service.dart';
 import '../storage/app_lock_storage.dart';
 import '../storage/backup_storage.dart';
 import 'backup_crypto.dart';
+import 'cloud_sync_adapter.dart';
+import 'cloud_sync_engine.dart';
+import 'dropbox_adapter.dart';
+import 'icloud_adapter.dart';
+import 's3_compat_adapter.dart';
 
 class BackupService {
   const BackupService({
@@ -81,41 +86,33 @@ class BackupService {
         case BackupDestination.syncthing:
           await _copyToSyncthing(config, backupFile);
           break;
+
+        case BackupDestination.s3Compat:
+        case BackupDestination.iCloud:
+        case BackupDestination.dropbox:
+          await _uploadToCloud(config, backupFile, password);
+          break;
       }
 
       await _backupStorage.saveConfig(
-        BackupConfig(
-          destination: config.destination,
-          sftpHost: config.sftpHost,
-          sftpPort: config.sftpPort,
-          sftpUsername: config.sftpUsername,
-          sftpPassword: config.sftpPassword,
-          sftpPath: config.sftpPath,
-          webdavUrl: config.webdavUrl,
-          webdavUsername: config.webdavUsername,
-          webdavPassword: config.webdavPassword,
-          syncthingPath: config.syncthingPath,
-          autoBackupEnabled: config.autoBackupEnabled,
+        config.copyWith(
           lastBackupTime: DateTime.now(),
           lastBackupStatus: 'Success',
+          lastCloudSyncTime:
+              config.isCloudDestination ? DateTime.now() : config.lastCloudSyncTime,
+          lastCloudSyncStatus:
+              config.isCloudDestination ? 'Success' : config.lastCloudSyncStatus,
         ),
       );
     } catch (e) {
       await _backupStorage.saveConfig(
-        BackupConfig(
-          destination: config.destination,
-          sftpHost: config.sftpHost,
-          sftpPort: config.sftpPort,
-          sftpUsername: config.sftpUsername,
-          sftpPassword: config.sftpPassword,
-          sftpPath: config.sftpPath,
-          webdavUrl: config.webdavUrl,
-          webdavUsername: config.webdavUsername,
-          webdavPassword: config.webdavPassword,
-          syncthingPath: config.syncthingPath,
-          autoBackupEnabled: config.autoBackupEnabled,
+        config.copyWith(
           lastBackupTime: DateTime.now(),
           lastBackupStatus: 'Failed: $e',
+          lastCloudSyncTime:
+              config.isCloudDestination ? DateTime.now() : config.lastCloudSyncTime,
+          lastCloudSyncStatus:
+              config.isCloudDestination ? 'Failed: $e' : config.lastCloudSyncStatus,
         ),
       );
       rethrow;
@@ -156,6 +153,11 @@ class BackupService {
             break;
           case BackupDestination.syncthing:
             fileToRestore = await _getFromSyncthing(config);
+            break;
+          case BackupDestination.s3Compat:
+          case BackupDestination.iCloud:
+          case BackupDestination.dropbox:
+            fileToRestore = await _downloadFromCloud(config);
             break;
         }
       }
@@ -298,6 +300,113 @@ class BackupService {
     final localFile = File(p.join(tempDir.path, 'restored_backup.aes'));
     await localFile.writeAsBytes(response.bodyBytes);
     return localFile;
+  }
+
+  /// Build the right [CloudSyncAdapter] for [config]'s destination.
+  /// Public for tests + the dedicated Cloud Sync screen, which needs
+  /// to construct an adapter without going through the legacy
+  /// `backupToDestination` path.
+  static CloudSyncAdapter buildCloudAdapter(BackupConfig config) {
+    switch (config.destination) {
+      case BackupDestination.s3Compat:
+        return S3CompatAdapter(
+          endpoint: config.s3Endpoint,
+          region: config.s3Region,
+          bucket: config.s3Bucket,
+          accessKeyId: config.s3AccessKeyId,
+          secretAccessKey: config.s3SecretAccessKey,
+          prefix: config.s3Prefix,
+          usePathStyle: config.s3UsePathStyle,
+        );
+      case BackupDestination.dropbox:
+        return DropboxAdapter(
+          accessToken: config.dropboxAccessToken,
+          appFolder: config.dropboxAppFolder,
+        );
+      case BackupDestination.iCloud:
+        return ICloudAdapter(
+          containerId: config.iCloudContainerId,
+          folder: config.iCloudFolder,
+        );
+      case BackupDestination.local:
+      case BackupDestination.sftp:
+      case BackupDestination.webdav:
+      case BackupDestination.syncthing:
+        throw const BackupException(
+          'buildCloudAdapter called for non-cloud destination',
+        );
+    }
+  }
+
+  Future<void> _uploadToCloud(
+    BackupConfig config,
+    File file,
+    String password,
+  ) async {
+    final adapter = buildCloudAdapter(config);
+    final deviceId = config.cloudDeviceId.isEmpty
+        ? generateDeviceId()
+        : config.cloudDeviceId;
+    final prefix = _cloudPrefixFor(config);
+    final engine = CloudSyncEngine(
+      adapter: adapter,
+      deviceId: deviceId,
+      prefix: prefix,
+      // Use the on-disk encrypted file the legacy path produced. We
+      // re-encrypt the *plaintext* `secureStorage` snapshot (rather
+      // than re-uploading the on-disk blob unchanged) so each cloud
+      // sync gets a fresh IV/salt — the engine's HMBK guard catches
+      // any code path that accidentally hands it plaintext.
+      encrypter: (plaintext) => BackupCrypto.encrypt(password, plaintext),
+    );
+
+    // Re-collect the plaintext snapshot from secure storage. We can't
+    // hand the engine the already-encrypted bytes from `file` because
+    // it would re-encrypt them, double-wrapping the payload.
+    final allData = await _secureStorage.readAll();
+    final plaintext = Uint8List.fromList(
+      utf8.encode(jsonEncode(allData)),
+    );
+
+    await engine.sync(plaintext);
+  }
+
+  Future<File> _downloadFromCloud(BackupConfig config) async {
+    final adapter = buildCloudAdapter(config);
+    final engine = CloudSyncEngine(
+      adapter: adapter,
+      deviceId: config.cloudDeviceId.isEmpty
+          ? 'restore'
+          : config.cloudDeviceId,
+      prefix: _cloudPrefixFor(config),
+      // Restore path doesn't call sync(), only fetchLatestSnapshot.
+      // The encrypter is unused; pass an identity that would still
+      // satisfy the HMBK guard if it ever fired.
+      encrypter: (p) => p,
+    );
+    final result = await engine.fetchLatestSnapshot();
+    final tempDir = await getTemporaryDirectory();
+    final localFile =
+        File(p.join(tempDir.path, 'restored_cloud_backup.aes'));
+    await localFile.writeAsBytes(result.ciphertext);
+    return localFile;
+  }
+
+  static String _cloudPrefixFor(BackupConfig config) {
+    switch (config.destination) {
+      case BackupDestination.s3Compat:
+        return config.s3Prefix.isEmpty ? 'hamma/' : config.s3Prefix;
+      case BackupDestination.dropbox:
+      case BackupDestination.iCloud:
+        // Path-based providers — keys are relative to the app folder /
+        // ubiquity container, so no extra prefix is needed.
+        return '';
+      case BackupDestination.local:
+      case BackupDestination.sftp:
+      case BackupDestination.webdav:
+      case BackupDestination.syncthing:
+        return '';
+    }
   }
 
   Future<void> _copyToSyncthing(BackupConfig config, File file) async {

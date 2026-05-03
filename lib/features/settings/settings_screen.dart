@@ -17,6 +17,7 @@ import '../../core/storage/backup_storage.dart';
 import '../security/app_lock_screen.dart';
 import '../../core/theme/app_colors.dart';
 import 'help_center_screen.dart';
+import 'cloud_sync_screen.dart';
 import 'local_ai_onboarding_screen.dart';
 import 'local_models_screen.dart';
 import 'widgets/settings_section_card.dart';
@@ -1524,7 +1525,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           labelText: 'Backup Destination',
                         ),
                         items:
-                            BackupDestination.values.map((dest) {
+                            BackupDestination.values
+                                .where((d) =>
+                                    d != BackupDestination.s3Compat &&
+                                    d != BackupDestination.iCloud &&
+                                    d != BackupDestination.dropbox)
+                                .map((dest) {
                               return DropdownMenuItem(
                                 value: dest,
                                 child: Text(dest.name.toUpperCase()),
@@ -1693,6 +1699,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _isBusy
+                              ? null
+                              : () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const CloudSyncScreen(),
+                                    ),
+                                  );
+                                },
+                          icon: const Icon(Icons.cloud_outlined),
+                          label: const Text('Cloud Sync (Encrypted)'),
+                        ),
                       ),
                     ],
                   ),

@@ -181,6 +181,38 @@ contents — server profiles, AI keys, trusted host keys) live in
   (binary + JSON + text payloads), all failure modes, the legacy
   migration path, and lock in the exact Argon2id parameters.
 
+## Cloud Sync (Phase 5 — opt-in, zero-trust)
+
+Three new opt-in destinations sit on top of the existing BackupCrypto v2 (HMBK / Argon2id / AES-256-GCM):
+
+- **S3-compatible** — AWS S3, Cloudflare R2, MinIO, Backblaze B2, etc. Full AWS SigV4 signing with no extra deps (`crypto` + `http`); supports virtual-host and path-style addressing.
+- **Dropbox** — OAuth bearer token against `api.dropboxapi.com` and `content.dropboxapi.com` (`/2/files/upload|download|list_folder|delete_v2|move_v2`).
+- **iCloud** — `MethodChannel('com.hamma/icloud')` to a native iOS/macOS shim. UI hides this destination on non-Apple platforms; the adapter throws `CloudSyncException` if invoked elsewhere.
+
+### Architecture
+
+`CloudSyncAdapter` (interface: `list/put/get/delete/rename`) → concrete adapters (`S3CompatAdapter`, `DropboxAdapter`, `ICloudAdapter`) → `CloudSyncEngine`, which:
+
+1. Encrypts via an injected `encrypter` callback (production wires `BackupCrypto.encrypt` with the user's master password).
+2. **HMBK header guard** — refuses to upload anything not starting with `HMBK\x02`. This is defence-in-depth: even if a future caller mis-wires the encrypter (e.g. passes the identity), no plaintext can leave the device.
+3. Uploads ciphertext under `<prefix><deviceId>/<isoTimestamp>.bin` and persists a manifest at `<prefix>manifest.json` with timestamp, deviceId, and SHA-256 blob hash.
+4. **Conflict resolution** — prior snapshots from the same device are moved to `<prefix>conflicts/`. Other devices' entries are preserved; restore picks the newest entry across all devices.
+
+`BackupService.backupToDestination` routes the three cloud destinations through the engine; `restoreFromDestination` calls `fetchLatestSnapshot` and decrypts via the existing BackupCrypto path. Local/SFTP/WebDAV/Syncthing flows are unchanged.
+
+### Zero-trust guarantee
+
+- **Cloud providers see ciphertext only.** Test `test/cloud_sync_zero_trust_test.dart` intercepts every HTTP body for S3 + Dropbox flows and asserts (a) every snapshot upload begins with the HMBK magic + version 0x02 and (b) the plaintext sentinel never appears in any request body — including manifest writes.
+- **Bug-injection coverage.** The same test wires an identity "encrypter" and asserts the engine throws `CloudSyncException` *and* that no PUT body ever contained plaintext.
+- **Keys never leave the device.** Master password is supplied per-sync, used only to derive a fresh Argon2id key, and is never persisted in `BackupConfig`.
+
+### UI
+
+- `lib/features/settings/cloud_sync_screen.dart` — brutalist destination cards with `READY` / `SYNCING` / `FAILED` / `NOT SET` status pills; "Sync Now" + "Reconfigure".
+- `lib/features/settings/cloud_sync_onboarding_screen.dart` — 4-step wizard (Intro → Auth → Encrypt cadence → Verify) that smoke-tests credentials with a read-only `list()` call before saving.
+- `lib/features/settings/cloud_restore_screen.dart` — guarded restore-on-new-device flow with master-password prompt and red warning banner.
+- Entry point added under "Backup & Restore" in `settings_screen.dart` ("Cloud Sync (Encrypted)"). Cloud destinations are filtered out of the legacy destination dropdown so they always go through the dedicated screen.
+
 ## Global Error Handling
 
 Top-level error capture is centralised in `lib/core/error/`:
