@@ -13,6 +13,7 @@ import '../../plugins/plugin_registry.dart';
 import '../docker/docker_manager_screen.dart';
 import '../logs/log_viewer_screen.dart';
 import '../packages/package_manager_screen.dart';
+import '../runbooks/runbooks_screen.dart';
 import '../sftp/file_explorer_screen.dart';
 import '../services/service_management_screen.dart';
 import '../settings/settings_screen.dart';
@@ -634,6 +635,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           serverName: _server.name,
           aiSettings: _currentAiSettings,
         );
+      case 6:
+        // Runbooks tab: per-server multi-step AI-assisted workflows.
+        return RunbooksScreen(
+          sshService: _sshService,
+          serverId: _server.id,
+          serverName: _server.name,
+          aiSettings: _currentAiSettings,
+        );
       default:
         // Plugin tabs sit after the built-in slots. Index translation:
         // tab 6 → plugin 0, tab 7 → plugin 1, …
@@ -778,6 +787,7 @@ class _NavItems {
     _NavItem(icon: Icons.settings_input_component_rounded, label: 'Services'),
     _NavItem(icon: Icons.system_update_alt_rounded, label: 'Packages'),
     _NavItem(icon: Icons.article_outlined, label: 'Logs'),
+    _NavItem(icon: Icons.menu_book_outlined, label: 'Runbooks'),
   ];
 }
 

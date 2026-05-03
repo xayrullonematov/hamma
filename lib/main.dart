@@ -19,6 +19,7 @@ import 'core/storage/api_key_storage.dart';
 import 'core/storage/app_lock_storage.dart';
 import 'core/storage/app_prefs_storage.dart';
 import 'core/storage/saved_servers_storage.dart';
+import 'core/sync/runbook_sync_service.dart';
 import 'core/sync/snippet_sync_service.dart';
 import 'core/sync/snippet_sync_storage.dart';
 import 'core/theme/app_colors.dart';
@@ -190,6 +191,20 @@ Future<void> _bootstrapAndRun() async {
     }
   } catch (_) {
     // Snippet sync is non-critical; never block app launch on it.
+  }
+
+  // Cross-device runbook sync (Phase 8) — sibling of snippet sync.
+  // Only `team:true` runbooks ride the wire; everything else stays
+  // on the originating device. Reuses the same encrypted blob /
+  // password / cloud-adapter stack so flipping the snippet sync
+  // toggle in settings activates this too.
+  try {
+    final runbookSync = RunbookSyncService()..start();
+    if (await const SnippetSyncStorage().isEnabled()) {
+      unawaited(runbookSync.pullAndMerge());
+    }
+  } catch (_) {
+    // Runbook sync is non-critical; never block app launch on it.
   }
 
   // Sentry DSN can be hardcoded for production or overridden by dev config
