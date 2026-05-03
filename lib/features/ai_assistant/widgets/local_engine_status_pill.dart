@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/ai/local_engine_health_monitor.dart';
@@ -40,6 +42,24 @@ class LocalEngineStatusPill extends StatefulWidget {
 class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
   static const _zeroTrustGreen = Color(0xFF00FF88);
   static const _loadingAmber = Color(0xFFFFB000);
+
+  /// Tracks an in-flight retry probe so the pill can show a spinner and
+  /// debounce duplicate taps until the request resolves.
+  bool _retrying = false;
+
+  /// Fires an out-of-band probe and forces a rebuild as soon as the
+  /// result lands so the user sees the new status without waiting for
+  /// the next polling tick.
+  Future<void> _probeFromTap() async {
+    if (_retrying) return;
+    setState(() => _retrying = true);
+    try {
+      widget.onRetry?.call();
+      await widget.monitor.probeNow();
+    } finally {
+      if (mounted) setState(() => _retrying = false);
+    }
+  }
 
   /// Strip a trailing `:latest` so the pill stays compact.
   String _shortName(String tag) {
@@ -98,9 +118,15 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
         };
 
         final canRetry = status == LocalEngineHealthStatus.offline;
-        // Tap on any state opens a details sheet; offline state still
-        // gets the inline retry icon for one-tap recovery.
-        void openDetails() => _showEngineDetailsSheet(context, health);
+        // Offline tap = one-shot probe (immediate recovery feedback);
+        // any other state opens the details sheet so users can inspect
+        // endpoint, version, loaded models, and retry from there.
+        VoidCallback onTap;
+        if (canRetry) {
+          onTap = () => unawaited(_probeFromTap());
+        } else {
+          onTap = () => _showEngineDetailsSheet(context, health);
+        }
 
         final pill = Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -111,7 +137,8 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (status == LocalEngineHealthStatus.loading ||
+              if (_retrying ||
+                  status == LocalEngineHealthStatus.loading ||
                   status == LocalEngineHealthStatus.loadingModel)
                 SizedBox(
                   width: 10,
@@ -166,7 +193,8 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
         return Tooltip(
           message: tooltip,
           child: InkWell(
-            onTap: openDetails,
+            onTap: onTap,
+            onLongPress: () => _showEngineDetailsSheet(context, health),
             child: pill,
           ),
         );

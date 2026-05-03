@@ -250,6 +250,11 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       _activeProvider = targetProvider;
       _isLoadingActiveApiKey = true;
       _status = 'Loading ${targetProvider.label} configuration...';
+      // Spin the monitor up/down here so the header pill appears the
+      // instant the user picks Local AI from the in-sheet provider
+      // picker — `didUpdateWidget` only fires for prop changes, but
+      // the picker mutates state internally.
+      _syncLocalEngineMonitor();
     });
 
     if (targetProvider == AiProvider.openRouter) {
