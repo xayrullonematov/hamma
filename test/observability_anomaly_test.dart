@@ -50,15 +50,48 @@ void main() {
       expect(stillAnom, isFalse);
     });
 
-    test('constant baseline never flags anomaly (stddev=0 guard)', () {
+    test('constant baseline → identical samples never flag', () {
       final buf = RollingBuffer(minSamplesForAnomaly: 5, zScoreThreshold: 2);
       for (var i = 0; i < 20; i++) {
         final r = buf.push(DateTime(2026, 1, 1, 0, 0, i), 42.0);
         expect(r.anomalous, isFalse);
       }
-      final spike = buf.push(DateTime(2026, 1, 1, 0, 0, 30), 99.0);
-      // Constant history → stddev=0 → guard suppresses spurious flags.
-      expect(spike.anomalous, isFalse);
+      // A repeat of the baseline keeps the flag clear — no flutter on
+      // idle hosts that don't actually change.
+      final same = buf.push(DateTime(2026, 1, 1, 0, 0, 30), 42.0);
+      expect(same.anomalous, isFalse);
+    });
+
+    test('idle-to-spike flags anomaly even with stddev=0 baseline', () {
+      // Most "real spikes" are the idle CPU / network / load case:
+      // a flat 0% sits there for an hour and then jumps to 80%. The
+      // z-score is undefined for stddev=0 but the operator absolutely
+      // wants this surfaced — covered by flatBaselineMinDelta.
+      final buf = RollingBuffer(
+        minSamplesForAnomaly: 5,
+        zScoreThreshold: 3,
+        flatBaselineMinDelta: 1.0,
+      );
+      for (var i = 0; i < 20; i++) {
+        buf.push(DateTime(2026, 1, 1, 0, 0, i), 0.0);
+      }
+      final spike = buf.push(DateTime(2026, 1, 1, 0, 0, 21), 80.0);
+      expect(spike.anomalous, isTrue);
+      expect(spike.stddev, 0);
+    });
+
+    test('idle baseline + sub-threshold delta does NOT flag', () {
+      final buf = RollingBuffer(
+        minSamplesForAnomaly: 5,
+        flatBaselineMinDelta: 5.0,
+      );
+      for (var i = 0; i < 20; i++) {
+        buf.push(DateTime(2026, 1, 1, 0, 0, i), 0.0);
+      }
+      // 2.0 of jitter on a flat 0 baseline isn't a spike — caller
+      // configured min-delta to 5.0.
+      final wobble = buf.push(DateTime(2026, 1, 1, 0, 0, 21), 2.0);
+      expect(wobble.anomalous, isFalse);
     });
 
     test('capacity bounds buffer size', () {

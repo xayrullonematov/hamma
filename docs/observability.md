@@ -51,10 +51,16 @@ Each tile exposes three actions:
 
 ### Process lists
 
-Each round we widen the `top` capture to 30 rows so the by-RAM
-ordering produces meaningfully different processes from the by-CPU
-ordering. The Health tab renders both **TOP PROCESSES BY CPU** and
-**TOP PROCESSES BY RAM** side-by-side under the tile grid.
+The poller emits two `top` calls per round: the default CPU-sorted
+batch (`top -b -n1 | head -n 40`) plus a RAM-sorted batch
+(`top -b -n1 -o %MEM | head -n 40`) — the latter is required because
+`top` ships rows pre-sorted by CPU and a local re-sort would silently
+drop high-RAM/low-CPU daemons (a 6 GB Postgres at 0 % CPU). Busybox
+top doesn't support `-o`, so on first failure the poller latches
+`_topByMemSupported = false` and falls back to local-sort of the
+wider 30-row CPU window. The Health tab renders both
+**TOP PROCESSES BY CPU** and **TOP PROCESSES BY RAM** side-by-side
+under the tile grid.
 
 ### Rolling window
 
@@ -77,10 +83,14 @@ escape; verified by `test/observability_health_tab_test.dart`.
 
 ### Anomaly callout
 
-When at least one metric crosses the z-score threshold, the Health
-tab renders a red **ANOMALY DETECTED** banner above the tiles listing
-each affected metric (e.g. `CPU, Network eth0 crossed the z-score
-threshold`). Individual tiles also continue to show their per-tile
+When at least one metric crosses the threshold (z-score *or*
+flat-baseline-min-delta), the Health tab renders a red
+**ANOMALY DETECTED** banner above the tiles listing each affected
+metric (e.g. `CPU, Network eth0 crossed the threshold`). The banner
+also exposes its own **EXPLAIN** action that runs the explainer
+against the most-impactful active anomaly (CPU > Memory > Load >
+Disk > Network) without forcing the operator to scroll back to the
+specific tile. Individual tiles also continue to show their per-tile
 ANOMALY badge and red border.
 
 ### Feature detection
@@ -101,24 +111,40 @@ appear for tools that were actually detected — Alpine boxes without
 
 ### Anomaly detection
 
-`RollingBuffer` keeps a fixed-window ring (default 720 samples = 60 min
-at 5 s) per metric. Each `push` returns a z-score over the prior N-1
-samples. A tile is marked anomalous when:
+`RollingBuffer` keeps a wall-clock-window ring (default 720 samples =
+60 min at 5 s — see *Rolling window* below) per metric. Each `push`
+returns a z-score over the prior N-1 samples. A tile is marked
+anomalous when:
 
 - the buffer has at least `minSamplesForAnomaly` samples, AND
 - `|z| ≥ zScoreThreshold` (default 3.0)
 
 Once flagged, the buffer applies **hysteresis** — it stays anomalous
 until `|z| < zScoreThreshold − hysteresis` (default 2.0). This
-suppresses banner flapping on noisy series. Disk usage anomalies are
-suppressed entirely because a logrotate cycle would otherwise trip them.
+suppresses banner flapping on noisy series.
+
+**Idle-to-spike (flat-baseline) branch.** When the prior history has
+zero variance (a perfectly idle host), z-score is undefined — but
+that's exactly the case where the operator wants the spike surfaced
+(idle CPU jumps from 0 → 80 %). The buffer falls back to a
+configurable `flatBaselineMinDelta`: any deviation `≥` that floor
+flags an anomaly with the same hysteresis behaviour. The Health tab
+configures it per metric: 1.0 % for CPU/memory/disk, 0.5 for load,
+1024 B/s for network so trivial ARP/mDNS chatter doesn't trip it.
+
+Disk anomalies are now enabled (the flat-baseline branch surfaces
+runaway-log fills cleanly) and disk tiles expose the EXPLAIN button.
 
 ### Explain this spike
 
 Tapping **EXPLAIN** on a tile builds a single prompt containing:
 
 1. The metric name and unit.
-2. The last ~10 minutes of `(timestamp, value)` samples from the buffer.
+2. The last ~10 minutes of `(timestamp, value)` samples from the
+   buffer — the window is **time-based**: the count is computed from
+   `windowDuration ÷ pollInterval` so the prompt always carries the
+   same wall-clock slice no matter whether the user is polling at 2 s
+   or 30 s. The Health tab passes the live `_intervalSeconds` in.
 3. The most recent `journalctl -n 200` (or `tail /var/log/syslog`)
    tail, fetched in the same call.
 

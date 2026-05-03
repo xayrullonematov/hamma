@@ -30,6 +30,7 @@ class MetricPoller {
   final DateTime Function() _clock;
 
   HostCapabilities? _caps;
+  bool _topByMemSupported = true;
   Map<String, (int rx, int tx)> _previousNet = const {};
   DateTime? _previousNetAt;
 
@@ -140,9 +141,28 @@ class MetricPoller {
             MetricParsers.parseTop(sections['CPU']!, top: 30);
         cpu = cpuSample;
         topByCpu = procs.length > 5 ? procs.sublist(0, 5) : procs;
-        // Order the wider sample window by mem descending so the
-        // by-memory tile actually shows different processes than
-        // the by-CPU tile.
+      }
+      // RAM ordering: prefer a true `top -o %MEM` round (procps),
+      // since `top` ships rows pre-sorted by CPU and just re-sorting
+      // those locally misses high-RAM / low-CPU processes (a daemon
+      // pinning 6 GB at 0% CPU). When that flag isn't supported (eg
+      // busybox top on Alpine), fall back to local-sort of the wider
+      // CPU window we already captured.
+      if (caps.hasTop && sections.containsKey('MEMTOP')) {
+        final body = sections['MEMTOP']!.trim();
+        if (body.isEmpty || body.toLowerCase().contains('unknown option')) {
+          _topByMemSupported = false;
+        } else {
+          final (_, memProcs) =
+              MetricParsers.parseTop(body, top: 5);
+          if (memProcs.isNotEmpty) {
+            topByMem = memProcs;
+          }
+        }
+      }
+      if (topByMem.isEmpty && caps.hasTop && sections.containsKey('CPU')) {
+        final (_, procs) =
+            MetricParsers.parseTop(sections['CPU']!, top: 30);
         topByMem = [...procs]
           ..sort((a, b) => b.memPercent.compareTo(a.memPercent));
         if (topByMem.length > 5) topByMem = topByMem.sublist(0, 5);
@@ -216,6 +236,13 @@ command -v df >/dev/null 2>&1 && echo DF
     // pre-sorted by CPU, so without the wider grab the by-RAM tile
     // would just re-shuffle the top CPU consumers.
     if (caps.hasTop) section('CPU', 'top -b -n1 | head -n 40');
+    // Procps top supports `-o %MEM` for a true RAM-sorted snapshot;
+    // busybox top does not. We always attempt it once — on the first
+    // failure the poller latches `_topByMemSupported=false` and stops
+    // including it in the batch.
+    if (caps.hasTop && _topByMemSupported) {
+      section('MEMTOP', 'top -b -n1 -o %MEM 2>/dev/null | head -n 40');
+    }
     if (caps.hasFree) section('MEM', 'free -k');
     if (caps.hasDf) section('DISK', 'df -P');
     if (caps.hasProcNetDev) section('NET', 'cat /proc/net/dev');

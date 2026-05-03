@@ -18,11 +18,22 @@ class RollingBuffer {
     this.minSamplesForAnomaly = 12,
     this.zScoreThreshold = 3.0,
     this.hysteresis = 1.0,
+    this.flatBaselineMinDelta = 1.0,
   })  : _capacity = capacity,
         assert(capacity > 1),
         assert(minSamplesForAnomaly >= 3),
         assert(zScoreThreshold > 0),
-        assert(hysteresis >= 0 && hysteresis < zScoreThreshold);
+        assert(hysteresis >= 0 && hysteresis < zScoreThreshold),
+        assert(flatBaselineMinDelta >= 0);
+
+  /// When the prior history has zero variance (a perfectly idle host),
+  /// z-score is undefined — but a sudden jump from 0 → 80 is exactly
+  /// the kind of "spike" the operator wants to know about. We treat
+  /// any deviation `>= flatBaselineMinDelta` from a flat baseline as
+  /// anomalous. Defaults to `1.0`, which is a sensible floor for
+  /// percent-scaled metrics; the Health tab passes 100× this for
+  /// bytes-per-second buffers via [setFlatBaselineMinDelta].
+  final double flatBaselineMinDelta;
 
   int _capacity;
   int get capacity => _capacity;
@@ -72,11 +83,24 @@ class RollingBuffer {
         priors.length;
     final stddev = math.sqrt(variance);
     if (stddev == 0) {
-      // Constant history → only flag if the new value is non-equal AND
-      // we have a meaningful baseline. We deliberately do not flag here
-      // to avoid trivial tile flutter on idle hosts.
-      _anomalous = false;
-      return (anomalous: false, score: 0, mean: mean, stddev: 0);
+      // Constant history → z-score is undefined. An idle baseline
+      // jumping to a meaningfully different value is exactly the
+      // signal the operator wants surfaced, so we flag when the
+      // delta exceeds [flatBaselineMinDelta]. Same hysteresis logic
+      // as the variance branch — the spike has to "settle back" near
+      // the baseline before the flag clears.
+      final delta = (v - mean).abs();
+      if (_anomalous) {
+        if (delta < flatBaselineMinDelta) _anomalous = false;
+      } else {
+        if (delta >= flatBaselineMinDelta) _anomalous = true;
+      }
+      return (
+        anomalous: _anomalous,
+        score: delta == 0 ? 0 : (v > mean ? double.infinity : -double.infinity),
+        mean: mean,
+        stddev: 0,
+      );
     }
 
     final z = (v - mean) / stddev;

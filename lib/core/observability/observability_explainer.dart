@@ -55,6 +55,8 @@ class ObservabilityExplainer {
     required String metricName,
     required RollingBuffer buffer,
     required String unit,
+    Duration pollInterval = const Duration(seconds: 5),
+    Duration windowDuration = const Duration(minutes: 10),
     HostCapabilities? capabilities,
   }) async {
     if (provider != AiProvider.local) {
@@ -63,9 +65,16 @@ class ObservabilityExplainer {
       );
     }
 
-    // Last 10 minutes of samples (poll interval is variable; window
-    // size is bounded by the buffer capacity).
-    final window = buffer.tail(120);
+    // Time-based window: ~last [windowDuration] worth of samples,
+    // converted to a count via the actual current poll cadence so
+    // the prompt always carries a consistent wall-clock slice
+    // regardless of whether the user is polling every 2 s or 30 s.
+    final intervalSecs = pollInterval.inSeconds <= 0
+        ? 5
+        : pollInterval.inSeconds;
+    final windowCount =
+        (windowDuration.inSeconds ~/ intervalSecs).clamp(20, buffer.capacity);
+    final window = buffer.tail(windowCount);
     final logTail = await _fetchLogTail();
 
     final prompt = _buildPrompt(

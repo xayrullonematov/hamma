@@ -65,12 +65,17 @@ class _HealthTabState extends State<HealthTab> {
   String _shQuote(String value) => HealthTab.shellQuoteForTest(value);
 
   // One buffer per surfaced metric. Disk uses a map keyed by mount.
+  // Network bytes/sec needs a 1 KB/s flat-baseline floor so trivial
+  // ARP / mDNS chatter doesn't trip the idle-to-spike branch.
   final RollingBuffer _cpuBuf = RollingBuffer();
   final RollingBuffer _memBuf = RollingBuffer();
-  final RollingBuffer _loadBuf = RollingBuffer();
+  final RollingBuffer _loadBuf =
+      RollingBuffer(flatBaselineMinDelta: 0.5);
   final Map<String, RollingBuffer> _diskBufs = {};
   final Map<String, RollingBuffer> _netRxBufs = {};
   final Map<String, RollingBuffer> _netTxBufs = {};
+  RollingBuffer _newDiskBuf() => RollingBuffer(flatBaselineMinDelta: 1.0);
+  RollingBuffer _newNetBuf() => RollingBuffer(flatBaselineMinDelta: 1024);
 
   // Anomaly state per metric key, refreshed on every push.
   final Map<String, bool> _anomaly = {};
@@ -133,17 +138,19 @@ class _HealthTabState extends State<HealthTab> {
       final liveIfs = <String>{};
       for (final d in snap.disks) {
         liveDisks.add(d.mountPoint);
-        final buf = _diskBufs.putIfAbsent(d.mountPoint, RollingBuffer.new);
-        // Disk fills slowly; z-score baseline rarely fires meaningfully
-        // and would be noisy on logrotate cycles. We track the trend
-        // for the sparkline but suppress the anomaly badge on disk.
-        buf.push(snap.timestamp, d.usagePercent);
-        _anomaly['disk:${d.mountPoint}'] = false;
+        final buf = _diskBufs.putIfAbsent(d.mountPoint, _newDiskBuf);
+        // Disk fills slowly; the z-score branch rarely fires on its
+        // own and the flat-baseline branch surfaces the realistic
+        // case (idle box at 32%, then a runaway log fills the FS).
+        // 1 % min-delta on the flat-baseline branch keeps logrotate
+        // saw-tooth noise out of the banner.
+        _anomaly['disk:${d.mountPoint}'] =
+            buf.push(snap.timestamp, d.usagePercent).anomalous;
       }
       for (final n in snap.network) {
         liveIfs.add(n.name);
-        final rx = _netRxBufs.putIfAbsent(n.name, RollingBuffer.new);
-        final tx = _netTxBufs.putIfAbsent(n.name, RollingBuffer.new);
+        final rx = _netRxBufs.putIfAbsent(n.name, _newNetBuf);
+        final tx = _netTxBufs.putIfAbsent(n.name, _newNetBuf);
         final rxAnom = rx.push(snap.timestamp, n.rxBytesPerSecond).anomalous;
         final txAnom = tx.push(snap.timestamp, n.txBytesPerSecond).anomalous;
         _anomaly['net:${n.name}'] = rxAnom || txAnom;
@@ -191,6 +198,7 @@ class _HealthTabState extends State<HealthTab> {
         metricName: displayName,
         buffer: buffer,
         unit: unit,
+        pollInterval: Duration(seconds: _intervalSeconds),
         capabilities: _caps,
       );
       if (!mounted) return;
@@ -321,9 +329,28 @@ class _HealthTabState extends State<HealthTab> {
                 color: AppColors.danger,
                 title: 'ANOMALY DETECTED',
                 body:
-                    '${activeAnomalies.join(", ")} crossed the z-score '
-                    'threshold. Tap EXPLAIN on the affected tile to ask the '
-                    'local AI for a likely cause.',
+                    '${activeAnomalies.join(", ")} crossed the threshold. '
+                    'Tap EXPLAIN to ask the local AI for a likely cause.',
+                action: isLocal && _activeAnomalies().isNotEmpty
+                    ? _BannerAction(
+                        label: _explainingNow.contains(
+                                _activeAnomalies().first.key)
+                            ? 'EXPLAINING…'
+                            : 'EXPLAIN',
+                        onTap: _explainingNow
+                                .contains(_activeAnomalies().first.key)
+                            ? null
+                            : () {
+                                final top = _activeAnomalies().first;
+                                _explain(
+                                  key: top.key,
+                                  displayName: top.displayName,
+                                  buffer: top.buf,
+                                  unit: top.unit,
+                                );
+                              },
+                      )
+                    : null,
               ),
             ),
           ),
@@ -379,14 +406,70 @@ class _HealthTabState extends State<HealthTab> {
     );
   }
 
-  List<String> _activeAnomalyLabels() {
-    final out = <String>[];
-    if (_anomaly['cpu'] == true) out.add('CPU');
-    if (_anomaly['mem'] == true) out.add('Memory');
-    if (_anomaly['load'] == true) out.add('Load');
+  List<String> _activeAnomalyLabels() => _activeAnomalies()
+      .map((e) => e.label)
+      .toList(growable: false);
+
+  /// Active anomalies in priority order so the banner-level EXPLAIN
+  /// button can target the most-impactful one without ambiguity.
+  List<({String key, String label, String displayName, RollingBuffer buf,
+      String unit})> _activeAnomalies() {
+    final out =
+        <({String key, String label, String displayName,
+            RollingBuffer buf, String unit})>[];
+    if (_anomaly['cpu'] == true) {
+      out.add((
+        key: 'cpu',
+        label: 'CPU',
+        displayName: 'CPU usage',
+        buf: _cpuBuf,
+        unit: '%',
+      ));
+    }
+    if (_anomaly['mem'] == true) {
+      out.add((
+        key: 'mem',
+        label: 'Memory',
+        displayName: 'Memory usage',
+        buf: _memBuf,
+        unit: '%',
+      ));
+    }
+    if (_anomaly['load'] == true) {
+      out.add((
+        key: 'load',
+        label: 'Load',
+        displayName: '1-minute load average',
+        buf: _loadBuf,
+        unit: 'load',
+      ));
+    }
     for (final entry in _anomaly.entries) {
-      if (entry.value && entry.key.startsWith('net:')) {
-        out.add('Network ${entry.key.substring(4)}');
+      if (!entry.value) continue;
+      if (entry.key.startsWith('disk:')) {
+        final mp = entry.key.substring('disk:'.length);
+        final b = _diskBufs[mp];
+        if (b != null) {
+          out.add((
+            key: entry.key,
+            label: 'Disk $mp',
+            displayName: 'Disk usage on $mp',
+            buf: b,
+            unit: '%',
+          ));
+        }
+      } else if (entry.key.startsWith('net:')) {
+        final iface = entry.key.substring('net:'.length);
+        final b = _netRxBufs[iface];
+        if (b != null) {
+          out.add((
+            key: entry.key,
+            label: 'Network $iface',
+            displayName: 'Network RX on $iface',
+            buf: b,
+            unit: 'bytes/s',
+          ));
+        }
       }
     }
     return out;
@@ -664,14 +747,23 @@ class _HealthTabState extends State<HealthTab> {
           subtitle:
               '${_bytes(disk.usedBytes)} / ${_bytes(disk.totalBytes)}',
           history: buf?.samples.map((s) => s.v).toList() ?? const [],
-          anomalous: false,
+          anomalous: _anomaly[key] == true,
           yMax: 100,
+          explainBusy: _explainingNow.contains(key),
           onExpand: (buf != null && buf.samples.length >= 2)
               ? () => _expand(
                     title: 'Disk ${disk.mountPoint}',
                     unit: '%',
                     buffer: buf,
                     yMax: 100,
+                  )
+              : null,
+          onExplain: (isLocal && buf != null)
+              ? () => _explain(
+                    key: key,
+                    displayName: 'Disk usage on ${disk.mountPoint}',
+                    buffer: buf,
+                    unit: '%',
                   )
               : null,
           onWatch: () => _watch(
@@ -830,18 +922,26 @@ class _HealthTabState extends State<HealthTab> {
 
 enum _ProcessSortKey { cpu, mem }
 
+class _BannerAction {
+  const _BannerAction({required this.label, required this.onTap});
+  final String label;
+  final VoidCallback? onTap;
+}
+
 class _Banner extends StatelessWidget {
   const _Banner({
     required this.icon,
     required this.color,
     required this.title,
     required this.body,
+    this.action,
   });
 
   final IconData icon;
   final Color color;
   final String title;
   final String body;
+  final _BannerAction? action;
 
   @override
   Widget build(BuildContext context) {
@@ -880,6 +980,39 @@ class _Banner extends StatelessWidget {
                     fontSize: 12,
                   ),
                 ),
+                if (action != null) ...[
+                  const SizedBox(height: 10),
+                  InkWell(
+                    onTap: action!.onTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: action!.onTap == null
+                              ? AppColors.textFaint
+                              : color,
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        action!.label,
+                        style: TextStyle(
+                          color: action!.onTap == null
+                              ? AppColors.textFaint
+                              : color,
+                          fontSize: 10,
+                          letterSpacing: 1.4,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: AppColors.monoFamily,
+                          fontFamilyFallback: AppColors.monoFallback,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
