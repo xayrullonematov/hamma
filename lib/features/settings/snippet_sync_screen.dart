@@ -72,6 +72,17 @@ class _SnippetSyncScreenState extends State<SnippetSyncScreen> {
     // pull() are runtime-gated on `isEnabled()`, so flipping the
     // flag here is sufficient — no need to start/stop a second
     // service from the UI.
+    if (value) {
+      // Kick off an initial pull-merge-push so users with existing
+      // snippets start syncing without having to edit one or wait
+      // for the next launch.
+      setState(() => _syncing = true);
+      try {
+        await _service.pullAndMerge();
+      } finally {
+        if (mounted) setState(() => _syncing = false);
+      }
+    }
     await _load();
   }
 
