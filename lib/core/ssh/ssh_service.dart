@@ -537,18 +537,30 @@ class SshService {
       ),
     );
 
-    try {
-      final output = await transport.run(
-        commandToRun,
-        environment: envForChannel,
-      );
-      return utf8.decode(output);
-    } catch (error, stackTrace) {
-      if (_looksLikeDisconnect(error)) {
-        _handleDisconnect(reason: 'Command failed: $error');
+    int retries = 0;
+    const maxRetries = 2;
+
+    while (true) {
+      try {
+        final output = await transport.run(
+          commandToRun,
+          environment: envForChannel,
+        );
+        return utf8.decode(output);
+      } catch (error, stackTrace) {
+        if (_isTransientChannelError(error) && retries < maxRetries) {
+          retries++;
+          final delay = retries == 1 ? 200 : 400;
+          await Future<void>.delayed(Duration(milliseconds: delay));
+          continue;
+        }
+
+        if (_looksLikeDisconnect(error)) {
+          _handleDisconnect(reason: 'Command failed: $error');
+        }
+        Sentry.captureException(error, stackTrace: stackTrace);
+        rethrow;
       }
-      Sentry.captureException(error, stackTrace: stackTrace);
-      rethrow;
     }
   }
 
@@ -558,14 +570,26 @@ class SshService {
       throw StateError('SSH client is not connected.');
     }
 
-    try {
-      return await transport.execute(command);
-    } catch (error, stackTrace) {
-      if (_looksLikeDisconnect(error)) {
-        _handleDisconnect(reason: 'Stream command failed: $error');
+    int retries = 0;
+    const maxRetries = 2;
+
+    while (true) {
+      try {
+        return await transport.execute(command);
+      } catch (error, stackTrace) {
+        if (_isTransientChannelError(error) && retries < maxRetries) {
+          retries++;
+          final delay = retries == 1 ? 200 : 400;
+          await Future<void>.delayed(Duration(milliseconds: delay));
+          continue;
+        }
+
+        if (_looksLikeDisconnect(error)) {
+          _handleDisconnect(reason: 'Stream command failed: $error');
+        }
+        Sentry.captureException(error, stackTrace: stackTrace);
+        rethrow;
       }
-      Sentry.captureException(error, stackTrace: stackTrace);
-      rethrow;
     }
   }
 
@@ -818,6 +842,13 @@ class SshService {
         .join(':');
   }
 
+  bool _isTransientChannelError(dynamic error) {
+    final message = error.toString().toLowerCase();
+    // Catch SSHChannelOpenError or variations of "open failed" which often
+    // indicate transient channel exhaustion or server-side resource limits.
+    return error is SSHChannelOpenError || message.contains('open failed');
+  }
+
   bool _looksLikeDisconnect(Object error) {
     final message = error.toString().toLowerCase();
     const patterns = [
@@ -836,6 +867,8 @@ class SshService {
       // SSH channel / session errors
       'channel is not open',
       'failed host handshake',
+      'sshchannelopenerror',
+      'open failed',
     ];
 
     return patterns.any(message.contains);

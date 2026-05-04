@@ -29,6 +29,8 @@ class ErrorReporter {
   ErrorReporter._();
 
   static bool _installed = false;
+  static FlutterExceptionHandler? _originalFlutterErrorHandler;
+  static ErrorCallback? _originalDispatcherHandler;
 
   /// The most recent fatal error captured by [install], or `null` if no
   /// fatal error has occurred. The message has been passed through
@@ -45,8 +47,8 @@ class ErrorReporter {
 
     // Preserve and chain to whatever was already installed so we play
     // nice with Sentry's own integrations.
-    final previousFlutterErrorHandler = FlutterError.onError;
-    final previousDispatcherHandler = PlatformDispatcher.instance.onError;
+    _originalFlutterErrorHandler = FlutterError.onError;
+    _originalDispatcherHandler = PlatformDispatcher.instance.onError;
 
     FlutterError.onError = (FlutterErrorDetails details) {
       _capture(details.exception, details.stack, hint: 'Flutter framework');
@@ -56,7 +58,7 @@ class ErrorReporter {
       }
       // Chain to the previous handler last so Sentry-style integrations
       // still receive every event.
-      previousFlutterErrorHandler?.call(details);
+      _originalFlutterErrorHandler?.call(details);
     };
 
     PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
@@ -65,7 +67,7 @@ class ErrorReporter {
       // was handled. We defer the final true/false to the previous
       // handler if any; otherwise return true to suppress the default
       // crash-the-isolate behavior in release.
-      final handledByPrevious = previousDispatcherHandler?.call(error, stack);
+      final handledByPrevious = _originalDispatcherHandler?.call(error, stack);
       return handledByPrevious ?? true;
     };
 
@@ -99,7 +101,13 @@ class ErrorReporter {
   /// Resets installation state. Test-only.
   @visibleForTesting
   static void debugReset() {
+    if (_installed) {
+      FlutterError.onError = _originalFlutterErrorHandler;
+      PlatformDispatcher.instance.onError = _originalDispatcherHandler;
+    }
     _installed = false;
+    _originalFlutterErrorHandler = null;
+    _originalDispatcherHandler = null;
     lastFatal = null;
   }
 

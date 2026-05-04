@@ -34,6 +34,11 @@ void main() {
       var previousCalled = false;
       FlutterError.onError = (_) => previousCalled = true;
 
+      // Suppress console noise from dumpErrorToConsole in debug mode.
+      final previousPresent = FlutterError.presentError;
+      FlutterError.presentError = (_) {};
+      addTearDown(() => FlutterError.presentError = previousPresent);
+
       ErrorReporter.install();
 
       FlutterError.onError!(FlutterErrorDetails(

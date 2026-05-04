@@ -41,6 +41,21 @@ class _DockerManagerScreenState extends State<DockerManagerScreen> {
   void initState() {
     super.initState();
     _fetchContainers();
+    widget.sshService.statusNotifier.addListener(_onConnectionStatusChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.sshService.statusNotifier.removeListener(_onConnectionStatusChanged);
+    super.dispose();
+  }
+
+  void _onConnectionStatusChanged() {
+    final status = widget.sshService.statusNotifier.value;
+    // Auto-refresh when transitioning from a disconnected/failed state to connected.
+    if (status.isConnected && (_error != null || _dockerMissing)) {
+      _fetchContainers();
+    }
   }
 
   Future<void> _fetchContainers() async {
