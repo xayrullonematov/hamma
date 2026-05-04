@@ -7,7 +7,7 @@ import 'voice_recognizer.dart';
 /// Production [VoiceBackend] backed by the `speech_to_text` plugin.
 ///
 /// On-device guarantees per platform:
-///   * iOS: passes `SpeechListenOptions(onDevice: true)` which sets
+///   * iOS: passes `onDevice: true` to `listen()` which sets
 ///     `SFSpeechRecognizer.requiresOnDeviceRecognition`. iOS hard-fails
 ///     when the locale isn't installed on-device.
 ///   * Android: passes `EXTRA_PREFER_OFFLINE`. This is the OS-level
@@ -79,11 +79,9 @@ class SpeechToTextBackend implements VoiceBackend {
     _activeOnError = onError;
     try {
       await _stt.listen(
-        listenOptions: SpeechListenOptions(
-          onDevice: true,
-          partialResults: true,
-          cancelOnError: true,
-        ),
+        onDevice: true,
+        partialResults: true,
+        cancelOnError: true,
         onResult: (r) => onResult(r.recognizedWords, r.finalResult),
       );
     } catch (e) {
