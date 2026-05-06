@@ -342,7 +342,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
                     });
                   },
                 )
-                : const Text('Saved Servers'),
+                : const Text('Dashboard'),
         actions: [
           if (_isSearching)
             IconButton(
@@ -424,43 +424,39 @@ class _ServerListScreenState extends State<ServerListScreen> {
                     slivers: [
                       SliverToBoxAdapter(
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
                           child: Row(
                             children: [
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _isSearching
-                                          ? 'Search Results'
-                                          : 'Server Dashboard',
-                                      style: theme.textTheme.headlineSmall,
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      _isSearching
-                                          ? 'Showing results for "$_searchQuery"'
-                                          : 'Direct SSH access to your saved infrastructure.',
-                                      style: theme.textTheme.bodySmall,
-                                    ),
-                                  ],
+                                child: Text(
+                                  _isSearching
+                                      ? 'SEARCH RESULTS'
+                                      : 'INFRASTRUCTURE',
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    letterSpacing: 1.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textMuted,
+                                  ),
                                 ),
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
+                                  horizontal: 10,
+                                  vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
                                   color: AppColors.panel,
+                                  border: Border.all(color: AppColors.border),
                                   borderRadius: BorderRadius.zero,
                                 ),
                                 child: Text(
-                                  '${filteredServers.length} ${_isSearching ? 'found' : 'saved'}',
+                                  '${filteredServers.length} TOTAL',
                                   style: const TextStyle(
                                     color: AppColors.textPrimary,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 10,
+                                    letterSpacing: 1.0,
+                                    fontFamily: AppColors.monoFamily,
                                   ),
                                 ),
                               ),

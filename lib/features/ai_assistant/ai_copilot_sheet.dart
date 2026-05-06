@@ -677,7 +677,13 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
   Future<void> _handleQuickAction(String actionPrompt) async {
     if (_isGenerating || _isRunningStep || !_hasActiveApiKey) return;
-    
+
+    if (_mode == CopilotMode.commandHelper) {
+      _promptController.text = actionPrompt;
+      await _generateCommands();
+      return;
+    }
+
     _appendChatMessage(role: 'user', content: actionPrompt);
     
     setState(() {
@@ -777,8 +783,53 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       return;
     }
 
-    await _generateAnalyzedCommand(prompt);
+    setState(() {
+      _isGenerating = true;
+      _status = 'Generating command plan...';
+    });
+
+    _appendChatMessage(role: 'user', content: prompt);
     _promptController.clear();
+
+    try {
+      final steps = await _aiCommandService.generateCommandPlan(prompt);
+
+      if (!mounted) return;
+
+      _disposePlanSteps();
+      setState(() {
+        _planSteps =
+            steps
+                .map(
+                  (s) => _CopilotPlanStep(
+                    title: s.title,
+                    controller: TextEditingController(text: s.command),
+                    state: CopilotPlanStepState.pending,
+                  ),
+                )
+                .toList();
+        _status = 'Plan ready';
+      });
+
+      _appendChatMessage(
+        role: 'assistant',
+        content: 'I have generated a ${steps.length}-step plan for your request.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = _friendlyErrorMessage(
+          error: error,
+          fallbackPrefix: 'Failed to generate plan',
+        );
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGenerating = false;
+        });
+      }
+    }
   }
 
   Future<void> _generateChatResponse() async {
@@ -1393,9 +1444,9 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
   String _promptHintText() {
     if (_mode == CopilotMode.commandHelper) {
-      return 'Describe the task, issue, or command plan you need';
+      return 'Describe a task or issue...';
     }
-    return 'Ask about logs, Linux concepts, or debugging strategy';
+    return 'Ask a question...';
   }
 
   BoxDecoration _surfaceDecoration() {
@@ -1427,15 +1478,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                       style: theme.textTheme.titleLarge?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _mode == CopilotMode.commandHelper
-                          ? 'Command planning and safe execution'
-                          : 'Explain logs, errors, and Linux concepts',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: _mutedColor,
                       ),
                     ),
                   ],
@@ -1650,46 +1692,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     );
   }
 
-  Widget _buildStatusBanner(ThemeData theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: _surfaceColor,
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 9,
-            height: 9,
-            margin: const EdgeInsets.only(top: 6),
-            decoration: const BoxDecoration(
-              color: _primaryColor,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              _status,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: _mutedColor,
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCommandHelperView(ThemeData theme) {
     return ListView(
       padding: const EdgeInsets.only(bottom: 8),
       children: [
-        _buildStatusBanner(theme),
         if (_isLoadingActiveApiKey || !_hasActiveApiKey) ...[
           const SizedBox(height: 12),
           _buildApiKeyBanner(theme),
@@ -1698,10 +1704,9 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         if (_isGenerating && _planSteps.isEmpty)
           const LoadingBubble(label: 'Building a step-by-step plan...')
         else if (_planSteps.isEmpty)
-          EmptyMessageCard(
-            title: 'No plan yet',
-            message:
-                'Describe the server task and the copilot will turn it into a safe step sequence.',
+          const EmptyMessageCard(
+            title: 'No Active Plan',
+            message: 'Describe a task to generate a step-by-step execution plan.',
           ),
         ...List.generate(_planSteps.length, (index) {
           final step = _planSteps[index];
@@ -1775,20 +1780,11 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     return ListView(
       padding: const EdgeInsets.only(bottom: 8),
       children: [
-        _buildStatusBanner(theme),
         if (_isLoadingActiveApiKey || !_hasActiveApiKey) ...[
           const SizedBox(height: 12),
           _buildApiKeyBanner(theme),
         ],
         const SizedBox(height: 16),
-        Text(
-          'Conversation with ${_activeProvider.label}',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: _mutedColor,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 10),
         if (_isHistoryLoading)
           const LoadingBubble(label: 'Loading previous chat...')
         else if (_chatMessages.isEmpty && !_isGenerating)
@@ -1798,7 +1794,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
               constraints: const BoxConstraints(maxWidth: 560),
               child: ChatBubble(
                 child: SelectableText(
-                  'Ask about logs, Linux concepts, or debugging strategy.',
+                  'Ask about logs, errors, or Linux concepts.',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: _mutedColor,
                     height: 1.5,

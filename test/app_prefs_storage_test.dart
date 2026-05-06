@@ -210,4 +210,35 @@ void main() {
       expect(result, isEmpty);
     });
   });
+
+  // ── Terminal Customization ───────────────────────────────────────────────────
+
+  group('terminalCustomization', () {
+    test('font size defaults to 13.0', () async {
+      expect(await prefs.getTerminalFontSize(), 13.0);
+    });
+
+    test('setTerminalFontSize persists', () async {
+      await prefs.setTerminalFontSize(16.5);
+      expect(await prefs.getTerminalFontSize(), 16.5);
+    });
+
+    test('font family defaults to "JetBrains Mono"', () async {
+      expect(await prefs.getTerminalFontFamily(), 'JetBrains Mono');
+    });
+
+    test('setTerminalFontFamily persists', () async {
+      await prefs.setTerminalFontFamily('Inter');
+      expect(await prefs.getTerminalFontFamily(), 'Inter');
+    });
+
+    test('theme defaults to "brutalist"', () async {
+      expect(await prefs.getTerminalTheme(), 'brutalist');
+    });
+
+    test('setTerminalTheme persists', () async {
+      await prefs.setTerminalTheme('solarized');
+      expect(await prefs.getTerminalTheme(), 'solarized');
+    });
+  });
 }

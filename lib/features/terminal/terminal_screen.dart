@@ -13,6 +13,7 @@ import '../../core/ai/ai_provider.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/ssh/connection_status.dart';
 import '../../core/storage/api_key_storage.dart';
+import '../../core/storage/app_prefs_storage.dart';
 import '../../core/vault/vault_change_bus.dart';
 import '../../core/vault/vault_injector.dart';
 import '../../core/vault/vault_redactor.dart';
@@ -22,6 +23,7 @@ import '../../core/responsive/breakpoints.dart';
 import '../ai_assistant/ai_copilot_sheet.dart';
 import '../ai_assistant/copilot_dock.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/terminal_themes.dart';
 
 class TerminalScreen extends StatefulWidget {
   const TerminalScreen({
@@ -30,6 +32,7 @@ class TerminalScreen extends StatefulWidget {
     required this.serverName,
     required this.aiProvider,
     required this.apiKeyStorage,
+    this.appPrefsStorage = const AppPrefsStorage(),
     required this.openRouterModel,
     this.localEndpoint,
     this.localModel,
@@ -41,6 +44,7 @@ class TerminalScreen extends StatefulWidget {
   final String serverName;
   final AiProvider aiProvider;
   final ApiKeyStorage apiKeyStorage;
+  final AppPrefsStorage appPrefsStorage;
   final String? openRouterModel;
   final String? localEndpoint;
   final String? localModel;
@@ -71,6 +75,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
   String _recentTerminalOutput = '';
   bool _isFullScreen = false;
 
+  // Terminal Customization State
+  double _fontSize = 13.0;
+  String _fontFamily = 'JetBrains Mono';
+  String _themeName = 'brutalist';
+
   late final VaultStorage _vaultStorage;
   // Snapshot of secrets visible to this server (global + scoped).
   // Refreshed whenever VaultChangeBus fires.
@@ -95,6 +104,8 @@ class _TerminalScreenState extends State<TerminalScreen> {
     _terminal.onOutput = _handleTerminalOutput;
     _terminal.onResize = _handleTerminalResize;
 
+    _loadTerminalPreferences();
+
     widget.sshService.statusNotifier.addListener(_handleStatusChange);
 
     _vaultStorage = widget.vaultStorage ?? VaultStorage();
@@ -115,6 +126,18 @@ class _TerminalScreenState extends State<TerminalScreen> {
           if (mounted) _terminalFocusNode.requestFocus();
         });
       }
+    });
+  }
+
+  Future<void> _loadTerminalPreferences() async {
+    final size = await widget.appPrefsStorage.getTerminalFontSize();
+    final family = await widget.appPrefsStorage.getTerminalFontFamily();
+    final theme = await widget.appPrefsStorage.getTerminalTheme();
+    if (!mounted) return;
+    setState(() {
+      _fontSize = size;
+      _fontFamily = family;
+      _themeName = theme;
     });
   }
 
@@ -337,12 +360,14 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final terminalTheme = AppTerminalThemes.get(_themeName);
+
     return Scaffold(
-      backgroundColor: _backgroundColor,
+      backgroundColor: terminalTheme.background,
       appBar: AppBar(
-        backgroundColor: _backgroundColor,
+        backgroundColor: Colors.transparent,
         automaticallyImplyLeading: false,
-        title: Text('Terminal: ${widget.serverName}'),
+        title: null,
         actions: [
           if (_isDesktop)
             IconButton(
@@ -355,19 +380,19 @@ class _TerminalScreenState extends State<TerminalScreen> {
             icon: const Icon(Icons.smart_toy_outlined),
             tooltip: 'AI Copilot',
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
-          ValueListenableBuilder<ConnectionStatus>(
-            valueListenable: widget.sshService.statusNotifier,
-            builder: (context, status, _) => _buildStatusHeader(status),
-          ),
           Expanded(
             child: GestureDetector(
               onTap: () => _terminalFocusNode.requestFocus(),
               child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
+                margin: EdgeInsets.symmetric(
+                  horizontal: _isDesktop ? 16 : 8,
+                  vertical: _isDesktop ? 0 : 8,
+                ),
                 decoration: const BoxDecoration(
                   color: Colors.black,
                 ),
@@ -377,10 +402,11 @@ class _TerminalScreenState extends State<TerminalScreen> {
                     _terminal,
                     focusNode: _terminalFocusNode,
                     autofocus: true,
-                    // On desktop, use hardware keyboard events directly.
-                    // The default IME/CustomTextEdit path is unreliable on
-                    // Linux (and Windows) and causes keyboard input to be
-                    // silently dropped.
+                    theme: terminalTheme,
+                    textStyle: TerminalStyle(
+                      fontSize: _fontSize,
+                      fontFamily: _fontFamily,
+                    ),
                     hardwareKeyboardOnly: _isDesktop,
                     onTapUp: (details, position) {
                       _terminalFocusNode.requestFocus();
@@ -400,94 +426,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     );
   }
 
-  Widget _buildStatusHeader(ConnectionStatus status) {
-    Color indicatorColor;
-    String label;
-    String? subLabel;
-    bool showLoading = false;
-
-    switch (status.state) {
-      case SshConnectionState.connected:
-        indicatorColor = AppColors.textPrimary;
-        label = 'Connected';
-        subLabel = 'Last sync: ${_formatTime(status.lastSuccessfulConnection)}';
-        break;
-      case SshConnectionState.connecting:
-        indicatorColor = AppColors.textMuted;
-        label = 'Connecting...';
-        showLoading = true;
-        break;
-      case SshConnectionState.reconnecting:
-        indicatorColor = AppColors.textMuted;
-        label = 'Reconnecting (Attempt ${status.reconnectAttempts}/${status.maxReconnectAttempts})...';
-        showLoading = true;
-        break;
-      case SshConnectionState.failed:
-        indicatorColor = AppColors.danger;
-        label = status.exception?.userMessage ?? 'Connection Failed';
-        subLabel = status.exception?.suggestedAction;
-        break;
-      case SshConnectionState.disconnected:
-        indicatorColor = Colors.grey;
-        label = 'Disconnected';
-        break;
-    }
-
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        color: _surfaceColor,
-      ),
-      child: Row(
-        children: [
-          if (showLoading)
-            const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.textMuted),
-            )
-          else
-            CircleAvatar(
-              radius: 4,
-              backgroundColor: indicatorColor,
-            ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-                if (subLabel != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      subLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: _mutedColor, fontSize: 11),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (!status.isConnected && !status.isConnecting)
-            TextButton(
-              onPressed: _handleReconnect,
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                foregroundColor: AppColors.textPrimary,
-              ),
-              child: const Text('Reconnect'),
-            ),
-        ],
-      ),
-    );
-  }
+  // Removed redundant _buildStatusHeader as information is in the sidebar.
 
   Widget _buildToolbar(bool isConnected) {
     if (_isDesktop) return const SizedBox.shrink();

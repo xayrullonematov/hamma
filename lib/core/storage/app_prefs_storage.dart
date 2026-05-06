@@ -20,6 +20,11 @@ class AppPrefsStorage {
   static const _sidebarWidthKey = 'dashboard_sidebar_width';
   static const _copilotDockTipSeenKey = 'copilot_dock_tip_seen';
 
+  // Terminal Customization
+  static const _terminalFontSizeKey = 'terminal_font_size';
+  static const _terminalFontFamilyKey = 'terminal_font_family';
+  static const _terminalThemeKey = 'terminal_theme';
+
   /// Sensible bounds for the dashboard sidebar drag-to-resize handle.
   /// Anything tighter than [sidebarMinWidth] crowds the labels; wider
   /// than [sidebarMaxWidth] starves the content pane on small desktops.
@@ -176,5 +181,32 @@ class AppPrefsStorage {
 
   Future<void> setCopilotDockTipSeen() async {
     await _secureStorage.write(key: _copilotDockTipSeenKey, value: 'true');
+  }
+
+  // Terminal Customization
+
+  Future<double> getTerminalFontSize() async {
+    final value = await _secureStorage.read(key: _terminalFontSizeKey);
+    return double.tryParse(value ?? '') ?? 13.0;
+  }
+
+  Future<void> setTerminalFontSize(double size) async {
+    await _secureStorage.write(key: _terminalFontSizeKey, value: size.toString());
+  }
+
+  Future<String> getTerminalFontFamily() async {
+    return await _secureStorage.read(key: _terminalFontFamilyKey) ?? 'JetBrains Mono';
+  }
+
+  Future<void> setTerminalFontFamily(String family) async {
+    await _secureStorage.write(key: _terminalFontFamilyKey, value: family);
+  }
+
+  Future<String> getTerminalTheme() async {
+    return await _secureStorage.read(key: _terminalThemeKey) ?? 'brutalist';
+  }
+
+  Future<void> setTerminalTheme(String theme) async {
+    await _secureStorage.write(key: _terminalThemeKey, value: theme);
   }
 }

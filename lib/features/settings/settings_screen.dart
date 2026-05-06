@@ -109,6 +109,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _healthMonitoringEnabled = false;
   int _healthCheckInterval = 30;
 
+  double _terminalFontSize = 13.0;
+  String _terminalFontFamily = 'JetBrains Mono';
+  String _terminalTheme = 'brutalist';
+
   bool _isDirty = false;
   bool _loadingFromStorage = true;
 
@@ -128,6 +132,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'triage': GlobalKey(),
     'health': GlobalKey(),
     'security': GlobalKey(),
+    'terminal': GlobalKey(),
     'backup': GlobalKey(),
     'support': GlobalKey(),
   };
@@ -178,6 +183,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     'security': {
       'App PIN':
           'security app pin biometric lock unlock vault master password',
+    },
+    'terminal': {
+      'Font Size': 'terminal font size text scale bigger smaller',
+      'Font Family': 'terminal font family typeface mono jetbrains geist',
+      'Color Theme': 'terminal theme color style dark solarized monochrome brutalist',
     },
     'backup': {
       'Backup Destination':
@@ -401,6 +411,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _editTerminalFontSizeRow() async {
+    final picked = await pushSettingsSliderEdit(
+      context: context,
+      title: 'Font Size',
+      currentValue: _terminalFontSize.toInt(),
+      min: 8,
+      max: 24,
+      divisions: 16,
+      labelBuilder: (v) => '$v pt',
+      helperText: 'Adjust terminal text size for readability.',
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _terminalFontSize = picked.toDouble();
+      _isDirty = true;
+      _bumpSaveBar();
+    });
+  }
+
+  Future<void> _pickTerminalFontFamily() async {
+    final choices = [
+      SettingsChoice(value: 'JetBrains Mono', label: 'JetBrains Mono', subtitle: 'Default professional mono'),
+      SettingsChoice(value: 'Inter', label: 'Inter', subtitle: 'Geometric sans-serif'),
+      SettingsChoice(value: 'Courier', label: 'Courier', subtitle: 'Classic typewriter'),
+    ];
+    final picked = await pushSettingsChoiceEdit<String>(
+      context: context,
+      title: 'Font Family',
+      currentValue: _terminalFontFamily,
+      choices: choices,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _terminalFontFamily = picked;
+      _isDirty = true;
+      _bumpSaveBar();
+    });
+  }
+
+  Future<void> _pickTerminalTheme() async {
+    final choices = [
+      SettingsChoice(value: 'brutalist', label: 'BRUTALIST', subtitle: 'Default monochrome (black/white)'),
+      SettingsChoice(value: 'solarized', label: 'SOLARIZED', subtitle: 'Classic high-contrast blue'),
+      SettingsChoice(value: 'matrix', label: 'MATRIX', subtitle: 'Phosphor green on black'),
+      SettingsChoice(value: 'ocean', label: 'OCEAN', subtitle: 'Soft deep blue and cyan'),
+    ];
+    final picked = await pushSettingsChoiceEdit<String>(
+      context: context,
+      title: 'Color Theme',
+      currentValue: _terminalTheme,
+      choices: choices,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _terminalTheme = picked;
+      _isDirty = true;
+      _bumpSaveBar();
+    });
+  }
+
   void _setHealthMonitoringEnabled(bool value) {
     setState(() {
       _healthMonitoringEnabled = value;
@@ -576,6 +646,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadAppPinStatus();
     _loadLogTriageSettings();
     _loadHealthMonitoringSettings();
+    _loadTerminalSettings();
     Future.wait([
       _loadStoredApiKeys(),
       _loadBackupSettings(),
@@ -689,6 +760,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  Future<void> _loadTerminalSettings() async {
+    final size = await _appPrefsStorage.getTerminalFontSize();
+    final family = await _appPrefsStorage.getTerminalFontFamily();
+    final theme = await _appPrefsStorage.getTerminalTheme();
+    if (!mounted) return;
+    setState(() {
+      _terminalFontSize = size;
+      _terminalFontFamily = family;
+      _terminalTheme = theme;
+    });
+  }
+
   Future<void> _save() async {
     if (_isBusy) return;
     if (_selectedProvider == AiProvider.local && !_isLocalEndpointValid) {
@@ -735,6 +818,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _healthMonitoringEnabled,
       );
       await _appPrefsStorage.setHealthCheckInterval(_healthCheckInterval);
+
+      await _appPrefsStorage.setTerminalFontSize(_terminalFontSize);
+      await _appPrefsStorage.setTerminalFontFamily(_terminalFontFamily);
+      await _appPrefsStorage.setTerminalTheme(_terminalTheme);
 
       if (_healthMonitoringEnabled) {
         await BackgroundKeepalive.enable(
@@ -1647,6 +1734,61 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                  ),
+                  restrictToIds: restrictToIds,
+                ),
+                _wrapCategorySection(
+                  'terminal',
+                  SettingsSectionCard(
+                    title: 'Terminal Customization',
+                    subtitle: 'Adjust the terminal appearance, typography, and color schemes.',
+                    icon: Icons.terminal_rounded,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SettingsRowGroup(
+                          header: 'TYPOGRAPHY',
+                          children: [
+                            if (_rowMatches('terminal', 'Font Size'))
+                              SettingsRow.chevron(
+                                key: const ValueKey('settings_row_terminal_font_size'),
+                                iconColor: AppColors.accentAi,
+                                icon: Icons.format_size_rounded,
+                                label: 'Font Size',
+                                value: '${_terminalFontSize.toInt()} pt',
+                                enabled: !_isBusy,
+                                onTap: _isBusy ? null : _editTerminalFontSizeRow,
+                              ),
+                            if (_rowMatches('terminal', 'Font Family'))
+                              SettingsRow.chevron(
+                                key: const ValueKey('settings_row_terminal_font_family'),
+                                iconColor: AppColors.accentAi,
+                                icon: Icons.font_download_rounded,
+                                label: 'Font Family',
+                                value: _terminalFontFamily,
+                                enabled: !_isBusy,
+                                onTap: _isBusy ? null : _pickTerminalFontFamily,
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        SettingsRowGroup(
+                          header: 'APPEARANCE',
+                          children: [
+                            if (_rowMatches('terminal', 'Color Theme'))
+                              SettingsRow.chevron(
+                                key: const ValueKey('settings_row_terminal_theme'),
+                                iconColor: AppColors.accentAi,
+                                icon: Icons.palette_rounded,
+                                label: 'Color Theme',
+                                value: _terminalTheme.toUpperCase(),
+                                enabled: !_isBusy,
+                                onTap: _isBusy ? null : _pickTerminalTheme,
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                   restrictToIds: restrictToIds,
                 ),

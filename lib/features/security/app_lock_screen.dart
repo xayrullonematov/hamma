@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -462,6 +463,14 @@ class _AppLockScreenState extends State<AppLockScreen> {
         return;
       }
 
+      if (logicalKey == LogicalKeyboardKey.enter ||
+          logicalKey == LogicalKeyboardKey.numpadEnter) {
+        if (_input.length == 4) {
+          _handleCompletedPin();
+        }
+        return;
+      }
+
       // Handle number keys (0-9) and numpad keys (0-9)
       final numberMap = {
         LogicalKeyboardKey.digit0: '0',
@@ -492,6 +501,10 @@ class _AppLockScreenState extends State<AppLockScreen> {
     }
   }
 
+  bool get _isDesktop =>
+      MediaQuery.of(context).size.width > 600 &&
+      (Platform.isLinux || Platform.isWindows || Platform.isMacOS);
+
   @override
   Widget build(BuildContext context) {
     final canPop = Navigator.of(context).canPop();
@@ -501,23 +514,30 @@ class _AppLockScreenState extends State<AppLockScreen> {
       onKeyEvent: _handleKeyEvent,
       child: Scaffold(
         backgroundColor: _backgroundColor,
-        appBar: AppBar(
-          automaticallyImplyLeading:
-              !(widget.mode == AppLockMode.verify && widget.nextScreen != null) &&
-                  canPop,
-          title: Text(_titleText),
-        ),
+        appBar: _isDesktop
+            ? null
+            : AppBar(
+                automaticallyImplyLeading: !(widget.mode == AppLockMode.verify &&
+                        widget.nextScreen != null) &&
+                    canPop,
+                title: Text(_titleText),
+              ),
         body: SafeArea(
           top: false,
           child: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
+                constraints: BoxConstraints(
+                  maxWidth: _isDesktop ? 460 : 420,
+                ),
                 child: Container(
                   decoration: BoxDecoration(
                     color: _surfaceColor,
                     borderRadius: BorderRadius.zero,
+                    border: _isDesktop
+                        ? Border.all(color: AppColors.border, width: 1)
+                        : null,
                     boxShadow: const [
                       BoxShadow(
                         color: _shadowColor,
@@ -526,26 +546,53 @@ class _AppLockScreenState extends State<AppLockScreen> {
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.all(_isDesktop ? 48 : 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          color: _primaryColor.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.zero,
+                      if (_isDesktop) ...[
+                        Center(
+                          child: Image.asset(
+                            AppColors.logoAsset,
+                            width: 48,
+                            height: 48,
+                            filterQuality: FilterQuality.high,
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.lock_outline,
-                          color: _primaryColor,
-                          size: 32,
+                        const SizedBox(height: 24),
+                        Center(
+                          child: Text(
+                            'HAMMA',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 4.0,
+                              fontFamily: AppColors.monoFamily,
+                              fontFamilyFallback: AppColors.monoFallback,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 18),
+                        const SizedBox(height: 48),
+                      ] else ...[
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: _primaryColor.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          child: const Icon(
+                            Icons.lock_outline,
+                            color: _primaryColor,
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                      ],
                       Text(
                         _titleText,
+                        textAlign: _isDesktop ? TextAlign.center : TextAlign.left,
                         style:
                             Theme.of(context).textTheme.headlineSmall?.copyWith(
                                   color: Colors.white,
@@ -555,14 +602,15 @@ class _AppLockScreenState extends State<AppLockScreen> {
                       const SizedBox(height: 8),
                       Text(
                         _subtitleText,
+                        textAlign: _isDesktop ? TextAlign.center : TextAlign.left,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: _mutedColor,
                               height: 1.4,
                             ),
                       ),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 42),
                       _buildPinIndicator(),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 24),
                       SizedBox(
                         height: 24,
                         child: Center(
@@ -577,6 +625,7 @@ class _AppLockScreenState extends State<AppLockScreen> {
                                   textAlign: TextAlign.center,
                                   style:
                                       Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            fontFamily: _isDesktop ? AppColors.monoFamily : null,
                                             color: _status
                                                         .toLowerCase()
                                                         .contains('incorrect') ||
@@ -589,8 +638,37 @@ class _AppLockScreenState extends State<AppLockScreen> {
                                 ),
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      _buildKeypad(),
+                      const SizedBox(height: 32),
+                      if (_isDesktop) ...[
+                        if (_biometricsAvailable &&
+                            widget.mode == AppLockMode.verify)
+                          OutlinedButton.icon(
+                            onPressed: () => _authenticateWithBiometrics(),
+                            icon: const Icon(Icons.fingerprint_rounded, size: 20),
+                            label: const Text('Unlock with Biometrics'),
+                          )
+                        else
+                          const Center(
+                            child: Text(
+                              'Type your PIN to continue',
+                              style: TextStyle(
+                                color: AppColors.textFaint,
+                                fontSize: 12,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        if (canPop &&
+                            !(widget.mode == AppLockMode.verify &&
+                                widget.nextScreen != null)) ...[
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                        ],
+                      ] else
+                        _buildKeypad(),
                     ],
                   ),
                 ),
