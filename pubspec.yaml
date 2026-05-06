@@ -49,6 +49,7 @@ dependencies:
   # FFI helpers (Utf8, malloc) for the bundled inference engine
   # bindings (lib/core/ai/llama_cpp_bindings.dart).
   ffi: ^2.1.0
+  dio: ^5.7.0
 
   # Voice-driven mobile ops (Task #29). Both packages are configured
   # for on-device recognition / on-device synthesis only — see
@@ -70,6 +71,7 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   msix: ^3.16.13
   flutter_launcher_icons: ^0.14.3
+  ffigen: ^11.0.0
 
   # Deterministic, virtual-clock event-loop driver used by the SSH
   # state-machine integration tests to advance auto-reconnect timers

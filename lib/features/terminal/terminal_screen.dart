@@ -346,7 +346,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
     
     if (parts.length == 1) {
       // Completing a command name
-      toAdd = suggestion.substring(parts[0].length) + ' ';
+      toAdd = '${suggestion.substring(parts[0].length)} ';
     } else {
       // Completing an argument
       final argPrefix = parts.sublist(1).join(' ');

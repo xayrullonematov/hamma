@@ -1,0 +1,33 @@
+platform :ios, '14.0'
+
+# CocoaPods analytics sends network stats synchronous during install.
+# If you would like to disable it, uncomment the following line.
+# install! 'cocoapods', :disable_input_output_paths => true
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    
+    target.build_configurations.each do |config|
+      # Force 14.0 for LLVM / Metal compatibility
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+      # Enable Metal hardware acceleration
+      config.build_settings['ENABLE_BITCODE'] = 'NO'
+      # Ensure C++ standard matches Android (C++17)
+      config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      # Link frameworks required for the inference engine
+      config.build_settings['OTHER_LDFLAGS'] = '$(inherited) -framework Metal -framework Foundation -framework Accelerate'
+    end
+  end
+end
