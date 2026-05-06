@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:xterm/xterm.dart';
 
@@ -71,6 +72,24 @@ class _TerminalScreenState extends State<TerminalScreen> {
   StreamSubscription<Uint8List>? _stderrSubscription;
   String _recentTerminalOutput = '';
   bool _isFullScreen = false;
+
+  // Predictive Commands State
+  String _currentLineBuffer = '';
+  List<String> _suggestions = [];
+  int _selectedSuggestionIndex = 0;
+
+  static const Map<String, List<String>> _suggestionMap = {
+    'git': ['status', 'add .', 'commit -m "', 'push', 'pull', 'log --oneline', 'checkout', 'branch', 'diff'],
+    'docker': ['ps', 'images', 'logs -f', 'stop', 'start', 'restart', 'exec -it', 'system prune'],
+    'systemctl': ['status', 'restart', 'start', 'stop', 'enable', 'disable', 'daemon-reload'],
+    'apt': ['update', 'upgrade', 'install', 'remove', 'autoremove', 'search'],
+    'ls': ['-la', '-lh', '-R'],
+    'cd': ['..', '~', '/var/www', '/etc'],
+    'npm': ['install', 'run dev', 'run build', 'start', 'test'],
+    'pm2': ['status', 'logs', 'restart', 'stop', 'save'],
+    'tail': ['-f', '-n 100'],
+    'grep': ['-r', '-i'],
+  };
 
   // Terminal Customization State
   double _fontSize = 13.0;
@@ -256,7 +275,92 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   void _handleTerminalOutput(String data) {
     if (!widget.sshService.isConnected) return;
+
+    // Track the current line buffer for suggestions
+    for (int i = 0; i < data.length; i++) {
+      final char = data[i];
+      if (char == '\r' || char == '\n') {
+        _currentLineBuffer = '';
+      } else if (char == '\x7f' || char == '\x08') {
+        // Backspace
+        if (_currentLineBuffer.isNotEmpty) {
+          _currentLineBuffer =
+              _currentLineBuffer.substring(0, _currentLineBuffer.length - 1);
+        }
+      } else if (char.codeUnitAt(0) >= 32 && char.codeUnitAt(0) <= 126) {
+        _currentLineBuffer += char;
+      }
+    }
+
+    _updateSuggestions();
     _session?.write(Uint8List.fromList(utf8.encode(data)));
+  }
+
+  void _updateSuggestions() {
+    if (!_isDesktop || _currentLineBuffer.isEmpty) {
+      if (_suggestions.isNotEmpty) {
+        setState(() {
+          _suggestions = [];
+          _selectedSuggestionIndex = 0;
+        });
+      }
+      return;
+    }
+
+    final parts = _currentLineBuffer.trimLeft().split(' ');
+    if (parts.isEmpty) return;
+
+    final command = parts[0];
+    final argumentPrefix = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+
+    List<String> matches = [];
+    if (parts.length == 1) {
+      // Suggest command names
+      matches =
+          _suggestionMap.keys
+              .where((k) => k.startsWith(command) && k != command)
+              .toList();
+    } else {
+      // Suggest arguments for the current command
+      final possibleArgs = _suggestionMap[command];
+      if (possibleArgs != null) {
+        matches = possibleArgs.where((a) => a.startsWith(argumentPrefix)).toList();
+      }
+    }
+
+    if (!listEquals(_suggestions, matches)) {
+      setState(() {
+        _suggestions = matches;
+        _selectedSuggestionIndex = 0;
+      });
+    }
+  }
+
+  void _acceptSuggestion() {
+    if (_suggestions.isEmpty) return;
+    final suggestion = _suggestions[_selectedSuggestionIndex];
+
+    // Calculate what needs to be typed
+    final parts = _currentLineBuffer.trimLeft().split(' ');
+    String toAdd = '';
+    
+    if (parts.length == 1) {
+      // Completing a command name
+      toAdd = suggestion.substring(parts[0].length) + ' ';
+    } else {
+      // Completing an argument
+      final argPrefix = parts.sublist(1).join(' ');
+      toAdd = suggestion.substring(argPrefix.length);
+    }
+
+    if (toAdd.isNotEmpty) {
+      _handleTerminalOutput(toAdd);
+    }
+
+    setState(() {
+      _suggestions = [];
+      _selectedSuggestionIndex = 0;
+    });
   }
 
   void _handleTerminalResize(int width, int height, int pixelWidth, int pixelHeight) {
@@ -333,6 +437,37 @@ class _TerminalScreenState extends State<TerminalScreen> {
     );
   }
 
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (_suggestions.isEmpty) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      setState(() {
+        _selectedSuggestionIndex =
+            (_selectedSuggestionIndex + 1) % _suggestions.length;
+      });
+      return KeyEventResult.handled;
+    } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      setState(() {
+        _selectedSuggestionIndex =
+            (_selectedSuggestionIndex - 1 + _suggestions.length) %
+            _suggestions.length;
+      });
+      return KeyEventResult.handled;
+    } else if (event.logicalKey == LogicalKeyboardKey.tab ||
+        event.logicalKey == LogicalKeyboardKey.enter) {
+      _acceptSuggestion();
+      return KeyEventResult.handled;
+    } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+      setState(() {
+        _suggestions = [];
+      });
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final terminalTheme = AppTerminalThemes.get(_themeName);
@@ -361,36 +496,40 @@ class _TerminalScreenState extends State<TerminalScreen> {
       body: Column(
         children: [
           Expanded(
-            child: GestureDetector(
-              onTap: () => _terminalFocusNode.requestFocus(),
-              child: Container(
-                margin: EdgeInsets.symmetric(
-                  horizontal: _isDesktop ? 16 : 8,
-                  vertical: _isDesktop ? 0 : 8,
-                ),
-                decoration: const BoxDecoration(
-                  color: Colors.black,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.zero,
-                  child: TerminalView(
-                    _terminal,
-                    focusNode: _terminalFocusNode,
-                    autofocus: true,
-                    theme: terminalTheme,
-                    textStyle: TerminalStyle(
-                      fontSize: _fontSize,
-                      fontFamily: _fontFamily,
+            child: Focus(
+              onKeyEvent: _handleKeyEvent,
+              child: GestureDetector(
+                onTap: () => _terminalFocusNode.requestFocus(),
+                child: Container(
+                  margin: EdgeInsets.symmetric(
+                    horizontal: _isDesktop ? 16 : 8,
+                    vertical: _isDesktop ? 0 : 8,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: Colors.black,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.zero,
+                    child: TerminalView(
+                      _terminal,
+                      focusNode: _terminalFocusNode,
+                      autofocus: true,
+                      theme: terminalTheme,
+                      textStyle: TerminalStyle(
+                        fontSize: _fontSize,
+                        fontFamily: _fontFamily,
+                      ),
+                      hardwareKeyboardOnly: _isDesktop,
+                      onTapUp: (details, position) {
+                        _terminalFocusNode.requestFocus();
+                      },
                     ),
-                    hardwareKeyboardOnly: _isDesktop,
-                    onTapUp: (details, position) {
-                      _terminalFocusNode.requestFocus();
-                    },
                   ),
                 ),
               ),
             ),
           ),
+          if (_isDesktop && _suggestions.isNotEmpty) _buildPredictiveBar(),
           ValueListenableBuilder<ConnectionStatus>(
             valueListenable: widget.sshService.statusNotifier,
             builder: (context, status, _) => _buildToolbar(status.isConnected),
@@ -402,6 +541,85 @@ class _TerminalScreenState extends State<TerminalScreen> {
   }
 
   // Removed redundant _buildStatusHeader as information is in the sidebar.
+
+  Widget _buildPredictiveBar() {
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: _panelColor,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            color: AppColors.accent,
+            child: const Center(
+              child: Text(
+                'SUGGEST',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 10,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _suggestions.length,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              itemBuilder: (context, index) {
+                final isSelected = index == _selectedSuggestionIndex;
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isSelected ? Colors.white : Colors.transparent,
+                        border: Border.all(
+                          color: isSelected ? Colors.white : Colors.transparent,
+                        ),
+                      ),
+                      child: Text(
+                        _suggestions[index],
+                        style: TextStyle(
+                          color: isSelected ? Colors.black : Colors.white,
+                          fontFamily: AppColors.monoFamily,
+                          fontSize: 12,
+                          fontWeight:
+                              isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Text(
+              'ARROWS TO NAV • TAB TO PICK',
+              style: TextStyle(
+                color: AppColors.textFaint,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildToolbar(bool isConnected) {
     if (_isDesktop) return const SizedBox.shrink();
