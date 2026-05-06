@@ -62,10 +62,7 @@ class TerminalScreen extends StatefulWidget {
 
 class _TerminalScreenState extends State<TerminalScreen> {
   static const _maxContextChars = 3500;
-  static const _backgroundColor = AppColors.scaffoldBackground;
-  static const _surfaceColor = AppColors.surface;
   static const _panelColor = AppColors.panel;
-  static const _mutedColor = AppColors.textMuted;
 
   late final Terminal _terminal;
   final FocusNode _terminalFocusNode = FocusNode();
@@ -273,20 +270,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
     }
   }
 
-  Future<void> _handleReconnect() async {
-    final status = widget.sshService.currentStatus;
-    if (status.isConnecting) return;
-
-    try {
-      await widget.sshService.reconnect();
-      // _openShell will be called by the status listener
-    } catch (e) {
-      if (mounted) {
-        _terminal.write('Reconnection failed: $e\r\n');
-      }
-    }
-  }
-
   void _sendToolbarKey(String data) {
     _handleTerminalOutput(data);
   }
@@ -348,14 +331,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
         child: buildBody(context),
       ),
     );
-  }
-
-  String _formatTime(DateTime? dt) {
-    if (dt == null) return 'Never';
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    final s = dt.second.toString().padLeft(2, '0');
-    return '$h:$m:$s';
   }
 
   @override

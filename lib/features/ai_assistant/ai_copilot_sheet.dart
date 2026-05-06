@@ -108,7 +108,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   List<_ChatMessage> _chatMessages = const [];
   String? _openRouterModelsError;
   String _commandOutput = '';
-  String _status = 'Describe the issue, then generate suggested commands.';
   List<String> _openRouterModels = const [];
   int _providerLoadGeneration = 0;
   bool _hasTriggeredInitialPrompt = false;
@@ -253,12 +252,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     _planSteps = [];
   }
 
-  String _defaultStatusText() {
-    return _mode == CopilotMode.commandHelper
-        ? 'Describe the issue, then generate suggested commands.'
-        : 'Ask for explanations, log analysis, or Linux help.';
-  }
-
   String? _normalizeOpenRouterModel(String? value) {
     final normalized = value?.trim() ?? '';
     return normalized.isEmpty ? null : normalized;
@@ -322,7 +315,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     setState(() {
       _activeProvider = targetProvider;
       _isLoadingActiveApiKey = true;
-      _status = 'Loading ${targetProvider.label} configuration...';
       // Spin the monitor up/down here so the header pill appears the
       // instant the user picks Local AI from the in-sheet provider
       // picker — `didUpdateWidget` only fires for prop changes, but
@@ -340,7 +332,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       _refreshAiCommandService();
       setState(() {
         _isLoadingActiveApiKey = false;
-        _status = _defaultStatusText();
       });
       _scheduleInitialPromptIfReady();
       return;
@@ -358,10 +349,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
       setState(() {
         _isLoadingActiveApiKey = false;
-        _status =
-            _hasActiveApiKey
-                ? _defaultStatusText()
-                : 'API key missing. Configure it in Settings.';
       });
       _scheduleInitialPromptIfReady();
     } catch (_) {
@@ -374,7 +361,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
       setState(() {
         _isLoadingActiveApiKey = false;
-        _status = 'API key missing. Configure it in Settings.';
       });
       _scheduleInitialPromptIfReady();
     }
@@ -533,12 +519,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     _activeOpenRouterModel = _normalizeOpenRouterModel(selected);
     _refreshAiCommandService();
 
-    setState(() {
-      _status =
-          _activeOpenRouterModel == null
-              ? 'OpenRouter model reset to default.'
-              : 'OpenRouter model updated.';
-    });
+    setState(() {});
   }
 
   Future<void> _loadChatHistory() async {
@@ -688,7 +669,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     
     setState(() {
       _isGenerating = true;
-      _status = 'Generating analyzed command...';
     });
 
     try {
@@ -705,59 +685,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         analysis: analysis,
       );
       
-      setState(() {
-        _status = 'Suggestion ready';
-      });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _status = _friendlyErrorMessage(
-          error: error,
-          fallbackPrefix: 'Failed to generate command',
-        );
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isGenerating = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _generateAnalyzedCommand(String prompt) async {
-    setState(() {
-      _isGenerating = true;
-      _status = 'Analyzing...';
-    });
-
-    _appendChatMessage(role: 'user', content: prompt);
-
-    try {
-      final analysis = await _aiCommandService.generateCommand(
-        prompt,
-        contextOutput: widget.getContext(),
-      );
-      
-      if (!mounted) return;
-
-      _appendChatMessage(
-        role: 'assistant',
-        content: analysis.explanation,
-        analysis: analysis,
-      );
-      
-      setState(() {
-        _status = 'Suggestion ready';
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _status = _friendlyErrorMessage(
-          error: error,
-          fallbackPrefix: 'Failed to generate analyzed command',
-        );
-      });
     } finally {
       if (mounted) {
         setState(() {
@@ -770,22 +699,15 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   Future<void> _generateCommands() async {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) {
-      setState(() {
-        _status = 'Enter a prompt first';
-      });
       return;
     }
 
     if (!_hasActiveApiKey) {
-      setState(() {
-        _status = 'API key missing. Configure it in Settings.';
-      });
       return;
     }
 
     setState(() {
       _isGenerating = true;
-      _status = 'Generating command plan...';
     });
 
     _appendChatMessage(role: 'user', content: prompt);
@@ -808,7 +730,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
                   ),
                 )
                 .toList();
-        _status = 'Plan ready';
       });
 
       _appendChatMessage(
@@ -817,12 +738,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _status = _friendlyErrorMessage(
-          error: error,
-          fallbackPrefix: 'Failed to generate plan',
-        );
-      });
     } finally {
       if (mounted) {
         setState(() {
@@ -835,16 +750,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   Future<void> _generateChatResponse() async {
     final prompt = _promptController.text.trim();
     if (prompt.isEmpty) {
-      setState(() {
-        _status = 'Enter a prompt first';
-      });
       return;
     }
 
     if (!_hasActiveApiKey) {
-      setState(() {
-        _status = 'API key missing. Configure it in Settings.';
-      });
       return;
     }
 
@@ -854,7 +763,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
     setState(() {
       _isGenerating = true;
-      _status = 'Generating response';
     });
 
     try {
@@ -885,9 +793,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       }
 
       _saveChatHistory(_chatMessages);
-      setState(() {
-        _status = 'Response ready';
-      });
       final finalReply = buffer.toString();
       if (finalReply.trim().isNotEmpty) {
         unawaited(_maybeSpeakReply(finalReply));
@@ -905,12 +810,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         });
       }
 
-      setState(() {
-        _status = _friendlyErrorMessage(
-          error: error,
-          fallbackPrefix: 'Failed to generate response',
-        );
-      });
     } finally {
       if (mounted) {
         setState(() {
@@ -977,7 +876,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     
     setState(() {
       _isGenerating = true;
-      _status = 'Generating explanation...';
     });
 
     try {
@@ -990,17 +888,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
       _appendChatMessage(role: 'assistant', content: response);
       
-      setState(() {
-        _status = 'Explanation ready';
-      });
     } catch (error) {
       if (!mounted) return;
-      setState(() {
-        _status = _friendlyErrorMessage(
-          error: error,
-          fallbackPrefix: 'Failed to generate explanation',
-        );
-      });
     } finally {
       if (mounted) {
         setState(() {
@@ -1014,16 +903,10 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     final step = _planSteps[index];
     final command = step.controller.text.trim();
     if (command.isEmpty) {
-      setState(() {
-        _status = 'Command cannot be empty';
-      });
       return;
     }
 
     if (!widget.canRunCommands()) {
-      setState(() {
-        _status = widget.executionUnavailableMessage;
-      });
       return;
     }
 
@@ -1045,10 +928,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
     setState(() {
       _runningCommandIndex = index;
-      _status =
-          widget.executionTarget == AiCopilotExecutionTarget.terminal
-              ? 'Sending Step ${index + 1} to shell'
-              : 'Running Step ${index + 1}';
     });
 
     try {
@@ -1060,10 +939,8 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       setState(() {
         if (widget.executionTarget == AiCopilotExecutionTarget.terminal) {
           step.state = CopilotPlanStepState.sentToShell;
-          _status = 'Step ${index + 1} sent to shell. Check terminal output.';
         } else {
           step.state = CopilotPlanStepState.executed;
-          _status = 'Step ${index + 1} executed. Output below.';
           _appendExecutionOutput(
             stepNumber: index + 1,
             stepTitle: step.title,
@@ -1080,10 +957,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
       setState(() {
         step.state = CopilotPlanStepState.failed;
-        _status =
-            widget.executionTarget == AiCopilotExecutionTarget.terminal
-                ? 'Step ${index + 1} could not be sent to shell.'
-                : 'Step ${index + 1} failed. Output below.';
         if (widget.executionTarget == AiCopilotExecutionTarget.dashboard) {
           _appendExecutionOutput(
             stepNumber: index + 1,
@@ -1270,61 +1143,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
             : '$_commandOutput\n\n------------------------------\n\n${entry.toString()}';
   }
 
-  String _friendlyErrorMessage({
-    required Object error,
-    required String fallbackPrefix,
-  }) {
-    final message = error.toString().trim();
-    final normalized = message.toLowerCase();
-
-    if (error is AiCommandServiceException && error.message.trim().isNotEmpty) {
-      return error.message.trim();
-    }
-
-    if (normalized.contains('api key is not set')) {
-      return 'Set your ${_activeProvider.label} API key in Settings first.';
-    }
-
-    if (normalized.contains('timed out')) {
-      return '${_activeProvider.label} took too long to respond. Try again.';
-    }
-
-    if (normalized.contains('network error') ||
-        normalized.contains('socketexception')) {
-      return 'Network error while contacting ${_activeProvider.label}. Check your connection and try again.';
-    }
-
-    if (normalized.contains('rejected the api key') ||
-        normalized.contains('invalid api key') ||
-        normalized.contains('incorrect api key') ||
-        normalized.contains('authentication') ||
-        normalized.contains('unauthorized')) {
-      return '${_activeProvider.label} API key was rejected. Check the key in Settings and try again.';
-    }
-
-    if (_activeProvider == AiProvider.gemini &&
-        (normalized.contains('free-tier') ||
-            normalized.contains('quota') ||
-            normalized.contains('overload') ||
-            normalized.contains('overloaded') ||
-            normalized.contains('resource exhausted') ||
-            normalized.contains('try again later'))) {
-      return 'Gemini is temporarily unavailable or out of quota. Try again later or switch providers in Settings.';
-    }
-
-    if (normalized.contains('valid json') ||
-        normalized.contains('json array') ||
-        normalized.contains('parsed') ||
-        normalized.contains('empty response') ||
-        normalized.contains('unsupported plan step entry') ||
-        normalized.contains('plan step without a command') ||
-        normalized.contains('no commands')) {
-      return '${_activeProvider.label} returned an unreadable plan. Try again with a more specific request.';
-    }
-
-    return '$fallbackPrefix. Please try again.';
-  }
-
   String _buildChatPrompt(
     String userPrompt, {
     List<_ChatMessage>? historyMessages,
@@ -1413,10 +1231,6 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
     setState(() {
       _mode = mode;
-      _status =
-          _hasActiveApiKey
-              ? _defaultStatusText()
-              : 'API key missing. Configure it in Settings.';
       _runningCommandIndex = null;
 
       if (mode == CopilotMode.generalChat) {
