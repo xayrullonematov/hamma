@@ -78,11 +78,7 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
   }
 
   bool get _builtInSupportedOnThisOs {
-    // The bundled engine is desktop-only — it spawns a native
-    // `llama-server` subprocess. On mobile we always route to the
-    // external path (Android/iOS don't allow arbitrary subprocess
-    // spawning, and the future FFI fallback isn't wired up yet).
-    if (Platform.isAndroid || Platform.isIOS) return false;
+    // We now support the built-in engine on mobile via the FFI path.
     return _engine.isAvailable;
   }
 

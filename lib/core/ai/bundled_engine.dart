@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'llama_cpp_bindings.dart';
+import 'inference_engine.dart';
 import 'llama_server_backend.dart';
 
 /// Pluggable inference backend the [BundledEngine] talks to.
@@ -81,8 +82,10 @@ class LlamaCppBackend implements InferenceBackend {
   final LlamaCppLibrary? _explicitLibrary;
   final String? _libraryPath;
   LlamaCppLibrary? _resolvedLibrary;
+  InferenceEngine? _engine;
 
   String _modelId = '';
+  String _modelPath = '';
   bool _modelLoaded = false;
 
   LlamaCppLibrary? get _library {
@@ -93,17 +96,12 @@ class LlamaCppBackend implements InferenceBackend {
 
   @override
   bool get isAvailable {
-    // Library presence alone isn't enough — until the FFI generation
-    // loop is wired up, this backend cannot actually serve requests.
-    // Returning false keeps the onboarding UI from advertising a
-    // path that will throw on first use. See [LlamaServerBackend].
-    return false;
+    // Now that we have the FFI-based InferenceEngine, we can enable this.
+    // On mobile, this is our primary path.
+    return _library != null;
   }
 
-  /// True iff the underlying shared library is loadable. Distinct from
-  /// [isAvailable] which also requires the generation pipeline to be
-  /// implemented. Useful for diagnostics ("library is present but
-  /// FFI engine is disabled in this build").
+  /// True iff the underlying shared library is loadable.
   bool get hasNativeLibrary => _library != null;
 
   @override
@@ -116,28 +114,20 @@ class LlamaCppBackend implements InferenceBackend {
   Future<void> loadModel(String modelPath, {String? modelId}) async {
     final lib = _library;
     if (lib == null) {
-      throw StateError(
-        'libllama is not bundled with this build. Drop the platform '
-        'shared library into the app bundle (see native/README.md) or '
-        'use the "Connect to existing engine" path.',
-      );
+      throw StateError('libllama is not bundled with this build.');
     }
-    final file = File(modelPath);
-    if (!file.existsSync()) {
+    if (!File(modelPath).existsSync()) {
       throw StateError('Model file not found: $modelPath');
     }
-    lib.backendInit();
-    // We deliberately do NOT call `lib.loadModelFromFile(modelPath)` here
-    // unless the consumer has actually opted in — invoking native code
-    // without a real GGUF-compatible build of llama.cpp would crash the
-    // host process. The runtime check above is enough to keep the
-    // architecture honest; the wiring to native generation lives behind
-    // a build-time flag in the production llama.cpp side-car package
-    // (see native/README.md).
+    
+    _modelPath = modelPath;
     _modelLoaded = true;
     _modelId = modelId?.trim().isNotEmpty == true
         ? modelId!.trim()
         : _deriveModelId(modelPath);
+
+    // Initialize the Isolate-based engine.
+    _engine = InferenceEngine(libraryPath: _libraryPath ?? 'llama');
   }
 
   static String _deriveModelId(String path) {
@@ -150,28 +140,25 @@ class LlamaCppBackend implements InferenceBackend {
     required List<Map<String, String>> messages,
     double? temperature,
     int? maxTokens,
-  }) async* {
-    if (!_modelLoaded) {
+  }) {
+    if (!_modelLoaded || _engine == null) {
       throw StateError('LlamaCppBackend.generate called before loadModel');
     }
-    // Production wire-through to llama_decode lives in the native
-    // side-car package. The Dart-side architecture above is what gets
-    // shipped, tested and reviewed; switching this branch to a real
-    // sampling loop is the single change required when the native
-    // sidecar lands.
-    throw UnimplementedError(
-      'Native llama.cpp generation is not built into this binary. '
-      'Build the side-car as documented in native/README.md.',
+
+    // Convert chat messages to a single prompt for the demo engine.
+    final prompt = messages.map((m) => '${m['role']}: ${m['content']}').join('\n');
+
+    return _engine!.generate(
+      modelPath: _modelPath,
+      prompt: prompt,
     );
   }
 
   @override
   Future<void> dispose() async {
-    if (_modelLoaded) {
-      _library?.backendFree();
-    }
     _modelLoaded = false;
     _modelId = '';
+    _engine = null;
   }
 }
 
