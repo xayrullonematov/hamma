@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hamma/ui/terminal/chat_view.dart';
-import 'package:hamma/core/theme/app_colors.dart';
 
 void main() {
   testWidgets('ChatView renders brutalist header and tokens', (tester) async {

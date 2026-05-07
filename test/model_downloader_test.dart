@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:hamma/core/networking/model_downloader.dart';
-import 'package:path/path.dart' as p;
 
 void main() {
   group('ModelDownloader', () {
