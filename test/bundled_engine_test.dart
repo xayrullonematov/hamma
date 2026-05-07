@@ -8,7 +8,6 @@ import 'package:hamma/core/ai/bundled_engine.dart';
 import 'package:hamma/core/ai/bundled_engine_controller.dart';
 import 'package:hamma/core/ai/bundled_model_catalog.dart';
 import 'package:hamma/core/ai/bundled_model_downloader.dart';
-import 'package:hamma/core/ai/llama_cpp_bindings.dart';
 
 void main() {
   group('BundledModelCatalog', () {
@@ -44,24 +43,10 @@ void main() {
     });
   });
 
-  group('LlamaCppLibrary (future FFI path)', () {
-    test('openOrNull returns null when no native library is present', () {
-      // In the test env we have no libllama bundled. The lookup MUST
-      // degrade gracefully — never throw — so the rest of the app can
-      // fall back to "Connect to existing engine".
-      final lib = LlamaCppLibrary.openOrNull(
-        overridePath: '/definitely/does/not/exist/libllama.so',
-      );
-      expect(lib, isNull);
-    });
-
-    test('LlamaCppBackend.isAvailable is false until the FFI path is wired',
-        () {
-      // The FFI backend is currently a documented future-work path.
-      // It MUST report unavailable so the onboarding UI never sends
-      // users down a dead end. Production uses LlamaServerBackend.
+  group('LlamaCppBackend (FFI path)', () {
+    test('LlamaCppBackend.isAvailable is true on native platforms', () {
       final backend = LlamaCppBackend();
-      expect(backend.isAvailable, isFalse);
+      expect(backend.isAvailable, isTrue);
     });
   });
 

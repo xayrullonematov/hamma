@@ -45,7 +45,7 @@ class BundledEngineController {
 
         // Try FFI Strategy (fallback or primary mobile path)
         for (final library in strategy.libraryCandidates) {
-          final backend = LlamaCppBackend(libraryPath: library);
+          final backend = LlamaCppBackend();
           if (backend.isAvailable) {
             debugPrint('BundledEngine: Using ${strategy.name} FFI runner: $library');
             bestBackend = backend;

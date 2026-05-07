@@ -3,10 +3,15 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:meta/meta.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import '../vault/vault_redactor.dart';
 import 'ai_provider.dart';
+import 'bundled_model_catalog.dart';
+import 'bundled_model_downloader.dart';
 import 'command_risk_assessor.dart';
+import 'inference_engine.dart';
 import 'ollama_client.dart';
 
 class AiApiConfig {
@@ -118,6 +123,7 @@ class AiCommandService {
   const AiCommandService({
     required this.config,
     this.openRouterModel,
+    this.inferenceEngine = const InferenceEngine(),
   });
 
   factory AiCommandService.forProvider({
@@ -147,6 +153,7 @@ class AiCommandService {
 
   final AiApiConfig config;
   final String? openRouterModel;
+  final InferenceEngine inferenceEngine;
 
   Duration get _connectionTimeout =>
       config.provider == AiProvider.local
@@ -165,17 +172,6 @@ class AiCommandService {
   }
 
   /// Extracts the first well-formed JSON object from [text].
-  ///
-  /// Tries three strategies in order:
-  ///   1. Direct JSON parse (model returned pure JSON).
-  ///   2. Extract from a ```json ... ``` or ``` ... ``` code fence.
-  ///   3. Brace-depth scan — finds the first syntactically complete `{...}`
-  ///      block, ignoring any surrounding prose or markdown. String-aware
-  ///      so braces inside JSON strings don't prematurely close the object.
-  ///
-  /// Public so peer services (e.g. the log-triage pipeline) can reuse
-  /// the same string-aware brace scanner instead of duplicating it.
-  /// Originally test-only; promoted once we had a non-test caller.
   static Map<String, dynamic>? parseJsonFromResponse(String text) {
     final trimmed = text.trim();
 
@@ -195,9 +191,7 @@ class AiCommandService {
       } catch (_) {}
     }
 
-    // 3. Brace-depth scan — O(n), string-aware so braces inside JSON
-    //    strings (e.g. {"explanation":"literal } brace"}) don't prematurely
-    //    close the candidate. Tracks escape sequences inside strings.
+    // 3. Brace-depth scan
     int depth = 0;
     int start = -1;
     bool inString = false;
@@ -223,7 +217,7 @@ class AiCommandService {
         if (depth == 0) start = i;
         depth++;
       } else if (ch == '}') {
-        if (depth == 0) continue; // stray '}' in prose — ignore
+        if (depth == 0) continue;
         depth--;
         if (depth == 0 && start != -1) {
           try {
@@ -260,16 +254,12 @@ class AiCommandService {
       String response;
       switch (config.provider) {
         case AiProvider.openAi:
+        case AiProvider.openRouter:
+        case AiProvider.local:
           response = await _chatWithOpenAi(client, trimmedPrompt, [], systemInstruction: systemInstruction);
           break;
         case AiProvider.gemini:
           response = await _chatWithGemini(client, trimmedPrompt, [], systemInstruction: systemInstruction);
-          break;
-        case AiProvider.openRouter:
-          response = await _chatWithOpenAi(client, trimmedPrompt, [], systemInstruction: systemInstruction);
-          break;
-        case AiProvider.local:
-          response = await _chatWithOpenAi(client, trimmedPrompt, [], systemInstruction: systemInstruction);
           break;
       }
 
@@ -311,13 +301,11 @@ class AiCommandService {
     try {
       switch (config.provider) {
         case AiProvider.openAi:
+        case AiProvider.openRouter:
+        case AiProvider.local:
           return await _chatWithOpenAi(client, trimmedPrompt, history);
         case AiProvider.gemini:
           return await _chatWithGemini(client, trimmedPrompt, history);
-        case AiProvider.openRouter:
-          return await _chatWithOpenAi(client, trimmedPrompt, history);
-        case AiProvider.local:
-          return await _chatWithOpenAi(client, trimmedPrompt, history);
       }
     } on TimeoutException {
       if (config.provider == AiProvider.local) {
@@ -336,15 +324,8 @@ class AiCommandService {
 
   /// Streamed counterpart of [generateChatResponse].
   ///
-  /// For the **local** provider, the response is consumed as Server-Sent
-  /// Events from the OpenAI-compatible `/chat/completions` endpoint with
-  /// `stream: true` (Ollama, LM Studio and llama.cpp server all support
-  /// this). Tokens are yielded incrementally as `delta.content` chunks.
-  ///
-  /// For other providers, this currently degrades to a single-emit stream
-  /// that yields the full reply — the caller can treat both paths the
-  /// same. If the local stream fails partway through, it surfaces a
-  /// terminal error on the stream so UI code can react.
+  /// For the **local** provider, this uses the on-device [InferenceEngine]
+  /// if reachable via loopback, otherwise falls back to the network.
   Stream<String> streamChatResponse(
     String prompt, {
     List<Map<String, String>> history = const [],
@@ -360,24 +341,42 @@ class AiCommandService {
       );
     }
 
-    if (config.provider != AiProvider.local) {
-      // Non-local providers: fall back to the non-streaming path. Yielding
-      // once keeps the UI logic uniform.
-      final full = await generateChatResponse(prompt, history: history);
-      if (full.isNotEmpty) yield full;
-      return;
+    if (config.provider == AiProvider.local && config.baseUrl.contains("127.0.0.1")) {
+      try {
+        final base = await getApplicationSupportDirectory();
+        final dir = p.join(base.path, "bundled_models");
+        final model = BundledModelCatalog.byId(config.model) ?? BundledModelCatalog.defaultPick;
+        final path = BundledModelDownloader.resolvePath(model, dir);
+
+        if (BundledModelDownloader.isCached(model, dir)) {
+          final redactor = GlobalVaultRedactor.current;
+          final historyContext = history.isEmpty
+            ? ''
+            : '${history.map((m) => '${m['role']}: ${redactor.redact(m['content'] ?? '')}').join('\n')}\n';
+          final fullPrompt = "System: $_chatInstruction\n$historyContext\nUser: ${redactor.redact(trimmedPrompt)}\nAssistant: ";
+          yield* inferenceEngine.streamResponse(fullPrompt, path);
+          return;
+        }
+      } catch (_) {}
     }
 
+    // Non-local providers (or future cloud-backed local):
     final client = HttpClient();
     client.connectionTimeout = _connectionTimeout;
     try {
-      yield* _streamWithOpenAi(client, trimmedPrompt, history);
+      if (config.provider == AiProvider.openAi || config.provider == AiProvider.local || 
+          config.provider == AiProvider.openRouter) {
+        yield* _streamWithOpenAi(client, trimmedPrompt, history);
+      } else {
+        final full = await generateChatResponse(trimmedPrompt, history: history);
+        if (full.isNotEmpty) yield full;
+      }
     } on TimeoutException {
       throw const AiCommandServiceException(
-        'Local AI engine timed out. The model may still be loading — try again.',
+        'AI engine timed out. Try again.',
       );
     } on SocketException {
-      throw AiCommandServiceException(_localUnavailableMessage());
+      throw AiCommandServiceException('Network error: cannot reach ${config.provider.label}');
     } finally {
       client.close(force: true);
     }
@@ -408,24 +407,19 @@ class AiCommandService {
       String response;
       switch (config.provider) {
         case AiProvider.openAi:
+        case AiProvider.openRouter:
+        case AiProvider.local:
           response = await _chatWithOpenAi(client, fullPrompt, [], systemInstruction: systemInstruction);
           break;
         case AiProvider.gemini:
           response = await _chatWithGemini(client, fullPrompt, [], systemInstruction: systemInstruction);
-          break;
-        case AiProvider.openRouter:
-          response = await _chatWithOpenAi(client, fullPrompt, [], systemInstruction: systemInstruction);
-          break;
-        case AiProvider.local:
-          response = await _chatWithOpenAi(client, fullPrompt, [], systemInstruction: systemInstruction);
           break;
       }
 
       final decoded = parseJsonFromResponse(response);
       if (decoded == null) {
         throw const AiCommandServiceException(
-          'AI response did not contain a valid JSON object. '
-          'Try rephrasing your request.',
+          'AI response did not contain a valid JSON object.',
         );
       }
 
@@ -447,8 +441,6 @@ class AiCommandService {
         throw AiCommandServiceException(_localUnavailableMessage());
       }
       throw AiCommandServiceException('Network error contacting ${config.provider.label}.');
-    } on FormatException catch (e) {
-      throw AiCommandServiceException('AI response was not valid JSON: $e');
     } catch (e) {
       if (e is AiCommandServiceException) rethrow;
       throw AiCommandServiceException('Command generation failed: $e');
@@ -469,11 +461,6 @@ class AiCommandService {
       request.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${config.apiKey}');
     }
 
-    // Vault redaction at the network boundary: every literal vault
-    // value in the user prompt or the prepended history is replaced
-    // with `••••••• (vault: NAME)` before the request body is built,
-    // so the secret never crosses process boundaries — not to a cloud
-    // provider, and not to the local LLM either.
     final redactor = GlobalVaultRedactor.current;
     final messages = [
       {'role': 'system', 'content': systemInstruction ?? _chatInstruction},
@@ -484,9 +471,6 @@ class AiCommandService {
       {'role': 'user', 'content': redactor.redact(prompt)},
     ];
 
-    // Write the body as UTF-8 bytes — the redaction marker uses U+2022
-    // ("•") which HttpClient.write would reject under its default
-    // Latin-1 encoder.
     request.add(utf8.encode(jsonEncode({
       'model': config.model,
       'temperature': 0.4,
@@ -503,13 +487,6 @@ class AiCommandService {
     return _extractOpenAiContent(responseBody) ?? '';
   }
 
-  /// Open the OpenAI-compatible `/chat/completions` endpoint with
-  /// `stream: true` and yield each `delta.content` chunk.
-  ///
-  /// Tolerates the few format variations local engines emit:
-  ///   - SSE-prefixed lines (`data: {...}`) from OpenAI / Ollama compat layer
-  ///   - Raw NDJSON (one JSON object per line) emitted by some llama.cpp builds
-  ///   - The `[DONE]` sentinel from OpenAI-style streams
   Stream<String> _streamWithOpenAi(
     HttpClient client,
     String prompt,
@@ -528,7 +505,6 @@ class AiCommandService {
       );
     }
 
-    // Vault redaction at the network boundary — see _chatWithOpenAi.
     final redactor = GlobalVaultRedactor.current;
     final messages = [
       {'role': 'system', 'content': systemInstruction ?? _chatInstruction},
@@ -539,7 +515,6 @@ class AiCommandService {
       {'role': 'user', 'content': redactor.redact(prompt)},
     ];
 
-    // UTF-8 bytes — see _chatWithOpenAi for rationale.
     request.add(utf8.encode(jsonEncode({
       'model': config.model,
       'temperature': 0.4,
@@ -560,15 +535,11 @@ class AiCommandService {
     yield* decodeOpenAiSseBody(lines);
   }
 
-  /// Public for testing. Decodes OpenAI-compatible streaming chat output
-  /// (line-by-line). Yields each `choices[0].delta.content` chunk in order.
-  /// Stops when the stream emits `[DONE]` or `finish_reason != null`.
   @visibleForTesting
   static Stream<String> decodeOpenAiSseBody(Stream<String> lines) async* {
     await for (final raw in lines) {
       var line = raw.trim();
       if (line.isEmpty) continue;
-      // Strip optional SSE `data: ` prefix.
       if (line.startsWith('data:')) {
         line = line.substring(5).trim();
       }
@@ -588,10 +559,9 @@ class AiCommandService {
             yield content;
           }
         } else {
-          // Some compat layers emit `message.content` instead of `delta`.
-          final message = first['message'];
+          final message = first["message"];
           if (message is Map) {
-            final content = message['content'];
+            final content = message["content"];
             if (content is String && content.isNotEmpty) {
               yield content;
             }
@@ -599,7 +569,6 @@ class AiCommandService {
         }
         if (first['finish_reason'] != null) return;
       } on FormatException {
-        // Skip a malformed line; the stream continues.
         continue;
       }
     }
@@ -615,7 +584,6 @@ class AiCommandService {
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
     request.headers.set('x-goog-api-key', config.apiKey);
 
-    // Vault redaction at the network boundary — see _chatWithOpenAi.
     final redactor = GlobalVaultRedactor.current;
     final contents = history.map((m) {
       return {
@@ -633,7 +601,6 @@ class AiCommandService {
       ]
     });
 
-    // UTF-8 bytes — see _chatWithOpenAi for rationale.
     request.add(utf8.encode(jsonEncode({'contents': contents})));
 
     final response = await request.close().timeout(_responseTimeout);

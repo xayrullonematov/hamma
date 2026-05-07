@@ -50,6 +50,7 @@ dependencies:
   # bindings (lib/core/ai/llama_cpp_bindings.dart).
   ffi: ^2.1.0
   dio: ^5.7.0
+  llama_cpp_dart: ^0.1.1
 
   # Voice-driven mobile ops (Task #29). Both packages are configured
   # for on-device recognition / on-device synthesis only — see

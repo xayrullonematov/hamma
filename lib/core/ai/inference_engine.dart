@@ -1,144 +1,129 @@
 import 'dart:async';
-import 'dart:ffi';
-import 'dart:isolate';
-import 'llama_cpp_bindings.dart';
+import 'dart:io';
+import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 
-/// Service that runs native LLM inference in a dedicated [Isolate].
+/// Service that runs native LLM inference using the llama_cpp_dart package.
 ///
-/// This prevents the heavy CPU/GPU workload of token generation from
-/// blocking the main UI thread, ensuring the app remains responsive
-/// even during long replies.
+/// This engine leverages [LlamaParent] to manage a background Dart Isolate
+/// where the heavy computational work of token generation occurs. This
+/// ensures the main UI thread remains responsive during long replies.
 class InferenceEngine {
-  InferenceEngine({required this.libraryPath});
+  /// Primary constructor.
+  const InferenceEngine();
 
-  final String libraryPath;
+  // Note: These fields are non-final but the class is used as a singleton
+  // in AiCommandService. We manage state internally.
+  static LlamaParent? _llamaParent;
+  static String? _currentModelPath;
 
-  /// Generate a streaming response for [prompt] using the model at [modelPath].
-  ///
-  /// Spawns a dedicated isolate to handle the native loading and execution.
-  /// Each token is streamed back to the main thread as it is generated.
-  ///
-  /// Gracefully handles cleanup of C++ pointers when the stream is cancelled
-  /// or finishes naturally.
-  Stream<String> generate({
-    required String modelPath,
-    required String prompt,
-  }) {
-    final receivePort = ReceivePort();
+  /// Loads a GGUF model from a local path.
+  Future<bool> loadModel(String modelPath) async {
+    // 1. Validate file existence before attempting to load
+    final file = File(modelPath);
+    if (!await file.exists()) {
+      throw Exception('Model file not found at: $modelPath');
+    }
+
+    // 2. Optimization: If the same model is already loaded and ready, skip reloading
+    if (_llamaParent != null &&
+        _currentModelPath == modelPath &&
+        _llamaParent!.status == LlamaStatus.ready) {
+      return true;
+    }
+
+    // 3. Clean up any existing background isolate/resources
+    await dispose();
+
+    try {
+      // 4. Configure model and context parameters. 
+      final modelParams = ModelParams();
+      final contextParams = ContextParams();
+      final samplingParams = SamplerParams();
+
+      final loadCommand = LlamaLoad(
+        path: modelPath,
+        modelParams: modelParams,
+        contextParams: contextParams,
+        samplingParams: samplingParams,
+      );
+
+      // 5. Initialize the Parent manager which handles Isolate lifecycle
+      final parent = LlamaParent(loadCommand);
+      _llamaParent = parent;
+      
+      // init() spawns the LlamaChild isolate and waits for the ready signal
+      await parent.init();
+
+      _currentModelPath = modelPath;
+      return true;
+    } catch (e) {
+      // Ensure we don't leave a half-initialized engine
+      await dispose();
+      throw Exception('Failed to initialize local inference engine: $e');
+    }
+  }
+
+  /// Generates a streaming response for the given [prompt].
+  Stream<String> streamResponse(String prompt, String modelPath) async* {
+    // 1. Ensure the engine is ready with the requested model
+    if (_llamaParent == null || _currentModelPath != modelPath) {
+      await loadModel(modelPath);
+    }
+
+    if (_llamaParent == null) {
+      throw Exception('Inference engine is not initialized.');
+    }
+
+    // 2. Send the prompt to the background isolate. 
+    final promptId = await _llamaParent!.sendPrompt(prompt);
+
+    // 3. Set up a local stream controller to bridge tokens and completion events
     final controller = StreamController<String>();
 
-    // We store the isolate handle so we can kill it if the user cancels.
-    Isolate? isolate;
-
-    controller.onListen = () async {
-      try {
-        isolate = await Isolate.spawn(
-          _inferenceIsolate,
-          _InferenceRequest(
-            libraryPath: libraryPath,
-            modelPath: modelPath,
-            prompt: prompt,
-            sendPort: receivePort.sendPort,
-          ),
-          debugName: 'hamma-inference-worker',
-        );
-      } catch (e) {
-        controller.addError(e);
-        await controller.close();
-      }
-    };
-
-    controller.onCancel = () {
-      receivePort.close();
-      isolate?.kill(priority: Isolate.immediate);
-      isolate = null;
-    };
-
-    receivePort.listen((message) {
-      if (message is String) {
-        controller.add(message);
-      } else if (message == null) {
-        // null sentinel signals completion
-        receivePort.close();
-        controller.close();
-        isolate = null;
-      } else if (message is List && message.first == 'error') {
-        controller.addError(Exception(message.last));
-        receivePort.close();
-        controller.close();
-        isolate = null;
+    // Listen for incremental text tokens from the background isolate
+    final tokenSub = _llamaParent!.stream.listen((token) {
+      if (!controller.isClosed) {
+        controller.add(token);
       }
     });
 
-    return controller.stream;
-  }
-
-  /// Entry point for the inference isolate.
-  ///
-  /// Owns its own [LlamaCppLibrary] instance and native pointers.
-  static void _inferenceIsolate(_InferenceRequest request) {
-    // Open the library in the new isolate.
-    final lib = LlamaCppLibrary.openOrNull(overridePath: request.libraryPath);
-    if (lib == null) {
-      request.sendPort.send(['error', 'Native library not found']);
-      return;
-    }
-
-    Pointer<Void> model = nullptr;
-    Pointer<Void> ctx = nullptr;
+    // Listen for the 'done' signal for this specific prompt
+    final completionSub = _llamaParent!.completions.listen((event) {
+      if (event.promptId == promptId) {
+        if (!event.success) {
+          if (!controller.isClosed) {
+            controller.addError(
+              Exception(event.errorDetails ?? 'Generation failed'),
+            );
+          }
+        }
+        if (!controller.isClosed) {
+          controller.close();
+        }
+      }
+    });
 
     try {
-      lib.backendInit();
-      model = lib.loadModelFromFile(request.modelPath);
-      ctx = lib.newContext(model);
-
-      // --- TOKEN GENERATION LOOP ---------------------------------------------
-      // In a real implementation, this would involve llama_tokenize, 
-      // llama_decode, and llama_sample_token. For this architectural task, 
-      // we yield tokens to demonstrate the isolate/stream plumbing.
-      
-      final demoTokens = [
-        'Hamma ', 'is ', 'generating ', 'this ', 'response ', 'via ', 
-        'a ', 'dedicated ', 'Dart ', 'Isolate ', 'connected ', 'to ', 
-        'libllama.'
-      ];
-
-      for (final token in demoTokens) {
-        // Yield each token back to the main thread immediately.
-        request.sendPort.send(token);
-        
-        // Simulating the blocking time of a real inference step.
-      }
-      // -----------------------------------------------------------------------
-
-      // Signal completion.
-      request.sendPort.send(null);
-    } catch (e) {
-      request.sendPort.send(['error', e.toString()]);
+      // 4. Yield the tokens to the consumer
+      yield* controller.stream;
     } finally {
-      // MANDATORY: Release native resources.
-      if (ctx != nullptr) {
-        lib.freeContext(ctx);
-      }
-      if (model != nullptr) {
-        lib.freeModel(model);
-      }
-      lib.backendFree();
+      // 5. Mandatory cleanup of local listeners to prevent leaks
+      await tokenSub.cancel();
+      await completionSub.cancel();
     }
   }
-}
 
-/// Private message passed to [Isolate.spawn].
-class _InferenceRequest {
-  const _InferenceRequest({
-    required this.libraryPath,
-    required this.modelPath,
-    required this.prompt,
-    required this.sendPort,
-  });
-
-  final String libraryPath;
-  final String modelPath;
-  final String prompt;
-  final SendPort sendPort;
+  /// Properly shuts down the inference engine and kills the background isolate.
+  Future<void> dispose() async {
+    if (_llamaParent != null) {
+      try {
+        await _llamaParent!.dispose();
+      } catch (_) {
+        // Best-effort cleanup
+      } finally {
+        _llamaParent = null;
+        _currentModelPath = null;
+      }
+    }
+  }
 }

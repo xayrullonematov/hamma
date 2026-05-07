@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'llama_cpp_bindings.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'inference_engine.dart';
 import 'llama_server_backend.dart';
 
@@ -14,8 +15,7 @@ import 'llama_server_backend.dart';
 /// it over loopback HTTP. Tests inject [EchoBackend] (or another
 /// custom fake) so the HTTP shim, the streaming protocol and the
 /// onboarding wiring can all be exercised without a native binary.
-/// [LlamaCppBackend] (FFI) is kept as a future option but is
-/// currently disabled — see its docstring.
+/// [LlamaCppBackend] (FFI) is kept as a primary path for mobile.
 ///
 /// Backend implementations MUST be safe to call from a single isolate
 /// (the engine serialises concurrent generate() calls so callers don't
@@ -55,54 +55,22 @@ abstract class InferenceBackend {
   Future<void> dispose();
 }
 
-/// **Future / experimental** backend that talks to `libllama` directly
-/// via FFI. Not used in production — see [LlamaServerBackend] in
-/// `llama_server_backend.dart`, which is the default backend wired
-/// into [BundledEngineController].
-///
-/// Why this exists: the FFI path is a useful fallback for builds where
-/// spawning a subprocess isn't an option (locked-down sandboxes,
-/// future iOS support). The bindings in `llama_cpp_bindings.dart`
-/// cover the symbols a complete implementation would need; the
-/// generation loop itself (token sampling, KV-cache management,
-/// chat-template wiring) is intentionally not wired up here because
-/// the struct ABI of llama.cpp's `llama_batch` / `llama_*_params` is
-/// volatile across upstream releases and would need to be pinned per
-/// release in production. [LlamaServerBackend] sidesteps that by
-/// using upstream's stable HTTP API.
-///
-/// [isAvailable] returns false unless a real `libllama` is present
-/// AND a future implementation flips the gate, so the onboarding UI
-/// silently routes around this path today.
+/// Backend that talks to `libllama` directly via FFI using [InferenceEngine].
+/// Primary path for mobile (Android/iOS) where spawning subprocesses is restricted.
 class LlamaCppBackend implements InferenceBackend {
-  LlamaCppBackend({LlamaCppLibrary? library, String? libraryPath})
-      : _explicitLibrary = library,
-        _libraryPath = libraryPath;
+  LlamaCppBackend();
 
-  final LlamaCppLibrary? _explicitLibrary;
-  final String? _libraryPath;
-  LlamaCppLibrary? _resolvedLibrary;
-  InferenceEngine? _engine;
+  final InferenceEngine _engine = const InferenceEngine();
 
   String _modelId = '';
   String _modelPath = '';
   bool _modelLoaded = false;
 
-  LlamaCppLibrary? get _library {
-    if (_explicitLibrary != null) return _explicitLibrary;
-    _resolvedLibrary ??= LlamaCppLibrary.openOrNull(overridePath: _libraryPath);
-    return _resolvedLibrary;
-  }
-
   @override
   bool get isAvailable {
-    // Now that we have the FFI-based InferenceEngine, we can enable this.
-    // On mobile, this is our primary path.
-    return _library != null;
+    // InferenceEngine is now available on all platforms via llama_cpp_dart.
+    return !kIsWeb;
   }
-
-  /// True iff the underlying shared library is loadable.
-  bool get hasNativeLibrary => _library != null;
 
   @override
   bool get isReady => _modelLoaded;
@@ -112,22 +80,22 @@ class LlamaCppBackend implements InferenceBackend {
 
   @override
   Future<void> loadModel(String modelPath, {String? modelId}) async {
-    final lib = _library;
-    if (lib == null) {
-      throw StateError('libllama is not bundled with this build.');
-    }
     if (!File(modelPath).existsSync()) {
       throw StateError('Model file not found: $modelPath');
     }
     
+    // We try to load the model. This will throw if the native library is missing.
+    try {
+      await _engine.loadModel(modelPath);
+    } catch (e) {
+      throw StateError('Failed to load local inference model: $e');
+    }
+
     _modelPath = modelPath;
     _modelLoaded = true;
     _modelId = modelId?.trim().isNotEmpty == true
         ? modelId!.trim()
         : _deriveModelId(modelPath);
-
-    // Initialize the Isolate-based engine.
-    _engine = InferenceEngine(libraryPath: _libraryPath ?? 'llama');
   }
 
   static String _deriveModelId(String path) {
@@ -141,24 +109,23 @@ class LlamaCppBackend implements InferenceBackend {
     double? temperature,
     int? maxTokens,
   }) {
-    if (!_modelLoaded || _engine == null) {
+    if (!_modelLoaded) {
       throw StateError('LlamaCppBackend.generate called before loadModel');
     }
 
-    // Convert chat messages to a single prompt for the demo engine.
-    final prompt = messages.map((m) => '${m['role']}: ${m['content']}').join('\n');
+    // Convert chat messages to a single prompt.
+    // In a real implementation, we would use a proper chat template for the model.
+    final prompt = '${messages.map((m) => '${m['role']}: ${m['content']}').join('\n')}\nassistant:';
 
-    return _engine!.generate(
-      modelPath: _modelPath,
-      prompt: prompt,
-    );
+    return _engine.streamResponse(prompt, _modelPath);
   }
 
   @override
   Future<void> dispose() async {
+    await _engine.dispose();
     _modelLoaded = false;
     _modelId = '';
-    _engine = null;
+    _modelPath = '';
   }
 }
 
@@ -298,8 +265,7 @@ class BundledEngine {
     if (!_snapshots.isClosed) _snapshots.add(s);
   }
 
-  /// Load [modelPath] and start the loopback shim. Idempotent: calling
-  /// twice tears down the previous server / model first.
+  /// Start the loopback server and load [modelPath]. Throws on failure.
   Future<void> start({
     required String modelPath,
     String? modelId,
@@ -352,96 +318,63 @@ class BundledEngine {
     }
     try {
       await _backend.dispose();
-    } catch (_) {/* swallow during teardown */}
+    } catch (_) {/* best-effort */}
   }
 
-  /// Permanently dispose this instance. Use for tests; in production
-  /// the controller keeps the engine alive for the app's lifetime.
+  /// Frees all resources.
   Future<void> dispose() async {
     await stop();
     await _snapshots.close();
   }
 
-  // ---- HTTP shim ------------------------------------------------------------
+  // ---- HTTP logic -----------------------------------------------------------
 
-  Future<void> _handleRequest(HttpRequest req) async {
-    // Defence in depth: refuse anything that didn't arrive on
-    // loopback. `bind(loopbackIPv4)` already enforces this at the
-    // socket layer, but if a future change ever flips the bind, the
-    // check below keeps the zero-trust guarantee.
-    final remote = req.connectionInfo?.remoteAddress;
-    if (remote != null && !remote.isLoopback) {
-      req.response.statusCode = HttpStatus.forbidden;
-      await req.response.close();
-      return;
-    }
-    try {
-      final path = req.uri.path;
-      if (req.method == 'GET' && path == '/v1/models') {
-        await _writeJson(req, {
-          'object': 'list',
-          'data': [
-            {
-              'id': _backend.currentModelId,
-              'object': 'model',
-              'owned_by': 'hamma-bundled',
-            }
-          ],
-        });
-        return;
-      }
-      if (req.method == 'GET' && path == '/api/version') {
-        // Compatibility with `LocalEngineHealthMonitor`'s tier-1 probe.
-        await _writeJson(req, {'version': 'bundled-1.0.0'});
-        return;
-      }
-      if (req.method == 'POST' && path == '/v1/chat/completions') {
-        await _handleChatCompletions(req);
-        return;
-      }
+  void _handleRequest(HttpRequest req) {
+    if (req.method == 'GET' && req.uri.path == '/v1/models') {
+      _handleListModels(req);
+    } else if (req.method == 'POST' && req.uri.path == '/v1/chat/completions') {
+      _handleChatCompletions(req);
+    } else {
       req.response.statusCode = HttpStatus.notFound;
-      await req.response.close();
-    } catch (e) {
-      try {
-        req.response.statusCode = HttpStatus.internalServerError;
-        req.response.write(jsonEncode({'error': {'message': e.toString()}}));
-        await req.response.close();
-      } catch (_) {/* connection already gone */}
+      req.response.close();
     }
   }
 
-  static Future<void> _writeJson(HttpRequest req, Object body) async {
+  void _handleListModels(HttpRequest req) {
+    final payload = {
+      'object': 'list',
+      'data': [
+        {
+          'id': _backend.currentModelId,
+          'object': 'model',
+          'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          'owned_by': 'hamma-bundled',
+        }
+      ],
+    };
     req.response.headers.contentType = ContentType.json;
-    req.response.write(jsonEncode(body));
-    await req.response.close();
+    req.response.write(jsonEncode(payload));
+    req.response.close();
   }
 
   Future<void> _handleChatCompletions(HttpRequest req) async {
     final body = await utf8.decoder.bind(req).join();
-    Map<String, dynamic> payload;
+    Map<String, dynamic> decoded;
     try {
-      final decoded = jsonDecode(body);
-      if (decoded is! Map<String, dynamic>) {
-        throw const FormatException('expected JSON object');
-      }
-      payload = decoded;
-    } on FormatException catch (e) {
+      decoded = jsonDecode(body) as Map<String, dynamic>;
+    } catch (_) {
       req.response.statusCode = HttpStatus.badRequest;
-      req.response.write(jsonEncode({
-        'error': {'message': 'invalid request: $e'},
-      }));
-      await req.response.close();
+      req.response.close();
       return;
     }
 
-    final stream = (payload['stream'] == true);
-    final temperature = _readDouble(payload['temperature']);
-    final maxTokens = _readInt(payload['max_tokens']);
-    final messages = _readMessages(payload['messages']);
+    final messages = _readMessages(decoded['messages']);
+    final temperature = _readDouble(decoded['temperature']) ?? 0.7;
+    final maxTokens = _readInt(decoded['max_tokens']);
+    final stream = decoded['stream'] == true;
 
     if (!stream) {
-      // Synchronous path — gather the full reply, then return one
-      // OpenAI-shaped object.
+      // Non-streaming fallback for simple clients.
       final buf = StringBuffer();
       try {
         await for (final chunk in _backend.generate(
@@ -453,15 +386,16 @@ class BundledEngine {
         }
       } catch (e) {
         req.response.statusCode = HttpStatus.internalServerError;
-        req.response.write(jsonEncode({
-          'error': {'message': e.toString()},
-        }));
+        req.response.write(jsonEncode({'error': e.toString()}));
         await req.response.close();
         return;
       }
-      await _writeJson(req, {
+
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(jsonEncode({
         'id': 'bundled-${DateTime.now().millisecondsSinceEpoch}',
         'object': 'chat.completion',
+        'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
         'model': _backend.currentModelId,
         'choices': [
           {
@@ -470,7 +404,8 @@ class BundledEngine {
             'finish_reason': 'stop',
           }
         ],
-      });
+      }));
+      await req.response.close();
       return;
     }
 
