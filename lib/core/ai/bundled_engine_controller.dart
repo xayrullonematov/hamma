@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import 'bundled_engine.dart';
 import 'llama_server_backend.dart';
+
+import 'hardware_detector.dart';
 
 /// Process-wide singleton that owns the [BundledEngine] for the app.
 ///
@@ -19,19 +22,42 @@ class BundledEngineController {
   static BundledEngine? _instance;
 
   /// Returns the active engine, lazily detecting the best available
-  /// backend on first access.
-  ///
-  /// On desktop it prefers [LlamaServerBackend] (subprocess) if the
-  /// binary is present; otherwise it falls back to [LlamaCppBackend]
-  /// (FFI), which is also the primary path for mobile.
-  static BundledEngine get instance {
+  /// backend on first access using an Ollama-inspired runner strategy.
+  static Future<BundledEngine> get instance async {
     if (_instance == null) {
-      final serverBackend = LlamaServerBackend();
-      if (serverBackend.isAvailable) {
-        _instance = BundledEngine(backend: serverBackend);
-      } else {
-        _instance = BundledEngine(backend: LlamaCppBackend());
+      final features = await HardwareDetector.detect();
+      final strategies = RunnerStrategy.getApplicable(features);
+      
+      InferenceBackend? bestBackend;
+      
+      // Look for the best available runner among applicable strategies.
+      for (final strategy in strategies) {
+        // Try Subprocess Strategy (Ollama's preferred runner style)
+        for (final binary in strategy.binaryCandidates) {
+          final backend = LlamaServerBackend(binaryPath: binary);
+          if (backend.isAvailable) {
+            debugPrint('BundledEngine: Using ${strategy.name} subprocess runner: $binary');
+            bestBackend = backend;
+            break;
+          }
+        }
+        if (bestBackend != null) break;
+
+        // Try FFI Strategy (fallback or primary mobile path)
+        for (final library in strategy.libraryCandidates) {
+          final backend = LlamaCppBackend(libraryPath: library);
+          if (backend.isAvailable) {
+            debugPrint('BundledEngine: Using ${strategy.name} FFI runner: $library');
+            bestBackend = backend;
+            break;
+          }
+        }
+        if (bestBackend != null) break;
       }
+
+      // If absolutely nothing is found, use the generic FFI backend
+      // as it will provide the best diagnostic error messages.
+      _instance = BundledEngine(backend: bestBackend ?? LlamaCppBackend());
     }
     return _instance!;
   }

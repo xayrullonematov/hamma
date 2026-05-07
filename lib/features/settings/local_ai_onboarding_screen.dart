@@ -65,8 +65,26 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
   String? _builtInError;
   String? _builtInEndpoint;
 
-  BundledEngine get _engine =>
-      widget.engine ?? BundledEngineController.instance;
+  BundledEngine? _resolvedEngine;
+
+  BundledEngine? get _engine => widget.engine ?? _resolvedEngine;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.engine == null) {
+      _initEngine();
+    }
+  }
+
+  Future<void> _initEngine() async {
+    final engine = await BundledEngineController.instance;
+    if (mounted) {
+      setState(() {
+        _resolvedEngine = engine;
+      });
+    }
+  }
 
   String get _osLabel {
     if (Platform.isLinux) return 'Linux';
@@ -79,7 +97,7 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
 
   bool get _builtInSupportedOnThisOs {
     // We now support the built-in engine on mobile via the FFI path.
-    return _engine.isAvailable;
+    return _engine?.isAvailable ?? false;
   }
 
   String get _installSnippet {
@@ -184,11 +202,11 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
       _isStartingEngine = true;
     });
     try {
-      await _engine.start(modelPath: modelPath, modelId: _selectedModel.id);
+      await _engine?.start(modelPath: modelPath, modelId: _selectedModel.id);
       if (!mounted) return;
       setState(() {
         _isStartingEngine = false;
-        _builtInEndpoint = _engine.endpoint;
+        _builtInEndpoint = _engine?.endpoint;
         _step = 2; // success step
       });
     } catch (e) {

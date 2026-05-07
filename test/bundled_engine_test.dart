@@ -216,7 +216,7 @@ void main() {
     test('overrideForTesting swaps the singleton', () async {
       final fake = BundledEngine(backend: EchoBackend());
       BundledEngineController.overrideForTesting(fake);
-      expect(identical(BundledEngineController.instance, fake), isTrue);
+      expect(identical(await BundledEngineController.instance, fake), isTrue);
       expect(BundledEngineController.isWired, isTrue);
     });
 

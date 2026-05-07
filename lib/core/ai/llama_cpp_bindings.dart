@@ -1,7 +1,9 @@
 // ignore_for_file: camel_case_types
 import 'dart:ffi';
+import 'dart:io';
 
 import 'package:ffi/ffi.dart';
+import 'package:path/path.dart' as p;
 
 /// Minimal Dart FFI typedefs for the public llama.cpp C API.
 ///
@@ -54,26 +56,49 @@ class LlamaCppLibrary {
   }
 
   static DynamicLibrary _openPlatformDefault() {
-    // We deliberately don't import `dart:io` here — the FFI bindings
-    // module stays platform-agnostic so unit tests on environments
-    // without `dart:io` work too. The caller decides per-OS naming.
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    
+    // We look in standard Flutter bundle locations for each OS.
     final candidates = <String>[
+      // Direct name (system path or Android native lib path)
       'libllama.so',
       'libllama.dylib',
       'llama.dll',
-      'lib/libllama.so',
-      'lib/libllama.dylib',
+      
+      // Desktop Bundle layouts
+      p.join(exeDir, 'lib', 'libllama.so'),
+      p.join(exeDir, 'libllama.so'),
+      p.join(exeDir, 'libllama.dylib'),
+      p.join(exeDir, 'llama.dll'),
+      
+      // macOS .app/Contents/Frameworks/
+      p.join(exeDir, '..', 'Frameworks', 'libllama.dylib'),
+      
+      // Fallback for development / custom installs
+      '/usr/local/lib/libllama.so',
+      '/usr/local/lib/libllama.dylib',
     ];
+
     Object? lastError;
-    for (final name in candidates) {
+    for (final path in candidates) {
       try {
-        return DynamicLibrary.open(name);
+        return DynamicLibrary.open(path);
       } catch (e) {
         lastError = e;
       }
     }
+    
+    // If all fail, try opening by just the name (last resort)
+    try {
+      if (Platform.isWindows) return DynamicLibrary.open('llama.dll');
+      if (Platform.isMacOS) return DynamicLibrary.open('libllama.dylib');
+      return DynamicLibrary.open('libllama.so');
+    } catch (e) {
+      lastError = e;
+    }
+
     throw StateError(
-      'Could not locate libllama. Tried: ${candidates.join(', ')}. '
+      'Could not locate libllama. Tried ${candidates.length} candidates. '
       'Last error: $lastError',
     );
   }
