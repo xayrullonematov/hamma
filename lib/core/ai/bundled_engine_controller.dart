@@ -18,12 +18,22 @@ class BundledEngineController {
 
   static BundledEngine? _instance;
 
-  /// Returns the active engine, lazily creating one (with the default
-  /// [LlamaServerBackend]) on first access. The backend wraps the
-  /// upstream `llama-server` binary — see `native/README.md` for how
-  /// the per-OS side-car gets built and bundled.
+  /// Returns the active engine, lazily detecting the best available
+  /// backend on first access.
+  ///
+  /// On desktop it prefers [LlamaServerBackend] (subprocess) if the
+  /// binary is present; otherwise it falls back to [LlamaCppBackend]
+  /// (FFI), which is also the primary path for mobile.
   static BundledEngine get instance {
-    return _instance ??= BundledEngine(backend: LlamaServerBackend());
+    if (_instance == null) {
+      final serverBackend = LlamaServerBackend();
+      if (serverBackend.isAvailable) {
+        _instance = BundledEngine(backend: serverBackend);
+      } else {
+        _instance = BundledEngine(backend: LlamaCppBackend());
+      }
+    }
+    return _instance!;
   }
 
   /// True when the controller has been wired (either by `instance`

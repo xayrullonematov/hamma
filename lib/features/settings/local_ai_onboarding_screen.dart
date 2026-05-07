@@ -353,9 +353,10 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
               ? 'Recommended. Hamma downloads a small model and runs '
                   'inference inside the app — no external daemon, no '
                   'extra installs.'
-              : 'Not available on $_osLabel — the bundled engine '
-                  'requires a desktop build with libllama. Use the '
-                  'external option instead.',
+              : 'Not available — the bundled engine requires the '
+                  'native libllama component to be present in this build. '
+                  'Use the external option instead.',
+
           recommended: _builtInSupportedOnThisOs,
           enabled: _builtInSupportedOnThisOs,
           onTap: _builtInSupportedOnThisOs

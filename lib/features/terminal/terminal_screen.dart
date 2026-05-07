@@ -441,21 +441,22 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (_suggestions.isEmpty) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+    final isControlPressed = HardwareKeyboard.instance.isControlPressed;
+
+    if (isControlPressed && event.logicalKey == LogicalKeyboardKey.arrowRight) {
       setState(() {
         _selectedSuggestionIndex =
             (_selectedSuggestionIndex + 1) % _suggestions.length;
       });
       return KeyEventResult.handled;
-    } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+    } else if (isControlPressed && event.logicalKey == LogicalKeyboardKey.arrowLeft) {
       setState(() {
         _selectedSuggestionIndex =
             (_selectedSuggestionIndex - 1 + _suggestions.length) %
             _suggestions.length;
       });
       return KeyEventResult.handled;
-    } else if (event.logicalKey == LogicalKeyboardKey.tab ||
-        event.logicalKey == LogicalKeyboardKey.enter) {
+    } else if (isControlPressed && event.logicalKey == LogicalKeyboardKey.tab) {
       _acceptSuggestion();
       return KeyEventResult.handled;
     } else if (event.logicalKey == LogicalKeyboardKey.escape) {
@@ -493,126 +494,116 @@ class _TerminalScreenState extends State<TerminalScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: Focus(
-              onKeyEvent: _handleKeyEvent,
-              child: GestureDetector(
-                onTap: () => _terminalFocusNode.requestFocus(),
-                child: Container(
-                  margin: EdgeInsets.symmetric(
-                    horizontal: _isDesktop ? 16 : 8,
-                    vertical: _isDesktop ? 0 : 8,
-                  ),
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.zero,
-                    child: TerminalView(
-                      _terminal,
-                      focusNode: _terminalFocusNode,
-                      autofocus: true,
-                      theme: terminalTheme,
-                      textStyle: TerminalStyle(
-                        fontSize: _fontSize,
-                        fontFamily: _fontFamily,
+          Column(
+            children: [
+              Expanded(
+                child: Focus(
+                  onKeyEvent: _handleKeyEvent,
+                  child: GestureDetector(
+                    onTap: () => _terminalFocusNode.requestFocus(),
+                    child: Container(
+                      margin: EdgeInsets.symmetric(
+                        horizontal: _isDesktop ? 16 : 8,
+                        vertical: _isDesktop ? 0 : 8,
                       ),
-                      hardwareKeyboardOnly: _isDesktop,
-                      onTapUp: (details, position) {
-                        _terminalFocusNode.requestFocus();
-                      },
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.zero,
+                        child: TerminalView(
+                          _terminal,
+                          focusNode: _terminalFocusNode,
+                          autofocus: true,
+                          theme: terminalTheme,
+                          textStyle: TerminalStyle(
+                            fontSize: _fontSize,
+                            fontFamily: _fontFamily,
+                          ),
+                          hardwareKeyboardOnly: _isDesktop,
+                          onTapUp: (details, position) {
+                            _terminalFocusNode.requestFocus();
+                          },
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
+              ValueListenableBuilder<ConnectionStatus>(
+                valueListenable: widget.sshService.statusNotifier,
+                builder: (context, status, _) => _buildToolbar(status.isConnected),
+              ),
+              if (_isDesktop) const SizedBox(height: 16),
+            ],
+          ),
+          if (_isDesktop && _suggestions.isNotEmpty)
+            Positioned(
+              top: 0,
+              right: 16,
+              child: _buildPredictivePalette(),
             ),
-          ),
-          if (_isDesktop && _suggestions.isNotEmpty) _buildPredictiveBar(),
-          ValueListenableBuilder<ConnectionStatus>(
-            valueListenable: widget.sshService.statusNotifier,
-            builder: (context, status, _) => _buildToolbar(status.isConnected),
-          ),
-          if (_isDesktop) const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  // Removed redundant _buildStatusHeader as information is in the sidebar.
-
-  Widget _buildPredictiveBar() {
+  Widget _buildPredictivePalette() {
     return Container(
-      height: 48,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      width: 240,
       decoration: BoxDecoration(
-        color: _panelColor,
-        border: Border.all(color: AppColors.border),
+        color: Colors.black,
+        border: Border.all(color: Colors.white, width: 2),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            color: AppColors.accent,
-            child: const Center(
-              child: Text(
-                'SUGGEST',
-                style: TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 10,
-                  letterSpacing: 1.2,
-                ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            color: Colors.white,
+            child: const Text(
+              'COMMAND SUGGESTIONS',
+              style: TextStyle(
+                color: Colors.black,
+                fontFamily: AppColors.monoFamily,
+                fontWeight: FontWeight.w900,
+                fontSize: 10,
+                letterSpacing: 1.0,
               ),
             ),
           ),
-          Expanded(
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _suggestions.length,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              itemBuilder: (context, index) {
-                final isSelected = index == _selectedSuggestionIndex;
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected ? Colors.white : Colors.transparent,
-                        border: Border.all(
-                          color: isSelected ? Colors.white : Colors.transparent,
-                        ),
-                      ),
-                      child: Text(
-                        _suggestions[index],
-                        style: TextStyle(
-                          color: isSelected ? Colors.black : Colors.white,
-                          fontFamily: AppColors.monoFamily,
-                          fontSize: 12,
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
+          const SizedBox(height: 4),
+          ...List.generate(_suggestions.length, (index) {
+            final isSelected = index == _selectedSuggestionIndex;
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              color: isSelected ? Colors.white : Colors.transparent,
+              child: Text(
+                _suggestions[index],
+                style: TextStyle(
+                  color: isSelected ? Colors.black : Colors.white,
+                  fontFamily: AppColors.monoFamily,
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            );
+          }),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: Colors.white24)),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Text(
-              'ARROWS TO NAV • TAB TO PICK',
+            child: const Text(
+              'CTRL+ARROWS TO NAV\nCTRL+TAB TO PICK',
               style: TextStyle(
-                color: AppColors.textFaint,
+                color: Colors.white54,
+                fontFamily: AppColors.monoFamily,
                 fontSize: 9,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.5,
+                height: 1.4,
               ),
             ),
           ),
