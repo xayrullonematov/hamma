@@ -11,6 +11,52 @@ class InferenceEngine {
   /// Primary constructor.
   const InferenceEngine();
 
+  /// Ensures the native llama.cpp library is loaded on desktop platforms.
+  ///
+  /// On Android, the package handles this automatically. On Linux, macOS,
+  /// and Windows, we must explicitly set [Llama.libraryPath] before the
+  /// engine is initialized, as DynamicLibrary.process() fails in
+  /// notarised/bundled environments.
+  static void ensureNativeLibraryLoaded() {
+    if (Platform.isAndroid) return;
+
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    final String? libraryName;
+    final List<String> candidates;
+
+    if (Platform.isLinux) {
+      libraryName = 'libllama.so';
+      candidates = [
+        '$exeDir/lib/$libraryName',
+        '$exeDir/$libraryName',
+      ];
+    } else if (Platform.isMacOS) {
+      libraryName = 'libllama.dylib';
+      candidates = [
+        '$exeDir/../Frameworks/$libraryName',
+        '$exeDir/$libraryName',
+      ];
+    } else if (Platform.isWindows) {
+      libraryName = 'llama.dll';
+      candidates = [
+        '$exeDir/$libraryName',
+      ];
+    } else {
+      return;
+    }
+
+    for (final path in candidates) {
+      if (File(path).existsSync()) {
+        Llama.libraryPath = path;
+        return;
+      }
+    }
+
+    // If we reach here on a desktop platform, we didn't find the library.
+    // We let the engine fail naturally later with a clear error.
+    Llama.libraryPath = null;
+  }
+
   // Note: These fields are non-final but the class is used as a singleton
   // in AiCommandService. We manage state internally.
   static LlamaParent? _llamaParent;
