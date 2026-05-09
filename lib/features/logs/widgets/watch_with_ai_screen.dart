@@ -311,6 +311,7 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
           onRunCommand: (_) async => null,
           executionUnavailableMessage:
               'Open the terminal to run commands; this view only inspects logs.',
+          isModal: !Breakpoints.isDesktop(context),
         );
 
     // Dock at desktop widths when a CopilotDock is installed; else modal.

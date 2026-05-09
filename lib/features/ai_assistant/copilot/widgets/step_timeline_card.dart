@@ -41,15 +41,8 @@ class StepTimelineCard extends StatelessWidget {
       decoration: const BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.zero,
-        boxShadow: [
-          BoxShadow(
-            color: kCopilotShadowColor,
-            blurRadius: 20,
-            offset: Offset(0, 10),
-          ),
-        ],
       ),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -58,41 +51,34 @@ class StepTimelineCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  title,
-                  style: theme.textTheme.titleMedium?.copyWith(
+                  title.toUpperCase(),
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 11,
+                    letterSpacing: 1.2,
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: stateColor.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: Text(
-                  stateLabel,
-                  style: TextStyle(
-                    color: stateColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
+              Text(
+                stateLabel,
+                style: TextStyle(
+                  color: stateColor,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 10,
+                  letterSpacing: 1.0,
                 ),
               ),
             ],
           ),
           if (warningText != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.danger.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.zero,
+                color: AppColors.danger.withValues(alpha: 0.1),
+                border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
               ),
               child: Text(
                 warningText!,
@@ -103,63 +89,67 @@ class StepTimelineCard extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           TextField(
             controller: controller,
             maxLines: null,
             onChanged: onChanged,
-            style: theme.textTheme.bodyMedium?.copyWith(
+            style: const TextStyle(
               color: Colors.white,
               fontFamily: 'monospace',
+              fontSize: 12,
             ),
             decoration: InputDecoration(
               filled: true,
               fillColor: AppColors.panel,
               contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
+                horizontal: 12,
+                vertical: 10,
               ),
-              border: OutlineInputBorder(
+              border: const OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(color: AppColors.border, width: 1),
+                borderSide: BorderSide(color: AppColors.border, width: 0.5),
               ),
-              enabledBorder: OutlineInputBorder(
+              enabledBorder: const OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(color: AppColors.border, width: 1),
+                borderSide: BorderSide(color: AppColors.border, width: 0.5),
               ),
-              focusedBorder: OutlineInputBorder(
+              focusedBorder: const OutlineInputBorder(
                 borderRadius: BorderRadius.zero,
-                borderSide: const BorderSide(
+                borderSide: BorderSide(
                   color: AppColors.textPrimary,
-                  width: 1.2,
+                  width: 0.8,
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               RiskBadge(label: riskLabel, color: riskColor),
-              Text(
-                riskExplanation,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.textMuted,
-                  height: 1.4,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  riskExplanation,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.textMuted,
+                    height: 1.4,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerRight,
-            child: FilledButton.icon(
+            child: OutlinedButton.icon(
               onPressed: isBusy ? null : onRun,
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.textPrimary,
-                foregroundColor: AppColors.scaffoldBackground,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+                side: const BorderSide(color: AppColors.border, width: 0.5),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 shape: const RoundedRectangleBorder(
                   borderRadius: BorderRadius.zero,
                 ),
@@ -167,15 +157,22 @@ class StepTimelineCard extends StatelessWidget {
               icon:
                   isRunning
                       ? const SizedBox(
-                        width: 16,
-                        height: 16,
+                        width: 14,
+                        height: 14,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppColors.scaffoldBackground,
+                          strokeWidth: 1.5,
+                          color: AppColors.textPrimary,
                         ),
                       )
-                      : const Icon(Icons.play_arrow_rounded),
-              label: const Text('Run'),
+                      : const Icon(Icons.play_arrow_rounded, size: 16),
+              label: const Text(
+                'RUN',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                  letterSpacing: 1.2,
+                ),
+              ),
             ),
           ),
         ],

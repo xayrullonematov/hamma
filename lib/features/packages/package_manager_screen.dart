@@ -39,6 +39,22 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> with Automa
   void initState() {
     super.initState();
     _initialize();
+    widget.sshService.statusNotifier.addListener(_onConnectionStatusChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.sshService.statusNotifier.removeListener(_onConnectionStatusChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onConnectionStatusChanged() {
+    final status = widget.sshService.statusNotifier.value;
+    // Auto-refresh when transitioning from a disconnected/failed state to connected.
+    if (status.isConnected && _upgradablePackages.isEmpty && !_isLoading) {
+      _initialize();
+    }
   }
 
   Future<void> _initialize() async {

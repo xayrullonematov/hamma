@@ -418,6 +418,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
           },
           executionUnavailableMessage:
               'Commands can only be run when the terminal is connected.',
+          isModal: !Breakpoints.isDesktop(context),
         );
 
     // Dock at desktop widths when a CopilotDock is installed; else modal.
@@ -425,7 +426,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
     if (dock != null && Breakpoints.isDesktop(context)) {
       dock.open(
         CopilotDockRequest(
-          title: 'AI COPILOT — ${widget.serverName.toUpperCase()}',
+          title: widget.serverName.toUpperCase(),
           builder: buildBody,
         ),
       );
@@ -495,7 +496,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
           IconButton(
             onPressed: _openCopilot,
             icon: const Icon(Icons.smart_toy_outlined),
-            tooltip: 'AI Copilot',
+            tooltip: 'Copilot',
           ),
           const SizedBox(width: 8),
         ],

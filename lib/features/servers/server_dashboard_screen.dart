@@ -479,7 +479,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
                   icon: docked
                       ? Icons.smart_toy
                       : Icons.smart_toy_outlined,
-                  label: docked ? 'Hide Copilot' : 'AI Copilot',
+                  label: docked ? 'Hide Copilot' : 'Copilot',
                 ),
                 isActive: docked,
                 isEnabled: isConnected,
@@ -532,7 +532,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
     if (Breakpoints.isDesktop(context)) {
       _copilotDock.open(
         CopilotDockRequest(
-          title: 'AI COPILOT — ${_server.name.toUpperCase()}',
+          title: _server.name.toUpperCase(),
           builder: buildBody,
         ),
       );
@@ -701,7 +701,14 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
             ),
           ),
           const Divider(height: 1, thickness: 1, color: AppColors.border),
-          Expanded(child: _buildTabContent()),
+          const Expanded(
+            child: Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.textFaint,
+              ),
+            ),
+          ),
         ],
       );
     }
@@ -1597,6 +1604,7 @@ class _DockedCopilotShell extends StatelessWidget {
       },
       executionUnavailableMessage:
           'Connect to the server to run suggested commands.',
+      isModal: false,
     );
   }
 }

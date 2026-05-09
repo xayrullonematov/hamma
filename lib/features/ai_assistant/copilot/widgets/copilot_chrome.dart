@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 
-const Color kCopilotShadowColor = Color(0x22000000);
-
 class StepNode extends StatelessWidget {
   const StepNode({super.key, required this.number});
 
@@ -12,10 +10,10 @@ class StepNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 34,
-      height: 34,
+      width: 24,
+      height: 24,
       decoration: BoxDecoration(
-        color: AppColors.textPrimary.withValues(alpha: 0.18),
+        border: Border.all(color: AppColors.border),
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
@@ -24,6 +22,7 @@ class StepNode extends StatelessWidget {
         style: const TextStyle(
           color: AppColors.textPrimary,
           fontWeight: FontWeight.w700,
+          fontSize: 10,
         ),
       ),
     );
@@ -39,9 +38,10 @@ class RiskBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.14),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.zero,
       ),
       child: Text(
@@ -49,8 +49,8 @@ class RiskBadge extends StatelessWidget {
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.w800,
-          fontSize: 12,
-          letterSpacing: 0.2,
+          fontSize: 11,
+          letterSpacing: 0.5,
         ),
       ),
     );
@@ -58,31 +58,43 @@ class RiskBadge extends StatelessWidget {
 }
 
 class ChatBubble extends StatelessWidget {
-  const ChatBubble({super.key, required this.child});
+  const ChatBubble({super.key, required this.child, this.isUser = false});
 
   final Widget child;
+  final bool isUser;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-          bottomRight: Radius.circular(24),
-          bottomLeft: Radius.circular(8),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isUser ? AppColors.scaffoldBackground : AppColors.surface,
+        border: const Border(
+          bottom: BorderSide(color: AppColors.border, width: 0.5),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: kCopilotShadowColor,
-            blurRadius: 18,
-            offset: Offset(0, 10),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.border),
+              color: isUser ? AppColors.panel : AppColors.primary.withValues(alpha: 0.1),
+            ),
+            alignment: Alignment.center,
+            child: Icon(
+              isUser ? Icons.person_outline : Icons.auto_awesome_outlined,
+              size: 14,
+              color: isUser ? AppColors.textMuted : AppColors.primary,
+            ),
           ),
+          const SizedBox(width: 16),
+          Expanded(child: child),
         ],
       ),
-      child: child,
     );
   }
 }
@@ -94,26 +106,7 @@ class UserChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: AppColors.panel,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
-          bottomRight: Radius.circular(8),
-          bottomLeft: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: kCopilotShadowColor,
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: child,
-    );
+    return ChatBubble(isUser: true, child: child);
   }
 }
 
@@ -125,28 +118,27 @@ class LoadingBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.zero,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(
-            width: 18,
-            height: 18,
+            width: 14,
+            height: 14,
             child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: AppColors.textPrimary,
+              strokeWidth: 1.5,
+              color: AppColors.textMuted,
             ),
           ),
           const SizedBox(width: 12),
           Flexible(
             child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.textMuted,
+              label.toUpperCase(),
+              style: const TextStyle(
+                color: AppColors.textFaint,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2,
               ),
             ),
           ),
@@ -171,27 +163,25 @@ class EmptyMessageCard extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.zero,
-      ),
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            title,
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
+            title.toUpperCase(),
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w800,
+              fontSize: 11,
+              letterSpacing: 1.5,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Text(
             message,
             style: theme.textTheme.bodySmall?.copyWith(
               color: AppColors.textMuted,
-              height: 1.45,
+              height: 1.6,
             ),
           ),
         ],
@@ -210,32 +200,35 @@ class ExecutionOutputCard extends StatelessWidget {
     return Container(
       decoration: const BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.zero,
+        border: Border(top: BorderSide(color: AppColors.border)),
       ),
       padding: const EdgeInsets.all(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Execution Output',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
+          const Text(
+            'EXECUTION OUTPUT',
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.4,
             ),
           ),
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(14),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.scaffoldBackground,
-              borderRadius: BorderRadius.zero,
+              border: Border.all(color: AppColors.border),
             ),
             child: SelectableText(
               output,
               style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontFamily: 'monospace',
+                fontSize: 12,
                 height: 1.45,
               ),
             ),

@@ -36,12 +36,21 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> with 
   void initState() {
     super.initState();
     _fetchServices();
+    widget.sshService.statusNotifier.addListener(_onConnectionStatusChanged);
   }
 
   @override
   void dispose() {
+    widget.sshService.statusNotifier.removeListener(_onConnectionStatusChanged);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onConnectionStatusChanged() {
+    final status = widget.sshService.statusNotifier.value;
+    if (status.isConnected && _allServices.isEmpty && !_isLoading) {
+      _fetchServices();
+    }
   }
 
   Future<void> _fetchServices() async {

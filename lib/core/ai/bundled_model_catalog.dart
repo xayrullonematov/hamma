@@ -100,11 +100,11 @@ class BundledModelCatalog {
       displayName: 'Gemma 3 1B (Q4_K_M)',
       summary:
           'Tiny but capable instruction-tuned model from Google. Runs on '
-          'almost any laptop. ~750 MB on disk.',
+          'almost any laptop. ~806 MB on disk.',
       downloadUrl:
-          'https://huggingface.co/google/gemma-3-1b-it-qat-q4_0-gguf/'
-          'resolve/main/gemma-3-1b-it-q4_0.gguf',
-      sizeBytes: 750 * 1024 * 1024,
+          'https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/'
+          'resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf',
+      sizeBytes: 806 * 1024 * 1024,
       parameterCount: '1B',
       quantization: 'Q4_K_M',
       recommended: true,
