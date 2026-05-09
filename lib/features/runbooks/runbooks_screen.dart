@@ -32,11 +32,14 @@ class RunbooksScreen extends StatefulWidget {
   State<RunbooksScreen> createState() => _RunbooksScreenState();
 }
 
-class _RunbooksScreenState extends State<RunbooksScreen> {
+class _RunbooksScreenState extends State<RunbooksScreen> with AutomaticKeepAliveClientMixin<RunbooksScreen> {
   final RunbookStorage _storage = const RunbookStorage();
   StreamSubscription<void>? _changeSub;
   List<Runbook> _userRunbooks = const [];
   bool _loading = true;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -190,6 +193,7 @@ class _RunbooksScreenState extends State<RunbooksScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_loading) {
       return const Center(
         child: SizedBox(

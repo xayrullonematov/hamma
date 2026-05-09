@@ -61,7 +61,7 @@ class TerminalScreen extends StatefulWidget {
   State<TerminalScreen> createState() => _TerminalScreenState();
 }
 
-class _TerminalScreenState extends State<TerminalScreen> {
+class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAliveClientMixin<TerminalScreen> {
   static const _maxContextChars = 3500;
   static const _panelColor = AppColors.panel;
 
@@ -72,6 +72,9 @@ class _TerminalScreenState extends State<TerminalScreen> {
   StreamSubscription<Uint8List>? _stderrSubscription;
   String _recentTerminalOutput = '';
   bool _isFullScreen = false;
+
+  @override
+  bool get wantKeepAlive => true;
 
   // Predictive Commands State
   String _currentLineBuffer = '';
@@ -186,13 +189,15 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void _handleStatusChange() {
     if (!mounted) return;
     final status = widget.sshService.currentStatus;
-    
+
     if (status.isConnected && _session == null) {
       _openShell();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _terminalFocusNode.requestFocus();
       });
     } else if (!status.isConnected && _session != null) {
+      // Ensure session is nulled if we transition to disconnected, failed,
+      // or reconnecting states.
       _session = null;
       setState(() {});
     }
@@ -471,6 +476,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final terminalTheme = AppTerminalThemes.get(_themeName);
 
     return Scaffold(

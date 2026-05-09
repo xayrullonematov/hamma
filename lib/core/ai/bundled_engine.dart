@@ -332,12 +332,23 @@ class BundledEngine {
   void _handleRequest(HttpRequest req) {
     if (req.method == 'GET' && req.uri.path == '/v1/models') {
       _handleListModels(req);
+    } else if (req.method == 'GET' && req.uri.path == '/api/version') {
+      _handleVersion(req);
     } else if (req.method == 'POST' && req.uri.path == '/v1/chat/completions') {
       _handleChatCompletions(req);
     } else {
       req.response.statusCode = HttpStatus.notFound;
       req.response.close();
     }
+  }
+
+  void _handleVersion(HttpRequest req) {
+    final payload = {
+      'version': 'bundled-0.0.0',
+    };
+    req.response.headers.contentType = ContentType.json;
+    req.response.write(jsonEncode(payload));
+    req.response.close();
   }
 
   void _handleListModels(HttpRequest req) {

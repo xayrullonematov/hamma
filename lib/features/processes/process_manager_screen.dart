@@ -17,12 +17,15 @@ class ProcessManagerScreen extends StatefulWidget {
   State<ProcessManagerScreen> createState() => _ProcessManagerScreenState();
 }
 
-class _ProcessManagerScreenState extends State<ProcessManagerScreen> {
+class _ProcessManagerScreenState extends State<ProcessManagerScreen> with AutomaticKeepAliveClientMixin<ProcessManagerScreen> {
   static const _backgroundColor = AppColors.scaffoldBackground;
   static const _surfaceColor = AppColors.surface;
   static const _panelColor = AppColors.panel;
   static const _mutedColor = AppColors.textMuted;
   static const _dangerColor = AppColors.danger;
+
+  @override
+  bool get wantKeepAlive => true;
 
   final TextEditingController _searchController = TextEditingController();
   List<ProcessInfo> _allProcesses = [];
@@ -175,6 +178,7 @@ class _ProcessManagerScreenState extends State<ProcessManagerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
 
     return Scaffold(

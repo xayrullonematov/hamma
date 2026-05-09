@@ -49,9 +49,12 @@ class HealthTab extends StatefulWidget {
   State<HealthTab> createState() => _HealthTabState();
 }
 
-class _HealthTabState extends State<HealthTab> {
+class _HealthTabState extends State<HealthTab> with AutomaticKeepAliveClientMixin<HealthTab> {
   late final MetricPoller _poller;
   StreamSubscription<MetricSnapshot>? _sub;
+
+  @override
+  bool get wantKeepAlive => true;
 
   MetricSnapshot? _latest;
   HostCapabilities? _caps;
@@ -290,6 +293,7 @@ class _HealthTabState extends State<HealthTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_booting) {
       return const Center(
         child: SizedBox(

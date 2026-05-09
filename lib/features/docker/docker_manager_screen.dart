@@ -27,10 +27,13 @@ class DockerManagerScreen extends StatefulWidget {
   State<DockerManagerScreen> createState() => _DockerManagerScreenState();
 }
 
-class _DockerManagerScreenState extends State<DockerManagerScreen> {
+class _DockerManagerScreenState extends State<DockerManagerScreen> with AutomaticKeepAliveClientMixin<DockerManagerScreen> {
   static const _backgroundColor = AppColors.scaffoldBackground;
   static const _mutedColor = AppColors.textMuted;
   static const _dangerColor = AppColors.danger;
+
+  @override
+  bool get wantKeepAlive => true;
 
   List<DockerContainer> _containers = [];
   bool _isLoading = true;
@@ -134,6 +137,7 @@ class _DockerManagerScreenState extends State<DockerManagerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final theme = Theme.of(context);
 
     return Scaffold(

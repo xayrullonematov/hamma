@@ -28,11 +28,14 @@ class LogViewerScreen extends StatefulWidget {
   State<LogViewerScreen> createState() => _LogViewerScreenState();
 }
 
-class _LogViewerScreenState extends State<LogViewerScreen> {
+class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAliveClientMixin<LogViewerScreen> {
   static const _backgroundColor = AppColors.scaffoldBackground;
   static const _surfaceColor = AppColors.surface;
   static const _mutedColor = AppColors.textMuted;
   static const _dangerColor = AppColors.danger;
+
+  @override
+  bool get wantKeepAlive => true;
 
   final List<_LogEntry> _logEntries = [];
   final ScrollController _scrollController = ScrollController();
@@ -209,6 +212,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: AppBar(

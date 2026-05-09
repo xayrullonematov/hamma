@@ -19,12 +19,15 @@ class PackageManagerScreen extends StatefulWidget {
   State<PackageManagerScreen> createState() => _PackageManagerScreenState();
 }
 
-class _PackageManagerScreenState extends State<PackageManagerScreen> {
+class _PackageManagerScreenState extends State<PackageManagerScreen> with AutomaticKeepAliveClientMixin<PackageManagerScreen> {
   static const _backgroundColor = AppColors.scaffoldBackground;
   static const _surfaceColor = AppColors.surface;
   static const _mutedColor = AppColors.textMuted;
   static const _primaryColor = AppColors.textPrimary;
   static const _dangerColor = AppColors.danger;
+
+  @override
+  bool get wantKeepAlive => true;
 
   List<UpgradablePackage> _upgradablePackages = [];
   List<SearchResultPackage> _searchResults = [];
@@ -173,6 +176,7 @@ class _PackageManagerScreenState extends State<PackageManagerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: AppBar(

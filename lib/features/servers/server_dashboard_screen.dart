@@ -766,9 +766,11 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
   }
 
   Widget _buildTabContent() {
-    switch (_activeTabIndex) {
-      case 0:
-        return TerminalScreen(
+    return IndexedStack(
+      key: const ValueKey('dashboard_tab_stack'),
+      index: _activeTabIndex,
+      children: [
+        TerminalScreen(
           sshService: _sshService,
           serverName: _server.name,
           serverId: _server.id,
@@ -777,69 +779,48 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           openRouterModel: _openRouterModel,
           localEndpoint: _localEndpoint,
           localModel: _localModel,
-        );
-      case 1:
-        return FileExplorerScreen(server: _server);
-      case 2:
-        return DockerManagerScreen(
+        ),
+        FileExplorerScreen(server: _server),
+        DockerManagerScreen(
           sshService: _sshService,
           serverName: _server.name,
           aiSettings: _currentAiSettings,
-        );
-      case 3:
-        return ServiceManagementScreen(
+        ),
+        ServiceManagementScreen(
           sshService: _sshService,
           serverName: _server.name,
-        );
-      case 4:
-        return PackageManagerScreen(
+        ),
+        PackageManagerScreen(
           sshService: _sshService,
           serverName: _server.name,
-        );
-      case 5:
+        ),
         // Live observability — agentless metric tiles + AI explainer.
-        return HealthTab(
+        HealthTab(
           sshService: _sshService,
           serverName: _server.name,
           aiSettings: _currentAiSettings,
-        );
-      case 6:
+        ),
         // System / auth / custom file-tail log viewer with the
         // "Watch with AI" entrypoint baked in.
-        return LogViewerScreen(
+        LogViewerScreen(
           sshService: _sshService,
           serverName: _server.name,
           aiSettings: _currentAiSettings,
-        );
-      case 7:
+        ),
         // Runbooks tab: per-server multi-step AI-assisted workflows.
-        return RunbooksScreen(
+        RunbooksScreen(
           sshService: _sshService,
           serverId: _server.id,
           serverName: _server.name,
           aiSettings: _currentAiSettings,
-        );
-      default:
-        // Plugin tabs sit after the built-in slots.
-        final pluginIndex = _activeTabIndex - _NavItems.items.length;
-        if (pluginIndex >= 0 && pluginIndex < _enabledPlugins.length) {
-          final plugin = _enabledPlugins[pluginIndex];
-          return _PluginPanelHost(
-            plugin: plugin,
-            apiFuture: _apiFor(plugin),
-          );
-        }
-        return TerminalScreen(
-          sshService: _sshService,
-          serverName: _server.name,
-          serverId: _server.id,
-          aiProvider: _aiProvider,
-          apiKeyStorage: _apiKeyStorage,
-          openRouterModel: _openRouterModel,
-          localEndpoint: _localEndpoint,
-          localModel: _localModel,
-        );
-    }
+        ),
+        ..._enabledPlugins.map((plugin) => _PluginPanelHost(
+              key: ValueKey('plugin_${plugin.manifest.id}'),
+              plugin: plugin,
+              apiFuture: _apiFor(plugin),
+            )),
+      ],
+    );
   }
 
   @override
@@ -1096,7 +1077,11 @@ class MobileDashboardBottomNav extends StatelessWidget {
 /// the dashboard chrome — sidebar, status, disconnect button —
 /// keeps working.
 class _PluginPanelHost extends StatefulWidget {
-  const _PluginPanelHost({required this.plugin, required this.apiFuture});
+  const _PluginPanelHost({
+    super.key,
+    required this.plugin,
+    required this.apiFuture,
+  });
 
   final HammaPlugin plugin;
   final Future<HammaApi> apiFuture;

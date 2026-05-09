@@ -16,11 +16,14 @@ class ServiceManagementScreen extends StatefulWidget {
   State<ServiceManagementScreen> createState() => _ServiceManagementScreenState();
 }
 
-class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
+class _ServiceManagementScreenState extends State<ServiceManagementScreen> with AutomaticKeepAliveClientMixin<ServiceManagementScreen> {
   static const _backgroundColor = AppColors.scaffoldBackground;
   static const _surfaceColor = AppColors.surface;
   static const _mutedColor = AppColors.textMuted;
   static const _dangerColor = AppColors.danger;
+
+  @override
+  bool get wantKeepAlive => true;
 
   final TextEditingController _searchController = TextEditingController();
   List<LinuxService> _allServices = [];
@@ -170,6 +173,7 @@ class _ServiceManagementScreenState extends State<ServiceManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: AppBar(

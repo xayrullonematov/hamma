@@ -24,7 +24,7 @@ class FileExplorerScreen extends StatefulWidget {
   State<FileExplorerScreen> createState() => _FileExplorerScreenState();
 }
 
-class _FileExplorerScreenState extends State<FileExplorerScreen> {
+class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticKeepAliveClientMixin<FileExplorerScreen> {
   static const _backgroundColor = AppColors.scaffoldBackground;
   static const _surfaceColor = AppColors.surface;
   static const _panelColor = AppColors.panel;
@@ -33,6 +33,9 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
   static const _fileColor = AppColors.textMuted;
   static const _shadowColor = Color(0x22000000);
   static const _overlayColor = Color(0xB3000000);
+
+  @override
+  bool get wantKeepAlive => true;
 
   final SftpService _sftpService = SftpService();
   final AppPrefsStorage _prefs = const AppPrefsStorage();
@@ -775,6 +778,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isConnecting) {
       return const Scaffold(
         backgroundColor: _backgroundColor,
