@@ -39,7 +39,7 @@
 
 -----
 
-## ![features](https://img.shields.io/badge/FEATURES-000000?style=flat-square&logo=stackedit&logoColor=00FF88) Features
+## ![features](https://img.shields.io/badge/FEATURES-000000?style=flat-square&logo=stackedit&logoColor=00FF88)
 
 |                                                                                                                  |Capability                                                                         |                                    |
 |------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|------------------------------------|
@@ -52,7 +52,7 @@
 
 -----
 
-## ![localai](https://img.shields.io/badge/LOCAL_AI-000000?style=flat-square&logo=ollama&logoColor=00FF88) Local AI — Zero Telemetry
+## ![localai](https://img.shields.io/badge/LOCAL_AI-000000?style=flat-square&logo=ollama&logoColor=00FF88) — Zero Telemetry
 
 Hamma streams responses token-by-token from **Ollama, LM Studio, llama.cpp, or Jan** — all running on your device. Local AI is hard-guarded to `127.0.0.0/8` at runtime; your prompts physically cannot reach the internet.
 
@@ -62,7 +62,7 @@ Cloud providers (OpenAI, Gemini, OpenRouter) are available as an explicit opt-in
 
 -----
 
-## ![quickstart](https://img.shields.io/badge/QUICK_START-000000?style=flat-square&logo=rocket&logoColor=00FF88) Quick Start
+## ![quickstart](https://img.shields.io/badge/QUICK_START-000000?style=flat-square&logo=rocket&logoColor=00FF88)
 
 ### Users
 
