@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import 'bundled_engine.dart';
 
 /// Production [InferenceBackend] implementation backed by upstream
@@ -306,7 +308,12 @@ Future<LlamaServerHandle> _spawnRealLlamaServer({
   // up and block the child after a few hundred MB of model-load
   // chatter.
   unawaited(proc.stdout.drain<void>().catchError((_) {}));
-  unawaited(proc.stderr.drain<void>().catchError((_) {}));
+  unawaited(proc.stderr
+      .transform(utf8.decoder)
+      .transform(const LineSplitter())
+      .listen((line) => debugPrint('[llama-server] $line'))
+      .asFuture<void>()
+      .catchError((_) {}));
 
   return _RealLlamaServerHandle(
     proc: proc,

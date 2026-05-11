@@ -16,8 +16,11 @@ import 'connection_status.dart';
 import 'ssh_exception.dart';
 import 'ssh_transport.dart';
 
+import '../shell/shell_service.dart';
+
 export 'ssh_exception.dart';
 export 'ssh_transport.dart' show SshTransport, SshConnector, DartSsh2Transport;
+export '../shell/shell_service.dart';
 
 /// Default backoff schedule (in seconds) used by the auto-reconnect
 /// loop. Exposed so tests can replace it with `[0, 0, 0, 0, 0]` for
@@ -28,7 +31,7 @@ const List<int> kDefaultReconnectBackoffSeconds = [5, 10, 20, 30, 60];
 /// giving up and entering the terminal `failed` state.
 const int kDefaultMaxReconnectAttempts = 5;
 
-class SshService {
+class SshService implements ShellService {
   static final Map<String, SshService> _instances = {};
 
   /// Gets or creates a shared SshService instance for a specific server.
@@ -136,15 +139,20 @@ class SshService {
     required String fingerprint,
   })? _lastOnTrustHostKey;
 
+  @override
   bool get isConnected => _currentStatus.isConnected;
+  @override
   Stream<ConnectionStatus> get status => _statusController.stream;
+  @override
   ConnectionStatus get currentStatus => _currentStatus;
+  @override
   ValueListenable<ConnectionStatus> get statusNotifier => _statusNotifier;
   bool get autoReconnectEnabled => _autoReconnectEnabled;
 
   // Keep the old stream for backward compatibility if needed, but updated to emits bools based on status
   Stream<bool> get connectionState => status.map((s) => s.isConnected);
 
+  @override
   List<int> get activeForwardedPorts => _activeForwards.keys.toList();
 
   /// Test-only: current consecutive reconnect attempt count.
@@ -485,6 +493,7 @@ class SshService {
     _reconnectTimer = null;
   }
 
+  @override
   bool isHealthy() {
     if (_transport == null) return false;
     try {
@@ -505,16 +514,18 @@ class SshService {
   /// this method's input string in the in-app command-history pane
   /// should likewise persist the placeholder form, not the substituted
   /// form.
+  @override
   Future<String> execute(
     String command, {
-    Iterable<VaultSecret> vaultSecrets = const [],
+    Iterable<dynamic> vaultSecrets = const [],
   }) async {
     final transport = _transport;
     if (transport == null) {
       throw StateError('SSH client is not connected.');
     }
 
-    final injector = VaultInjector(vaultSecrets.toList(growable: false));
+    final List<VaultSecret> secrets = vaultSecrets.whereType<VaultSecret>().toList();
+    final injector = VaultInjector(secrets);
     final hasPlaceholders = injector.hasPlaceholders(command);
     final wrapped =
         hasPlaceholders ? injector.buildEnvCommand(command) : null;
@@ -564,6 +575,7 @@ class SshService {
     }
   }
 
+  @override
   Future<SSHSession> streamCommand(String command) async {
     final transport = _transport;
     if (transport == null) {
@@ -593,6 +605,7 @@ class SshService {
     }
   }
 
+  @override
   Future<SSHSession> startShell({int width = 80, int height = 24}) async {
     final transport = _transport;
     if (transport == null) {
@@ -612,6 +625,7 @@ class SshService {
     }
   }
 
+  @override
   Future<void> startLocalForwarding({
     required int localPort,
     required String remoteHost,
@@ -649,6 +663,7 @@ class SshService {
     );
   }
 
+  @override
   Future<void> stopLocalForwarding(int localPort) async {
     final serverSocket = _activeForwards.remove(localPort);
     if (serverSocket == null) {
@@ -662,6 +677,7 @@ class SshService {
     }
   }
 
+  @override
   Future<void> disconnect({bool updateStatus = true, bool cancelAuto = true}) async {
     _heartbeatTimer?.cancel();
     if (cancelAuto) cancelAutoReconnect();

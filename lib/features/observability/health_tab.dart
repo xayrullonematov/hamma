@@ -8,9 +8,10 @@ import '../../core/observability/metric_poller.dart';
 import '../../core/observability/metric_snapshot.dart';
 import '../../core/observability/observability_explainer.dart';
 import '../../core/observability/rolling_buffer.dart';
-import '../../core/ssh/ssh_service.dart';
+import '../../core/shell/shell_service.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/theme/app_colors.dart';
+
 import '../logs/widgets/watch_with_ai_screen.dart';
 import 'metric_chart_screen.dart';
 import 'widgets/explanation_card.dart';
@@ -28,7 +29,7 @@ class HealthTab extends StatefulWidget {
     this.poller,
   });
 
-  final SshService sshService;
+  final ShellService sshService;
   final String serverName;
   final AiSettings aiSettings;
 

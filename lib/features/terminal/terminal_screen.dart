@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +11,7 @@ import 'package:xterm/xterm.dart';
 
 import '../../core/ai/ai_provider.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/shell/shell_service.dart';
 import '../../core/ssh/connection_status.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/app_prefs_storage.dart';
@@ -41,7 +41,7 @@ class TerminalScreen extends StatefulWidget {
     this.vaultStorage,
   });
 
-  final SshService sshService;
+  final ShellService sshService;
   final String serverName;
   final AiProvider aiProvider;
   final ApiKeyStorage apiKeyStorage;
@@ -63,11 +63,11 @@ class TerminalScreen extends StatefulWidget {
 
 class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAliveClientMixin<TerminalScreen> {
   static const _maxContextChars = 3500;
-  static const _panelColor = AppColors.panel;
+  static final _panelColor = AppColors.panel;
 
   late final Terminal _terminal;
   final FocusNode _terminalFocusNode = FocusNode();
-  SSHSession? _session;
+  dynamic _session;
   StreamSubscription<Uint8List>? _stdoutSubscription;
   StreamSubscription<Uint8List>? _stderrSubscription;
   String _recentTerminalOutput = '';
@@ -76,10 +76,11 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
   @override
   bool get wantKeepAlive => true;
 
-  // Predictive Commands State
-  String _currentLineBuffer = '';
-  List<String> _suggestions = [];
-  int _selectedSuggestionIndex = 0;
+  // Fish-shell style Tab Autocomplete State
+  String _currentInput = '';
+  List<String> _tabSuggestions = [];
+  int _tabCycleIndex = -1;
+  String _ghostText = '';
 
   static const Map<String, List<String>> _suggestionMap = {
     'git': ['status', 'add .', 'commit -m "', 'push', 'pull', 'log --oneline', 'checkout', 'branch', 'diff'],
@@ -218,13 +219,13 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
     try {
       // Use fallback dimensions if the terminal hasn't been laid out yet.
       // Starting with 0x0 can cause some shells to freeze or ignore input.
-      final session = await widget.sshService.startShell(
+      final dynamic session = await widget.sshService.startShell(
         width: math.max(80, _terminal.viewWidth),
         height: math.max(24, _terminal.viewHeight),
       );
 
       _stdoutSubscription?.cancel();
-      _stdoutSubscription = session.stdout.listen((data) {
+      _stdoutSubscription = (session.stdout as Stream<Uint8List>).listen((data) {
         // Stream through a carry-buffered redactor so a secret split
         // across SSH chunks is still caught before either half is
         // emitted to xterm or the AI-context buffer.
@@ -237,7 +238,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       });
 
       _stderrSubscription?.cancel();
-      _stderrSubscription = session.stderr.listen((data) {
+      _stderrSubscription = (session.stderr as Stream<Uint8List>).listen((data) {
         final text = _stderrRedactor.feed(
           utf8.decode(data, allowMalformed: true),
         );
@@ -246,7 +247,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
         _trackOutput(text);
       });
 
-      session.done.then((_) {
+      (session.done as Future).then((_) {
         if (!mounted) return;
         // Flush any held-back carry so a trailing secret at EOF is
         // still scrubbed before the closing banner.
@@ -281,91 +282,24 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
   void _handleTerminalOutput(String data) {
     if (!widget.sshService.isConnected) return;
 
-    // Track the current line buffer for suggestions
+    // Track the current input for suggestions
     for (int i = 0; i < data.length; i++) {
       final char = data[i];
       if (char == '\r' || char == '\n') {
-        _currentLineBuffer = '';
+        _currentInput = '';
       } else if (char == '\x7f' || char == '\x08') {
         // Backspace
-        if (_currentLineBuffer.isNotEmpty) {
-          _currentLineBuffer =
-              _currentLineBuffer.substring(0, _currentLineBuffer.length - 1);
+        if (_currentInput.isNotEmpty) {
+          _currentInput = _currentInput.substring(0, _currentInput.length - 1);
         }
+      } else if (char == '\t') {
+        // Tab - instructions say do NOT append to _currentInput
       } else if (char.codeUnitAt(0) >= 32 && char.codeUnitAt(0) <= 126) {
-        _currentLineBuffer += char;
+        _currentInput += char;
       }
     }
 
-    _updateSuggestions();
     _session?.write(Uint8List.fromList(utf8.encode(data)));
-  }
-
-  void _updateSuggestions() {
-    if (!_isDesktop || _currentLineBuffer.isEmpty) {
-      if (_suggestions.isNotEmpty) {
-        setState(() {
-          _suggestions = [];
-          _selectedSuggestionIndex = 0;
-        });
-      }
-      return;
-    }
-
-    final parts = _currentLineBuffer.trimLeft().split(' ');
-    if (parts.isEmpty) return;
-
-    final command = parts[0];
-    final argumentPrefix = parts.length > 1 ? parts.sublist(1).join(' ') : '';
-
-    List<String> matches = [];
-    if (parts.length == 1) {
-      // Suggest command names
-      matches =
-          _suggestionMap.keys
-              .where((k) => k.startsWith(command) && k != command)
-              .toList();
-    } else {
-      // Suggest arguments for the current command
-      final possibleArgs = _suggestionMap[command];
-      if (possibleArgs != null) {
-        matches = possibleArgs.where((a) => a.startsWith(argumentPrefix)).toList();
-      }
-    }
-
-    if (!listEquals(_suggestions, matches)) {
-      setState(() {
-        _suggestions = matches;
-        _selectedSuggestionIndex = 0;
-      });
-    }
-  }
-
-  void _acceptSuggestion() {
-    if (_suggestions.isEmpty) return;
-    final suggestion = _suggestions[_selectedSuggestionIndex];
-
-    // Calculate what needs to be typed
-    final parts = _currentLineBuffer.trimLeft().split(' ');
-    String toAdd = '';
-    
-    if (parts.length == 1) {
-      // Completing a command name
-      toAdd = '${suggestion.substring(parts[0].length)} ';
-    } else {
-      // Completing an argument
-      final argPrefix = parts.sublist(1).join(' ');
-      toAdd = suggestion.substring(argPrefix.length);
-    }
-
-    if (toAdd.isNotEmpty) {
-      _handleTerminalOutput(toAdd);
-    }
-
-    setState(() {
-      _suggestions = [];
-      _selectedSuggestionIndex = 0;
-    });
   }
 
   void _handleTerminalResize(int width, int height, int pixelWidth, int pixelHeight) {
@@ -445,31 +379,97 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
-    if (_suggestions.isEmpty) return KeyEventResult.ignored;
 
-    final isControlPressed = HardwareKeyboard.instance.isControlPressed;
+    final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
 
-    if (isControlPressed && event.logicalKey == LogicalKeyboardKey.arrowRight) {
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      // 1. Parse _currentInput
+      final trimmedInput = _currentInput.trimLeft();
+      if (trimmedInput.isEmpty) return KeyEventResult.ignored;
+
+      final parts = trimmedInput.split(' ');
+      final baseCommand = parts[0];
+      final partialSuffix = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+
+      // 2. Look up _suggestionMap[baseCommand]
+      final suggestions = _suggestionMap[baseCommand];
+
+      if (suggestions == null) {
+        return KeyEventResult.ignored; // Let literal Tab through if no command match
+      }
+
+      // 3. Filter suggestions (case-insensitive)
+      final filtered = suggestions
+          .where((s) => s.toLowerCase().startsWith(partialSuffix.toLowerCase()))
+          .toList();
+
+      // 4. If no matches -> normal tab
+      if (filtered.isEmpty) {
+        return KeyEventResult.ignored;
+      }
+
+      // 5. If matches exist and _tabSuggestions is empty -> initialize
+      if (_tabSuggestions.isEmpty) {
+        _tabSuggestions = filtered;
+        _tabCycleIndex = 0;
+      } else {
+        // 6. Else -> Cycle
+        if (isShiftPressed) {
+          _tabCycleIndex = (_tabCycleIndex - 1 + _tabSuggestions.length) % _tabSuggestions.length;
+        } else {
+          _tabCycleIndex = (_tabCycleIndex + 1) % _tabSuggestions.length;
+        }
+      }
+
+      // 7. Set _ghostText
       setState(() {
-        _selectedSuggestionIndex =
-            (_selectedSuggestionIndex + 1) % _suggestions.length;
+        _ghostText = _tabSuggestions[_tabCycleIndex];
       });
+
+      // 9. Return KeyEventResult.handled
       return KeyEventResult.handled;
-    } else if (isControlPressed && event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+    }
+
+    if (_ghostText.isNotEmpty) {
+      if (event.logicalKey == LogicalKeyboardKey.enter ||
+          event.logicalKey == LogicalKeyboardKey.space ||
+          event.logicalKey == LogicalKeyboardKey.arrowRight) {
+        // Calculate the suffix to type
+        final parts = _currentInput.trimLeft().split(' ');
+        final partialSuffix = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+        final suffix = _ghostText.substring(partialSuffix.length);
+
+        // Send suffix to terminal
+        _session?.write(Uint8List.fromList(utf8.encode(suffix)));
+
+        // Reset
+        setState(() {
+          _ghostText = '';
+          _tabSuggestions = [];
+          _tabCycleIndex = -1;
+          // Update _currentInput by simulating the suffix being typed
+          _handleTerminalOutput(suffix);
+        });
+
+        return KeyEventResult.ignored;
+      }
+
+      if (event.logicalKey == LogicalKeyboardKey.escape) {
+        setState(() {
+          _ghostText = '';
+          _tabSuggestions = [];
+          _tabCycleIndex = -1;
+        });
+        return KeyEventResult.handled;
+      }
+
+      // On any other key when _ghostText is not empty
       setState(() {
-        _selectedSuggestionIndex =
-            (_selectedSuggestionIndex - 1 + _suggestions.length) %
-            _suggestions.length;
+        _ghostText = '';
+        _tabSuggestions = [];
+        _tabCycleIndex = -1;
       });
-      return KeyEventResult.handled;
-    } else if (isControlPressed && event.logicalKey == LogicalKeyboardKey.tab) {
-      _acceptSuggestion();
-      return KeyEventResult.handled;
-    } else if (event.logicalKey == LogicalKeyboardKey.escape) {
-      setState(() {
-        _suggestions = [];
-      });
-      return KeyEventResult.handled;
+      return KeyEventResult.ignored;
     }
 
     return KeyEventResult.ignored;
@@ -539,80 +539,66 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
                   ),
                 ),
               ),
+              if (_isDesktop && _ghostText.isNotEmpty)
+                Container(
+                  color: Colors.black,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Row(
+                    children: [
+                      // Ghost text: dim accepted portion
+                      Text(
+                        _currentInput.split(' ').length > 1 ? _currentInput.split(' ').last : '',
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontFamily: AppColors.monoFamily,
+                          fontSize: 13,
+                        ),
+                      ),
+                      // Active ghost suggestion in white
+                      Text(
+                        _ghostText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontFamily: AppColors.monoFamily,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      // All other suggestions dimmed
+                      ..._tabSuggestions
+                          .where((s) => s != _ghostText)
+                          .take(5)
+                          .map((s) => Padding(
+                                padding: const EdgeInsets.only(right: 12),
+                                child: Text(
+                                  s,
+                                  style: const TextStyle(
+                                    color: Colors.white24,
+                                    fontFamily: AppColors.monoFamily,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              )),
+                      const Spacer(),
+                      // Key hint
+                      const Text(
+                        'TAB / SHIFT+TAB to cycle  ·  SPACE to accept',
+                        style: TextStyle(
+                          color: Colors.white24,
+                          fontFamily: AppColors.monoFamily,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ValueListenableBuilder<ConnectionStatus>(
                 valueListenable: widget.sshService.statusNotifier,
                 builder: (context, status, _) => _buildToolbar(status.isConnected),
               ),
               if (_isDesktop) const SizedBox(height: 16),
             ],
-          ),
-          if (_isDesktop && _suggestions.isNotEmpty)
-            Positioned(
-              top: 0,
-              right: 16,
-              child: _buildPredictivePalette(),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPredictivePalette() {
-    return Container(
-      width: 240,
-      decoration: BoxDecoration(
-        color: Colors.black,
-        border: Border.all(color: Colors.white, width: 2),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            color: Colors.white,
-            child: const Text(
-              'COMMAND SUGGESTIONS',
-              style: TextStyle(
-                color: Colors.black,
-                fontFamily: AppColors.monoFamily,
-                fontWeight: FontWeight.w900,
-                fontSize: 10,
-                letterSpacing: 1.0,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          ...List.generate(_suggestions.length, (index) {
-            final isSelected = index == _selectedSuggestionIndex;
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              color: isSelected ? Colors.white : Colors.transparent,
-              child: Text(
-                _suggestions[index],
-                style: TextStyle(
-                  color: isSelected ? Colors.black : Colors.white,
-                  fontFamily: AppColors.monoFamily,
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-            );
-          }),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Colors.white24)),
-            ),
-            child: const Text(
-              'CTRL+ARROWS TO NAV\nCTRL+TAB TO PICK',
-              style: TextStyle(
-                color: Colors.white54,
-                fontFamily: AppColors.monoFamily,
-                fontSize: 9,
-                height: 1.4,
-              ),
-            ),
           ),
         ],
       ),

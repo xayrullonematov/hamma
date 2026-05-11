@@ -98,7 +98,11 @@ class InferenceEngine {
       _llamaParent = parent;
       
       // init() spawns the LlamaChild isolate and waits for the ready signal
-      await parent.init();
+      await parent.init().timeout(
+        const Duration(seconds: 120),
+        onTimeout: () => throw TimeoutException(
+          'model loading', const Duration(seconds: 120)),
+      );
 
       _currentModelPath = modelPath;
       return true;

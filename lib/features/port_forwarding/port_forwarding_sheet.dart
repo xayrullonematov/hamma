@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../core/ssh/ssh_service.dart';
+import '../../core/shell/shell_service.dart';
 import '../../core/theme/app_colors.dart';
 
 class PortForwardingSheet extends StatefulWidget {
   const PortForwardingSheet({super.key, required this.sshService});
 
-  final SshService sshService;
+  final ShellService sshService;
 
   @override
   State<PortForwardingSheet> createState() => _PortForwardingSheetState();

@@ -4,7 +4,7 @@ import '../ai/ai_command_service.dart';
 import '../ai/ai_provider.dart';
 import '../ai/command_risk_assessor.dart';
 import '../ai/log_triage/log_triage_models.dart';
-import '../ssh/ssh_service.dart';
+import '../shell/shell_service.dart';
 import 'metric_snapshot.dart';
 import 'rolling_buffer.dart';
 
@@ -48,7 +48,7 @@ class ObservabilityExplainer {
 
   final AiCommandService ai;
   final AiProvider provider;
-  final SshService sshService;
+  final ShellService sshService;
   final int logTailLines;
 
   Future<ExplanationResult> explain({

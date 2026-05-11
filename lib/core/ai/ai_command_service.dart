@@ -35,14 +35,14 @@ class AiApiConfig {
           provider: provider,
           baseUrl: 'https://api.openai.com/v1',
           apiKey: apiKey,
-          model: 'gpt-4o-mini',
+          model: 'gpt-4.1-mini',
         );
       case AiProvider.gemini:
         return AiApiConfig(
           provider: provider,
           baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
           apiKey: apiKey,
-          model: 'gemini-1.5-flash',
+          model: 'gemini-2.5-flash',
         );
       case AiProvider.openRouter:
         return AiApiConfig(
@@ -51,7 +51,7 @@ class AiApiConfig {
           apiKey: apiKey,
           model: (openRouterModel?.trim().isNotEmpty ?? false)
               ? openRouterModel!.trim()
-              : 'meta-llama/llama-3-8b-instruct',
+              : 'meta-llama/llama-3.1-8b-instruct:free',
         );
       case AiProvider.local:
         final endpoint = (localEndpoint?.trim().isNotEmpty ?? false)

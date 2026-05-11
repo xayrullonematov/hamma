@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -12,6 +11,7 @@ import '../../../core/ai/log_triage/log_batcher.dart';
 import '../../../core/ai/log_triage/log_triage_models.dart';
 import '../../../core/ai/log_triage/log_triage_service.dart';
 import '../../../core/ssh/ssh_service.dart';
+import '../../../core/shell/shell_service.dart';
 import '../../../core/storage/api_key_storage.dart';
 import '../../../core/storage/custom_actions_storage.dart';
 import '../../../core/storage/log_triage_prefs.dart';
@@ -42,7 +42,7 @@ class WatchWithAiScreen extends StatefulWidget {
     this.actionsStorage = const CustomActionsStorage(),
   });
 
-  final SshService sshService;
+  final ShellService sshService;
 
   /// Tailing command — must produce continuous lines on stdout (e.g.
   /// `journalctl -f`, `docker logs -f --tail 50 web`, `tail -f /var/log/syslog`).
@@ -66,7 +66,7 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
   final ScrollController _rawScroll = ScrollController();
   bool _autoScroll = true;
 
-  SSHSession? _session;
+  dynamic _session;
   StreamSubscription<String>? _stdout;
   StreamSubscription<String>? _stderr;
   StreamSubscription<InsightUpdate>? _insightSub;
@@ -135,15 +135,15 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
     await _stopStreaming();
     _lineBus = StreamController<String>.broadcast();
 
-    final session = await widget.sshService.streamCommand(widget.command);
+    final dynamic session = await widget.sshService.streamCommand(widget.command);
     _session = session;
 
-    _stdout = session.stdout
+    _stdout = (session.stdout as Stream<Uint8List>)
         .cast<List<int>>()
         .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
         .listen(_onLine);
-    _stderr = session.stderr
+    _stderr = (session.stderr as Stream<Uint8List>)
         .cast<List<int>>()
         .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())

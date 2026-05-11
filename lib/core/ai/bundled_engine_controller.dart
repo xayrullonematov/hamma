@@ -25,7 +25,7 @@ class BundledEngineController {
   /// backend on first access using an Ollama-inspired runner strategy.
   static Future<BundledEngine> get instance async {
     if (_instance == null) {
-      final features = await HardwareDetector.detect();
+      final features = await HardwareDetector.detectAndLog();
       final strategies = RunnerStrategy.getApplicable(features);
       
       InferenceBackend? bestBackend;
@@ -34,7 +34,10 @@ class BundledEngineController {
       for (final strategy in strategies) {
         // Try Subprocess Strategy (Ollama's preferred runner style)
         for (final binary in strategy.binaryCandidates) {
-          final backend = LlamaServerBackend(binaryPath: binary);
+          final backend = LlamaServerBackend(
+            binaryPath: binary,
+            contextSize: _contextSizeForModel(binary),
+          );
           if (backend.isAvailable) {
             debugPrint('BundledEngine: Using ${strategy.name} subprocess runner: $binary');
             bestBackend = backend;
@@ -88,5 +91,12 @@ class BundledEngineController {
     if (prev != null) {
       await prev.dispose();
     }
+  }
+
+  static int _contextSizeForModel(String path) {
+    final lower = path.toLowerCase();
+    if (lower.contains('1b') || lower.contains('1.1b')) return 512;
+    if (lower.contains('3b') || lower.contains('3.8b')) return 2048;
+    return 4096;
   }
 }

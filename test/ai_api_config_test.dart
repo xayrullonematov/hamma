@@ -9,7 +9,7 @@ void main() {
         provider: AiProvider.openAi,
         baseUrl: 'https://api.openai.com/v1',
         apiKey: 'sk-test-key',
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-mini',
       );
       expect(config.isConfigured, isTrue);
     });
@@ -19,7 +19,7 @@ void main() {
         provider: AiProvider.openAi,
         baseUrl: 'https://api.openai.com/v1',
         apiKey: '',
-        model: 'gpt-4o-mini',
+        model: 'gpt-4.1-mini',
       );
       expect(config.isConfigured, isFalse);
     });
@@ -29,7 +29,7 @@ void main() {
         provider: AiProvider.gemini,
         baseUrl: 'https://example.com',
         apiKey: '   ',
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-flash',
       );
       expect(config.isConfigured, isFalse);
     });
@@ -42,7 +42,7 @@ void main() {
         apiKey: 'sk-key',
       );
       expect(config.baseUrl, 'https://api.openai.com/v1');
-      expect(config.model, 'gpt-4o-mini');
+      expect(config.model, 'gpt-4.1-mini');
       expect(config.provider, AiProvider.openAi);
       expect(config.apiKey, 'sk-key');
     });
@@ -55,7 +55,7 @@ void main() {
         apiKey: 'gm-key',
       );
       expect(config.baseUrl, contains('googleapis.com'));
-      expect(config.model, 'gemini-1.5-flash');
+      expect(config.model, 'gemini-2.5-flash');
       expect(config.provider, AiProvider.gemini);
     });
   });
@@ -76,7 +76,7 @@ void main() {
         provider: AiProvider.openRouter,
         apiKey: 'or-key',
       );
-      expect(config.model, 'meta-llama/llama-3-8b-instruct');
+      expect(config.model, 'meta-llama/llama-3.1-8b-instruct:free');
     });
 
     test('falls back to default model when openRouterModel is blank', () {
@@ -85,7 +85,7 @@ void main() {
         apiKey: 'or-key',
         openRouterModel: '   ',
       );
-      expect(config.model, 'meta-llama/llama-3-8b-instruct');
+      expect(config.model, 'meta-llama/llama-3.1-8b-instruct:free');
     });
   });
 

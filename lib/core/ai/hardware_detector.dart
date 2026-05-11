@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 
 /// Hardware capabilities that influence the choice of inference runner.
 enum HardwareFeature {
@@ -45,6 +46,31 @@ class HardwareDetector {
       if (cpuinfo.contains('avx2')) features.add(HardwareFeature.avx2);
     }
 
+    if (Platform.isWindows) {
+      try {
+        final result = await Process.run(
+          'wmic', ['cpu', 'get', 'Caption'], runInShell: true,
+        );
+        final info = (result.stdout as String).toLowerCase();
+        if (info.contains('i3') || info.contains('i5') ||
+            info.contains('i7') || info.contains('i9') ||
+            info.contains('ryzen') || info.contains('core')) {
+          features.add(HardwareFeature.avx2);
+        }
+      } catch (_) {}
+    }
+
+    return features;
+  }
+
+  /// Calls [detect] and logs the results to the debug console.
+  static Future<Set<HardwareFeature>> detectAndLog() async {
+    final features = await detect();
+    if (features.isEmpty) {
+      debugPrint('HardwareDetector: No specialized features detected (generic CPU mode)');
+    } else {
+      debugPrint('HardwareDetector: Detected features: ${features.map((e) => e.name).join(', ')}');
+    }
     return features;
   }
 
@@ -77,32 +103,33 @@ class RunnerStrategy {
 
   /// Returns the best available strategies for the current hardware.
   static List<RunnerStrategy> getApplicable(Set<HardwareFeature> features) {
+    final exe = Platform.isWindows ? '.exe' : '';
     final all = <RunnerStrategy>[
       // Metal Strategy (Apple)
       RunnerStrategy(
         name: 'METAL',
         requiredFeature: HardwareFeature.metal,
-        binaryCandidates: ['llama-server-metal', 'llama-server'],
+        binaryCandidates: ['llama-server-metal$exe', 'llama-server$exe'],
         libraryCandidates: ['libllama-metal.dylib', 'libllama.dylib'],
       ),
       // CUDA Strategy (NVIDIA)
       RunnerStrategy(
         name: 'CUDA',
         requiredFeature: HardwareFeature.cuda,
-        binaryCandidates: ['llama-server-cuda', 'llama-server'],
+        binaryCandidates: ['llama-server-cuda$exe', 'llama-server$exe'],
         libraryCandidates: ['libllama-cuda.so', 'libllama.so', 'llama-cuda.dll', 'llama.dll'],
       ),
       // High-performance CPU (AVX2)
       RunnerStrategy(
         name: 'CPU-AVX2',
         requiredFeature: HardwareFeature.avx2,
-        binaryCandidates: ['llama-server-avx2', 'llama-server'],
+        binaryCandidates: ['llama-server-avx2$exe', 'llama-server$exe'],
         libraryCandidates: ['libllama-avx2.so', 'libllama.so'],
       ),
       // Baseline CPU
-      const RunnerStrategy(
+      RunnerStrategy(
         name: 'CPU-GENERIC',
-        binaryCandidates: ['llama-server'],
+        binaryCandidates: ['llama-server$exe'],
         libraryCandidates: ['libllama.so', 'libllama.dylib', 'llama.dll'],
       ),
     ];

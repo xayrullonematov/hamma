@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../core/ssh/ssh_service.dart';
+import '../../core/shell/shell_service.dart';
 import '../../core/theme/app_colors.dart';
 
 class ProcessManagerScreen extends StatefulWidget {
@@ -10,7 +10,7 @@ class ProcessManagerScreen extends StatefulWidget {
     required this.serverName,
   });
 
-  final SshService sshService;
+  final ShellService sshService;
   final String serverName;
 
   @override

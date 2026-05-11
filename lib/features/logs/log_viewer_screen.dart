@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:dartssh2/dartssh2.dart';
-import '../../core/ssh/ssh_service.dart';
+import '../../core/shell/shell_service.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/watch_with_ai_screen.dart';
@@ -15,7 +15,7 @@ class LogViewerScreen extends StatefulWidget {
     this.aiSettings,
   });
 
-  final SshService sshService;
+  final ShellService sshService;
   final String serverName;
 
   /// When supplied, an extra AppBar action opens the same stream in
@@ -42,7 +42,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
   final TextEditingController _filterController = TextEditingController();
   final TextEditingController _customPathController = TextEditingController();
 
-  SSHSession? _session;
+  dynamic _session;
   StreamSubscription<String>? _stdoutSubscription;
   StreamSubscription<String>? _stderrSubscription;
   bool _isPaused = false;
@@ -139,16 +139,16 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
     }
 
     try {
-      final session = await widget.sshService.streamCommand(command);
+      final dynamic session = await widget.sshService.streamCommand(command);
       _session = session;
       
       // sudo requires passwordless sudo or SSH key auth on the server
       
-      _stdoutSubscription = session.stdout
+      _stdoutSubscription = (session.stdout as Stream<Uint8List>)
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .transform(const LineSplitter())
-          .listen((line) {
+          .listen((String line) {
             if (!_isPaused && mounted) {
               setState(() {
                 _logEntries.add(_LogEntry(line, isError: false));
@@ -160,11 +160,11 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
             }
           });
 
-      _stderrSubscription = session.stderr
+      _stderrSubscription = (session.stderr as Stream<Uint8List>)
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .transform(const LineSplitter())
-          .listen((line) {
+          .listen((String line) {
             if (!_isPaused && mounted) {
               setState(() {
                 _logEntries.add(_LogEntry(line, isError: true));
