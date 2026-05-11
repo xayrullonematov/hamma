@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../../core/shell/shell_service.dart';
@@ -106,21 +107,31 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
   /// source, or `null` if the source isn't fully configured (e.g.
   /// custom path with empty input).
   String? _buildStreamCommand() {
+    final isWindows = Platform.isWindows;
+
     switch (_selectedSource) {
       case LogSource.system:
-        return 'sudo -S journalctl -f -n 100';
+        if (isWindows) {
+          return r'powershell.exe -Command "Get-WinEvent -LogName System -MaxEvents 100 | Sort-Object TimeCreated | ForEach-Object { \"$($_.TimeCreated) [$($_.LevelDisplayName)] $($_.Message)\" }"';
+        }
+        return 'sudo journalctl -f -n 100';
       case LogSource.auth:
-        return 'sudo -S tail -f -n 100 /var/log/auth.log';
+        if (isWindows) {
+          // Security event log on Windows
+          return r'powershell.exe -Command "Get-WinEvent -LogName Security -MaxEvents 100 | Sort-Object TimeCreated | ForEach-Object { \"$($_.TimeCreated) [$($_.LevelDisplayName)] $($_.Message)\" }"';
+        }
+        return 'sudo tail -f -n 100 /var/log/auth.log';
       case LogSource.custom:
         final path = _customPathController.text.trim();
         if (path.isEmpty) return null;
-        // Shell-quote the user-supplied path so spaces, $VAR, ;,
-        // backticks, &&, etc. cannot break out of the tail invocation
-        // and execute arbitrary remote commands. Wrap in single quotes
-        // and escape any embedded single quote with the canonical
-        // POSIX `'\''` sequence.
+
+        if (isWindows) {
+          return "powershell.exe -Command \"Get-Content -Wait -Tail 100 '$path'\"";
+        }
+
+        // Shell-quote the user-supplied path
         final quoted = "'${path.replaceAll("'", r"'\''")}'";
-        return 'sudo -S tail -f -n 100 $quoted';
+        return 'sudo tail -f -n 100 $quoted';
     }
   }
 
@@ -141,8 +152,6 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
     try {
       final dynamic session = await widget.sshService.streamCommand(command);
       _session = session;
-      
-      // sudo requires passwordless sudo or SSH key auth on the server
       
       _stdoutSubscription = (session.stdout as Stream<Uint8List>)
           .cast<List<int>>()
@@ -176,7 +185,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
             }
           });
           
-      session.done.then((_) {
+      (session.done as Future).then((_) {
         if (mounted) {
           setState(() => _logEntries.add(_LogEntry('--- Stream closed by server ---', isError: false)));
         }
@@ -326,7 +335,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
                       controller: _customPathController,
                       style: const TextStyle(color: Colors.white, fontSize: 14),
                       decoration: InputDecoration(
-                        hintText: '/var/log/syslog',
+                        hintText: Platform.isWindows ? 'C:\\Logs\\app.log' : '/var/log/syslog',
                         hintStyle: const TextStyle(color: _mutedColor),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -390,8 +399,8 @@ class _LogEntry {
 }
 
 enum LogSource {
-  system('System (journalctl)'),
-  auth('Auth logs (/var/log/auth.log)'),
+  system('System (journalctl / WinEvent)'),
+  auth('Auth logs (/var/log/auth / Security)'),
   custom('Custom Path');
 
   final String label;

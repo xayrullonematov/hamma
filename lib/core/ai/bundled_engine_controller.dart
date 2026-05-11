@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'bundled_engine.dart';
@@ -25,14 +26,23 @@ class BundledEngineController {
   /// backend on first access using an Ollama-inspired runner strategy.
   static Future<BundledEngine> get instance async {
     if (_instance == null) {
+      // Mobile Fast-Path: Mobile platforms (Android/iOS) do not support
+      // spawning subprocesses for inference. We bypass the Ollama-style
+      // strategy loop and go straight to the FFI backend (fllama).
+      if (Platform.isAndroid || Platform.isIOS) {
+        debugPrint('BundledEngine: Using mobile FFI runner');
+        _instance = BundledEngine(backend: LlamaCppBackend());
+        return _instance!;
+      }
+
+      // Desktop Path: Try tiered strategy.
       final features = await HardwareDetector.detectAndLog();
       final strategies = RunnerStrategy.getApplicable(features);
       
       InferenceBackend? bestBackend;
       
-      // Look for the best available runner among applicable strategies.
+      // Tier 1: Look for a compatible subprocess binary (Ollama-style).
       for (final strategy in strategies) {
-        // Try Subprocess Strategy (Ollama's preferred runner style)
         for (final binary in strategy.binaryCandidates) {
           final backend = LlamaServerBackend(
             binaryPath: binary,
@@ -45,22 +55,15 @@ class BundledEngineController {
           }
         }
         if (bestBackend != null) break;
-
-        // Try FFI Strategy (fallback or primary mobile path)
-        for (final library in strategy.libraryCandidates) {
-          final backend = LlamaCppBackend();
-          if (backend.isAvailable) {
-            debugPrint('BundledEngine: Using ${strategy.name} FFI runner: $library');
-            bestBackend = backend;
-            break;
-          }
-        }
-        if (bestBackend != null) break;
       }
 
-      // If absolutely nothing is found, use the generic FFI backend
-      // as it will provide the best diagnostic error messages.
-      _instance = BundledEngine(backend: bestBackend ?? LlamaCppBackend());
+      // Tier 2: Fall back to FFI (fllama) if no binary was found or usable.
+      if (bestBackend == null) {
+        debugPrint('BundledEngine: No usable subprocess found, falling back to FFI runner');
+        bestBackend = LlamaCppBackend();
+      }
+
+      _instance = BundledEngine(backend: bestBackend);
     }
     return _instance!;
   }

@@ -3,8 +3,8 @@ import 'package:hamma/core/ai/ai_command_service.dart';
 import 'package:hamma/core/ai/ai_provider.dart';
 
 void main() {
-  const service = AiCommandService(
-    config: AiApiConfig(
+  final service = AiCommandService(
+    config: const AiApiConfig(
       provider: AiProvider.openAi,
       baseUrl: 'https://example.com',
       apiKey: 'test-key',

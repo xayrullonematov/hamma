@@ -42,6 +42,21 @@ class _LocalDevelopmentScreenState extends State<LocalDevelopmentScreen> {
   }
 
   Future<void> _connect() async {
+    if (Platform.isWindows) {
+      final r = await Process.run('wsl.exe', ['--status'])
+        .catchError((_) => ProcessResult(-1, 1, '', ''));
+      if (r.exitCode != 0) {
+        if (mounted) {
+          setState(() => _isConnecting = false);
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            duration: Duration(seconds: 8),
+            content: Text('WSL required. Run: wsl --install in PowerShell, then restart.'),
+          ));
+        }
+        return;
+      }
+    }
+
     setState(() => _isConnecting = true);
     await _shell.connect();
     if (mounted) {

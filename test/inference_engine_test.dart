@@ -3,9 +3,9 @@ import 'package:hamma/core/ai/inference_engine.dart';
 
 void main() {
   group('InferenceEngine (basic)', () {
-    const InferenceEngine engine = InferenceEngine();
+    final InferenceEngine engine = InferenceEngine();
 
-    test('can be instantiated as const', () {
+    test('can be instantiated', () {
       expect(engine, isNotNull);
     });
 

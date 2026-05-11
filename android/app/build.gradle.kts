@@ -20,7 +20,7 @@ fun signingValue(envKey: String, propKey: String): String? =
 android {
     namespace = "com.hamma.app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "25.1.8937393"
+    ndkVersion = "26.1.10909125"
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -49,24 +49,10 @@ android {
 
     defaultConfig {
         applicationId = "com.hamma.app"
-        minSdk = flutter.minSdkVersion
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
-        externalNativeBuild {
-            cmake {
-                cppFlags("-std=c++17")
-                arguments("-DGGML_OPENBLAS=OFF", "-DGGML_CUDA=OFF")
-            }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1+"
-        }
     }
 
     buildTypes {

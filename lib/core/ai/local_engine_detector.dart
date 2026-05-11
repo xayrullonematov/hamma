@@ -76,6 +76,13 @@ class LocalEngineDetector {
   /// Probe every well-known port in parallel and return the engines we
   /// found, in the same order as [defaultProbes].
   Future<List<DetectedEngine>> detect() async {
+    // On mobile, automatic localhost detection is impossible/useless as
+    // nothing will be listening on the phone itself.
+    if (Platform.isAndroid || Platform.isIOS) {
+      // User must enter LAN IP manually.
+      return [];
+    }
+
     final results = await Future.wait(
       defaultProbes.map((p) => _probe(p.kind, p.port)),
     );

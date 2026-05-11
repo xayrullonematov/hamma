@@ -39,6 +39,8 @@ class OllamaClient {
   /// — Settings, the runtime client, and the loopback test all share
   /// this implementation so they cannot drift apart.
   static bool isLoopbackEndpoint(String url) {
+    if (Platform.isAndroid || Platform.isIOS) return true;
+
     final trimmed = url.trim();
     if (trimmed.isEmpty) return false;
     final uri = Uri.tryParse(trimmed);

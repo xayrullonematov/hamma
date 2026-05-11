@@ -107,8 +107,10 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
     if (Platform.isWindows) {
       return 'winget install Ollama.Ollama';
     }
-    return '# Ollama is desktop-only. Run it on a server you trust\n'
-        '# and point Hamma at that endpoint.';
+    return 'On your desktop, run:\n'
+        'OLLAMA_HOST=0.0.0.0 ollama serve\n\n'
+        'Then use your desktop\'s IP address, e.g.:\n'
+        'http://192.168.1.x:11434';
   }
 
   @override
@@ -210,6 +212,7 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
         _step = 2; // success step
       });
     } catch (e) {
+      debugPrint('[BundledEngine] $e');
       if (!mounted) return;
       setState(() {
         _isStartingEngine = false;
@@ -568,13 +571,16 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
   }
 
   Widget _buildInstallStep() {
+    final isMobile = Platform.isAndroid || Platform.isIOS;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildBadgeRow(),
         const SizedBox(height: 12),
         Text(
-          'Install Ollama on $_osLabel',
+          isMobile
+              ? 'Connect to Ollama on your computer'
+              : 'Install Ollama on $_osLabel',
           style: const TextStyle(
             color: AppColors.textPrimary,
             fontSize: 18,
@@ -582,19 +588,26 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Ollama is a small, free local inference engine. It runs entirely '
-          'on your machine — no cloud, no API key, no traffic leaves '
-          'localhost.',
-          style: TextStyle(color: AppColors.textMuted, height: 1.4),
+        Text(
+          isMobile
+              ? 'Run this on your computer:\n\nOLLAMA_HOST=0.0.0.0 ollama serve\n\nThen enter your computer\'s local IP address (e.g. http://192.168.1.5:11434) in the endpoint field.'
+              : 'Ollama is a small, free local inference engine. It runs entirely '
+                  'on your machine — no cloud, no API key, no traffic leaves '
+                  'localhost.',
+          style: const TextStyle(color: AppColors.textMuted, height: 1.4),
         ),
         const SizedBox(height: 16),
-        _CodeBlock(snippet: _installSnippet),
-        const SizedBox(height: 16),
-        const Text(
-          'Once installed, the engine usually starts automatically. On Linux '
-          'and macOS you can verify with `ollama --version`.',
-          style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+        if (!isMobile) ...[
+          _CodeBlock(snippet: _installSnippet),
+          const SizedBox(height: 16),
+        ],
+        Text(
+          isMobile
+              ? 'Once started, make sure your phone is on the same Wi-Fi network '
+                  'as your desktop.'
+              : 'Once installed, the engine usually starts automatically. On Linux '
+                  'and macOS you can verify with `ollama --version`.',
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
         ),
       ],
     );
@@ -633,6 +646,7 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
   }
 
   Widget _buildExternalDoneStep() {
+    final isMobile = Platform.isAndroid || Platform.isIOS;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -647,10 +661,13 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        const Text(
-          'Tap "Detect engines" to scan localhost. We will use whichever '
-          'engine answers first.',
-          style: TextStyle(color: AppColors.textMuted, height: 1.4),
+        Text(
+          isMobile
+              ? 'Tap "Detect engines" to scan your local network. Make sure '
+                  'you followed the instructions in step 1.'
+              : 'Tap "Detect engines" to scan localhost. We will use whichever '
+                  'engine answers first.',
+          style: const TextStyle(color: AppColors.textMuted, height: 1.4),
         ),
         const SizedBox(height: 16),
         OutlinedButton.icon(

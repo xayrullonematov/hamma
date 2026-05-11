@@ -5,7 +5,7 @@ import '../ssh/connection_status.dart';
 import '../shell/shell_service.dart';
 
 List<String> _resolveShell() {
-  if (Platform.isWindows) return ['powershell.exe'];
+  if (Platform.isWindows) return ['wsl.exe', 'bash'];
   if (Platform.isMacOS) return ['/bin/zsh'];
   return ['/bin/bash'];
 }
@@ -64,7 +64,7 @@ class LocalShellService implements ShellService {
     if (!_isConnected) throw StateError('Local shell is not connected.');
     try {
       final shell = _resolveShell();
-      final shellFlag = Platform.isWindows ? '/c' : '-c';
+      final shellFlag = '-c';
       final result = await Process.run(
         shell.first,
         [...shell.skip(1), shellFlag, command],
@@ -87,7 +87,7 @@ class LocalShellService implements ShellService {
   Future<LocalShellSession> streamCommand(String command) async {
     if (!_isConnected) throw StateError('Local shell is not connected.');
     final shell = _resolveShell();
-    final shellFlag = Platform.isWindows ? '/c' : '-c';
+    final shellFlag = '-c';
     final process = await Process.start(
       shell.first,
       [...shell.skip(1), shellFlag, command],

@@ -46,11 +46,8 @@ dependencies:
   hotkey_manager: ^0.2.3
   tray_manager: ^0.5.2
   meta: ^1.15.0
-  # FFI helpers (Utf8, malloc) for the bundled inference engine
-  # bindings (lib/core/ai/llama_cpp_bindings.dart).
-  ffi: ^2.1.0
   dio: ^5.7.0
-  llama_cpp_dart: ^0.1.1
+  fllama: ^1.0.0
 
   # Voice-driven mobile ops (Task #29). Both packages are configured
   # for on-device recognition / on-device synthesis only — see
@@ -79,6 +76,12 @@ dev_dependencies:
   # without sleeping in real time. Already pulled transitively by
   # flutter_test, listed here so the dependency is explicit and pinned.
   fake_async: ^1.3.1
+
+dependency_overrides:
+  fllama:
+    git:
+      url: https://github.com/Telosnex/fllama.git
+      ref: main
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

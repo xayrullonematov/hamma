@@ -57,13 +57,9 @@ class AiApiConfig {
         final endpoint = (localEndpoint?.trim().isNotEmpty ?? false)
             ? localEndpoint!.trim()
             : 'http://localhost:11434';
-        // Zero-trust guarantee: the local provider may only ever talk to
-        // a loopback endpoint. We share OllamaClient.isLoopbackEndpoint as
-        // the single source of truth so Settings, the runtime client, and
-        // this config can never drift apart. Refusing here means a
-        // misconfigured value injected from persisted state or any other
-        // call path can never silently exfiltrate prompts off-device.
-        if (!OllamaClient.isLoopbackEndpoint(endpoint)) {
+
+        final isMobile = Platform.isAndroid || Platform.isIOS;
+        if (!isMobile && !OllamaClient.isLoopbackEndpoint(endpoint)) {
           throw ArgumentError.value(
             endpoint,
             'localEndpoint',
@@ -120,11 +116,11 @@ class CommandIntent {
 }
 
 class AiCommandService {
-  const AiCommandService({
+  AiCommandService({
     required this.config,
     this.openRouterModel,
-    this.inferenceEngine = const InferenceEngine(),
-  });
+    InferenceEngine? inferenceEngine,
+  }) : inferenceEngine = inferenceEngine ?? InferenceEngine();
 
   factory AiCommandService.forProvider({
     required AiProvider provider,

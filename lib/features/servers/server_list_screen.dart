@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../core/ai/ai_provider.dart';
@@ -473,18 +474,19 @@ class _ServerListScreenState extends State<ServerListScreen> {
                           ),
                         ),
                       ),
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                          child: _LocalDevelopmentCard(
-                            onOpen: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const LocalDevelopmentScreen(),
+                      if (!Platform.isAndroid && !Platform.isIOS)
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                            child: _LocalDevelopmentCard(
+                              onOpen: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const LocalDevelopmentScreen(),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
                       if (filteredServers.isEmpty && _isSearching)
                         const SliverFillRemaining(
                           hasScrollBody: false,

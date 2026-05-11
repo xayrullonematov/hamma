@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/shell/shell_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -60,10 +61,22 @@ class _ProcessManagerScreenState extends State<ProcessManagerScreen> with Automa
     }
 
     try {
-      final output = await widget.sshService.execute(
-        'ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 50',
-      );
-      final processes = _parseProcesses(output);
+      final isWindows = Platform.isWindows;
+      final String output;
+      final List<ProcessInfo> processes;
+
+      if (isWindows) {
+        output = await widget.sshService.execute(
+          'powershell.exe -Command "Get-Process | Sort-Object CPU -Descending | Select-Object -First 50 Id,UserName,CPU,WorkingSet,ProcessName | ConvertTo-Csv -NoTypeInformation"',
+        );
+        processes = _parseProcessesCsv(output);
+      } else {
+        output = await widget.sshService.execute(
+          'ps -eo pid,user,%cpu,%mem,comm --sort=-%cpu | head -n 50',
+        );
+        processes = _parseProcessesUnix(output);
+      }
+
       if (mounted) {
         setState(() {
           _allProcesses = processes;
@@ -83,7 +96,7 @@ class _ProcessManagerScreenState extends State<ProcessManagerScreen> with Automa
     }
   }
 
-  List<ProcessInfo> _parseProcesses(String output) {
+  List<ProcessInfo> _parseProcessesUnix(String output) {
     final lines = output.trim().split('\n');
     if (lines.isEmpty) return [];
 
@@ -101,6 +114,40 @@ class _ProcessManagerScreenState extends State<ProcessManagerScreen> with Automa
           cpu: double.tryParse(parts[2]) ?? 0.0,
           ram: double.tryParse(parts[3]) ?? 0.0,
           command: parts.sublist(4).join(' '),
+        ));
+      }
+    }
+    return processes;
+  }
+
+  List<ProcessInfo> _parseProcessesCsv(String output) {
+    final lines = output.trim().split('\n');
+    if (lines.isEmpty) return [];
+
+    final processes = <ProcessInfo>[];
+    // Skip header line
+    for (var i = 1; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty) continue;
+
+      // Split by comma, but handle potential quotes (very simple CSV split)
+      final parts = line.split(',').map((e) => e.replaceAll('"', '').trim()).toList();
+      
+      if (parts.length >= 5) {
+        final pid = parts[0];
+        final user = parts[1].isEmpty ? 'SYSTEM' : parts[1];
+        final cpuRaw = double.tryParse(parts[2]) ?? 0.0;
+        final ramRaw = double.tryParse(parts[3]) ?? 0.0; // WorkingSet in bytes
+        final name = parts[4];
+
+        processes.add(ProcessInfo(
+          pid: pid,
+          user: user,
+          // Normalize Windows CPU (seconds) and RAM (bytes) to something
+          // that fits the %-based UI bars reasonably.
+          cpu: (cpuRaw / 10).clamp(0, 100), 
+          ram: (ramRaw / (1024 * 1024 * 10)).clamp(0, 100), 
+          command: name,
         ));
       }
     }
@@ -125,6 +172,7 @@ class _ProcessManagerScreenState extends State<ProcessManagerScreen> with Automa
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: _surfaceColor,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         title: const Text('Kill Process', style: TextStyle(color: Colors.white)),
         content: Text(
           'Are you sure you want to kill process ${process.pid} (${process.command})?',
@@ -150,7 +198,12 @@ class _ProcessManagerScreenState extends State<ProcessManagerScreen> with Automa
     });
 
     try {
-      await widget.sshService.execute('sudo kill -9 ${process.pid}');
+      if (Platform.isWindows) {
+        await widget.sshService.execute('powershell.exe -Command "Stop-Process -Id ${process.pid} -Force"');
+      } else {
+        await widget.sshService.execute('sudo kill -9 ${process.pid}');
+      }
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Process ${process.pid} terminated')),

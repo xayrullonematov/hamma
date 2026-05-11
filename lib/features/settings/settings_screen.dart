@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -74,7 +75,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool get _isLocalEndpointValid {
     final raw = _localEndpointController.text.trim();
-    return raw.isEmpty || OllamaClient.isLoopbackEndpoint(raw);
+    final isMobile = Platform.isAndroid || Platform.isIOS;
+    return raw.isEmpty || isMobile || OllamaClient.isLoopbackEndpoint(raw);
   }
   bool _isDetectingLocalEngines = false;
   List<DetectedEngine> _detectedLocalEngines = const [];
@@ -288,14 +290,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       title: 'Engine Endpoint',
       currentValue: _localEndpointController.text,
-      helperText:
-          'Base URL of your local AI server (loopback only — no LAN/internet).',
-      hintText: 'http://localhost:11434',
+      helperText: (Platform.isAndroid || Platform.isIOS)
+          ? 'Base URL of your local AI server (e.g. on your desktop).'
+          : 'Base URL of your local AI server (loopback only — no LAN/internet).',
+      hintText: (Platform.isAndroid || Platform.isIOS)
+          ? 'http://192.168.1.x:11434'
+          : 'http://localhost:11434',
       monospace: true,
       validator: (v) {
         if (v.isEmpty) return null;
         if (OllamaClient.isLoopbackEndpoint(v)) return null;
-        return 'Endpoint must be loopback (localhost, 127.0.0.1, or ::1).';
+        return (Platform.isAndroid || Platform.isIOS)
+            ? 'Invalid endpoint URL.'
+            : 'Endpoint must be loopback (localhost, 127.0.0.1, or ::1).';
       },
     );
     if (result == null || !mounted) return;
@@ -776,9 +783,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_isBusy) return;
     if (_selectedProvider == AiProvider.local && !_isLocalEndpointValid) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Local AI endpoint must be loopback (localhost / 127.0.0.1 / ::1).',
+            (Platform.isAndroid || Platform.isIOS)
+                ? 'Invalid Local AI endpoint URL.'
+                : 'Local AI endpoint must be loopback (localhost / 127.0.0.1 / ::1).',
           ),
         ),
       );
@@ -1542,7 +1551,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 icon: Icons.dns_rounded,
                                 label: 'Engine Endpoint',
                                 value: _localEndpointController.text.isEmpty
-                                    ? 'http://localhost:11434'
+                                    ? (Platform.isAndroid || Platform.isIOS
+                                        ? 'http://192.168.1.x:11434'
+                                        : 'http://localhost:11434')
                                     : _localEndpointController.text,
                                 enabled: !_isBusy,
                                 onTap: _isBusy ? null : _editLocalEndpointRow,
@@ -1568,7 +1579,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 icon: Icons.electrical_services_rounded,
                                 label: 'Test Connection',
                                 value: _localConnectionTestResult ??
-                                    'Probe loopback for a running engine',
+                                    (Platform.isAndroid || Platform.isIOS
+                                        ? 'Probe your network for a running engine'
+                                        : 'Probe loopback for a running engine'),
                                 enabled: !_isBusy &&
                                     !_isTestingLocalConnection &&
                                     _isLocalEndpointValid,
@@ -1583,7 +1596,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 label: 'Detect Engines',
                                 value: _detectError ??
                                     (_detectedLocalEngines.isEmpty
-                                        ? 'Scan loopback for installed engines'
+                                        ? (Platform.isAndroid || Platform.isIOS
+                                            ? 'Scan local network for installed engines'
+                                            : 'Scan loopback for installed engines')
                                         : '${_detectedLocalEngines.length} engine(s) found'),
                                 enabled: !_isBusy && !_isDetectingLocalEngines,
                                 onTap: _detectLocalEngines,

@@ -60,7 +60,7 @@ abstract class InferenceBackend {
 class LlamaCppBackend implements InferenceBackend {
   LlamaCppBackend();
 
-  final InferenceEngine _engine = const InferenceEngine();
+  final InferenceEngine _engine = InferenceEngine();
 
   String _modelId = '';
   String _modelPath = '';
@@ -68,8 +68,16 @@ class LlamaCppBackend implements InferenceBackend {
 
   @override
   bool get isAvailable {
-    // InferenceEngine is now available on all platforms via llama_cpp_dart.
-    return !kIsWeb;
+    if (kIsWeb) return false;
+    if (Platform.isAndroid || Platform.isIOS) return true;
+    
+    // Desktop: check the native lib exists next to the executable
+    try {
+      InferenceEngine.ensureNativeLibraryLoaded();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -84,6 +92,9 @@ class LlamaCppBackend implements InferenceBackend {
       throw StateError('Model file not found: $modelPath');
     }
     
+    // Set library path before FFI calls on desktop
+    InferenceEngine.ensureNativeLibraryLoaded();
+
     // We try to load the model. This will throw if the native library is missing.
     try {
       await _engine.loadModel(modelPath);
@@ -423,8 +434,8 @@ class BundledEngine {
     // Streaming SSE.
     req.response.headers.contentType =
         ContentType('text', 'event-stream', charset: 'utf-8');
-    req.response.headers.set('Cache-Control', 'no-cache');
-    req.response.headers.set('Connection', 'keep-alive');
+    req.headers.set('Cache-Control', 'no-cache');
+    req.headers.set('Connection', 'keep-alive');
 
     final id = 'bundled-${DateTime.now().millisecondsSinceEpoch}';
     final created = DateTime.now().millisecondsSinceEpoch ~/ 1000;
