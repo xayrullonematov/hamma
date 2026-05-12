@@ -434,8 +434,8 @@ class BundledEngine {
     // Streaming SSE.
     req.response.headers.contentType =
         ContentType('text', 'event-stream', charset: 'utf-8');
-    req.headers.set('Cache-Control', 'no-cache');
-    req.headers.set('Connection', 'keep-alive');
+    req.response.headers.set('Cache-Control', 'no-cache');
+    req.response.headers.set('Connection', 'keep-alive');
 
     final id = 'bundled-${DateTime.now().millisecondsSinceEpoch}';
     final created = DateTime.now().millisecondsSinceEpoch ~/ 1000;
