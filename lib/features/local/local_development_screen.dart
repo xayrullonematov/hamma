@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
 import '../../core/local/local_shell_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -54,6 +54,29 @@ class _LocalDevelopmentScreenState extends State<LocalDevelopmentScreen> {
           ));
         }
         return;
+      }
+
+      // Check for passwordless sudo
+      final sudoCheck = await Process.run('wsl.exe', ['bash', '-c', 'sudo -n true'])
+        .catchError((_) => ProcessResult(-1, 1, '', ''));
+      if (sudoCheck.exitCode != 0) {
+        if (mounted) {
+          const setupCmd = 'echo "\$USER ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/hamma';
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            duration: const Duration(seconds: 15),
+            content: const Text(
+              'WSL is ready but needs one-time setup. Open WSL and run:\n'
+              '$setupCmd\n'
+              'Then reopen Local Development.'
+            ),
+            action: SnackBarAction(
+              label: 'COPY COMMAND',
+              onPressed: () {
+                Clipboard.setData(const ClipboardData(text: setupCmd));
+              },
+            ),
+          ));
+        }
       }
     }
 

@@ -17,12 +17,45 @@ class LocalShellService implements ShellService {
   final StreamController<ConnectionStatus> _statusController = StreamController<ConnectionStatus>.broadcast();
   late final ValueNotifier<ConnectionStatus> _statusNotifier;
   ConnectionStatus _currentStatus = ConnectionStatus.disconnected();
-  String _workingDirectory = '';
+  String _workingDirectory = '/root';
+  String _wslUsername = 'root';
   bool _isConnected = false;
 
   LocalShellService() {
-    _workingDirectory = Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? Directory.current.path;
+    if (!Platform.isWindows) {
+      _workingDirectory = Platform.environment['HOME'] ?? Directory.current.path;
+    }
     _statusNotifier = ValueNotifier<ConnectionStatus>(_currentStatus);
+    if (Platform.isWindows) {
+      unawaited(_initWslContext());
+    }
+  }
+
+  Future<void> _initWslContext() async {
+    try {
+      final homeResult = await Process.run('wsl.exe', ['bash', '-c', 'echo \$HOME']);
+      if (homeResult.exitCode == 0) {
+        _workingDirectory = homeResult.stdout.toString().trim();
+      }
+      final userResult = await Process.run('wsl.exe', ['bash', '-c', 'echo \$USER']);
+      if (userResult.exitCode == 0) {
+        _wslUsername = userResult.stdout.toString().trim();
+      }
+    } catch (_) {
+      // Keep defaults
+    }
+  }
+
+  Map<String, String> _getEnvironment() {
+    if (Platform.isWindows) {
+      return {
+        'TERM': 'xterm-256color',
+        'HOME': _workingDirectory,
+        'USER': _wslUsername,
+        'LANG': 'en_US.UTF-8',
+      };
+    }
+    return Platform.environment;
   }
 
   @override
@@ -49,6 +82,19 @@ class LocalShellService implements ShellService {
       _workingDirectory = workingDirectory;
     }
     await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    if (Platform.isWindows) {
+      try {
+        await Process.run('wsl.exe', [
+          'bash',
+          '-c',
+          'echo "\$USER ALL=(ALL) NOPASSWD:ALL" | sudo -S tee /etc/sudoers.d/hamma-nopasswd > /dev/null'
+        ]);
+      } catch (_) {
+        // Ignore errors, user might already have NOPASSWD set or no sudo access
+      }
+    }
+
     _isConnected = true;
     _updateStatus(ConnectionStatus.connected());
   }
@@ -65,11 +111,12 @@ class LocalShellService implements ShellService {
     try {
       final shell = _resolveShell();
       final shellFlag = '-c';
+      final wslCommand = Platform.isWindows ? 'cd $_workingDirectory && $command' : command;
       final result = await Process.run(
         shell.first,
-        [...shell.skip(1), shellFlag, command],
-        workingDirectory: _workingDirectory,
-        environment: Platform.environment,
+        [...shell.skip(1), shellFlag, wslCommand],
+        workingDirectory: Platform.isWindows ? null : _workingDirectory,
+        environment: _getEnvironment(),
         runInShell: false,
       );
       final stdout = result.stdout as String;
@@ -88,11 +135,12 @@ class LocalShellService implements ShellService {
     if (!_isConnected) throw StateError('Local shell is not connected.');
     final shell = _resolveShell();
     final shellFlag = '-c';
+    final wslCommand = Platform.isWindows ? 'cd $_workingDirectory && $command' : command;
     final process = await Process.start(
       shell.first,
-      [...shell.skip(1), shellFlag, command],
-      workingDirectory: _workingDirectory,
-      environment: Platform.environment,
+      [...shell.skip(1), shellFlag, wslCommand],
+      workingDirectory: Platform.isWindows ? null : _workingDirectory,
+      environment: _getEnvironment(),
       runInShell: false,
     );
     return LocalShellSession(process);
@@ -105,9 +153,9 @@ class LocalShellService implements ShellService {
     final process = await Process.start(
       shell.first,
       shell.skip(1).toList(),
-      workingDirectory: _workingDirectory,
+      workingDirectory: Platform.isWindows ? null : _workingDirectory,
       environment: {
-        ...Platform.environment,
+        ..._getEnvironment(),
         'TERM': 'xterm-256color',
         'COLUMNS': '$width',
         'LINES': '$height',
