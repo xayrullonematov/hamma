@@ -1283,6 +1283,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _localEndpointController.text = endpoint;
       });
+
+      // Auto-save the built-in engine endpoint immediately.
+      await widget.onSaveAiSettings(
+        AiProvider.local,
+        '', // built-in needs no key
+        null,
+        endpoint,
+        _localModelController.text.trim(),
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Built-in engine saved — $endpoint'),
+          backgroundColor: AppColors.accent,
+        ),
+      );
     }
   }
 
