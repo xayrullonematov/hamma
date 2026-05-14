@@ -5,19 +5,25 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:meta/meta.dart';
 
 import 'vault_change_bus.dart';
+import 'vault_group.dart';
 import 'vault_secret.dart';
 
 /// Newest-wins sync metadata for the vault, mirroring the snippet sync
 /// model: per-id `updatedAt` and tombstones for deleted ids.
 @immutable
 class VaultSyncMeta {
-  const VaultSyncMeta({required this.updatedAt, required this.tombstones});
+  const VaultSyncMeta({
+    required this.updatedAt,
+    required this.tombstones,
+    this.groupTombstones = const {},
+  });
 
   final Map<String, DateTime> updatedAt;
   final Map<String, DateTime> tombstones;
+  final Map<String, DateTime> groupTombstones;
 
   static const VaultSyncMeta empty =
-      VaultSyncMeta(updatedAt: {}, tombstones: {});
+      VaultSyncMeta(updatedAt: {}, tombstones: {}, groupTombstones: {});
 
   Map<String, dynamic> toJson() => {
         'updatedAt': {
@@ -25,6 +31,9 @@ class VaultSyncMeta {
         },
         'tombstones': {
           for (final e in tombstones.entries) e.key: e.value.toIso8601String(),
+        },
+        'groupTombstones': {
+          for (final e in groupTombstones.entries) e.key: e.value.toIso8601String(),
         },
       };
 
@@ -42,6 +51,7 @@ class VaultSyncMeta {
     return VaultSyncMeta(
       updatedAt: parse(json['updatedAt']),
       tombstones: parse(json['tombstones']),
+      groupTombstones: parse(json['groupTombstones']),
     );
   }
 }
@@ -54,7 +64,9 @@ class VaultSyncMeta {
 ///     enumerate without decrypting every value individually.
 ///   - `vault_value_<id>` → plaintext value (encrypted at rest by the
 ///     OS keystore — secure_storage only stores ciphertext on disk).
-///   - `vault_meta_<id>` → `{description, updatedAt}` JSON.
+///   - `vault_meta_<id>` → `{description, updatedAt, groupId, lastUsedAt, rotateBy}` JSON.
+///   - `vault_group_index` → JSON list of `{id, name, type, tags}` records.
+///   - `vault_group_<id>` → full [VaultGroup] JSON.
 ///   - `vault_sync_meta` → [VaultSyncMeta] JSON for the sync layer.
 ///
 /// Every successful mutation fires [VaultChangeBus.notify] so listeners
@@ -68,6 +80,9 @@ class VaultStorage {
   static const _valuePrefix = 'vault_value_';
   static const _metaPrefix = 'vault_meta_';
   static const _deviceIdKey = 'vault_device_id';
+
+  static const _groupIndexKey = 'vault_group_index';
+  static const _groupPrefix = 'vault_group_';
 
   final FlutterSecureStorage _secureStorage;
 
@@ -90,9 +105,11 @@ class VaultStorage {
         value: value,
         scope: entry['scope'] == '' ? null : entry['scope'],
         description: (meta['description'] ?? '').toString(),
-        updatedAt:
-            DateTime.tryParse((meta['updatedAt'] ?? '').toString()) ??
-                DateTime.fromMillisecondsSinceEpoch(0),
+        updatedAt: DateTime.tryParse((meta['updatedAt'] ?? '').toString()) ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        groupId: meta['groupId']?.toString(),
+        lastUsedAt: DateTime.tryParse((meta['lastUsedAt'] ?? '').toString()),
+        rotateBy: DateTime.tryParse((meta['rotateBy'] ?? '').toString()),
       ));
     }
     return out;
@@ -106,6 +123,12 @@ class VaultStorage {
     return all
         .where((s) => s.isGlobal || (serverId != null && s.scope == serverId))
         .toList();
+  }
+
+  /// Loads all secrets belonging to a specific group.
+  Future<List<VaultSecret>> loadByGroup(String groupId) async {
+    final all = await loadAll();
+    return all.where((s) => s.groupId == groupId).toList();
   }
 
   /// Insert or update [secret]. Names are normalised to the canonical
@@ -142,8 +165,7 @@ class VaultStorage {
       }
     }
 
-    final id =
-        normalised.id.isEmpty ? _generateId() : normalised.id;
+    final id = normalised.id.isEmpty ? _generateId() : normalised.id;
     final updated = normalised.copyWith(id: id);
 
     await _secureStorage.write(
@@ -155,6 +177,9 @@ class VaultStorage {
       value: jsonEncode({
         'description': updated.description,
         'updatedAt': updated.updatedAt.toIso8601String(),
+        'groupId': updated.groupId,
+        'lastUsedAt': updated.lastUsedAt?.toIso8601String(),
+        'rotateBy': updated.rotateBy?.toIso8601String(),
       }),
     );
 
@@ -171,6 +196,7 @@ class VaultStorage {
     final newMeta = VaultSyncMeta(
       updatedAt: {...meta.updatedAt, id: updated.updatedAt},
       tombstones: {...meta.tombstones}..remove(id),
+      groupTombstones: {...meta.groupTombstones},
     );
     await saveSyncMeta(newMeta);
 
@@ -194,6 +220,93 @@ class VaultStorage {
     final newMeta = VaultSyncMeta(
       updatedAt: {...meta.updatedAt}..remove(id),
       tombstones: {...meta.tombstones, id: now},
+      groupTombstones: {...meta.groupTombstones},
+    );
+    await saveSyncMeta(newMeta);
+
+    VaultChangeBus.instance.notify();
+  }
+
+  /// Returns every group in the store.
+  Future<List<VaultGroup>> loadAllGroups() async {
+    final index = await _readGroupIndex();
+    final out = <VaultGroup>[];
+    for (final entry in index) {
+      final id = entry['id']!;
+      final raw = await _secureStorage.read(key: '$_groupPrefix$id');
+      if (raw == null) continue;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map<String, dynamic>) {
+          out.add(VaultGroup.fromJson(decoded));
+        } else if (decoded is Map) {
+          out.add(VaultGroup.fromJson(decoded.cast<String, dynamic>()));
+        }
+      } catch (_) {
+        // Corrupt group data — skip
+      }
+    }
+    return out;
+  }
+
+  /// Insert or update [group].
+  Future<VaultGroup> upsertGroup(VaultGroup group) async {
+    final id = group.id.isEmpty ? _generateId() : group.id;
+    final updated = group.copyWith(
+      id: id,
+      updatedAt: DateTime.now().toUtc(),
+    );
+
+    await _secureStorage.write(
+      key: '$_groupPrefix$id',
+      value: jsonEncode(updated.toJson()),
+    );
+
+    final index = await _readGroupIndex();
+    final newIndex = index.where((e) => e['id'] != id).toList()
+      ..add({
+        'id': id,
+        'name': updated.name,
+        'type': updated.type.name,
+        'tags': updated.tags.join(','),
+      });
+    await _writeGroupIndex(newIndex);
+
+    // Sync meta: bump updatedAt, clear any stale group tombstone.
+    final meta = await loadSyncMeta();
+    final newMeta = VaultSyncMeta(
+      updatedAt: {...meta.updatedAt, id: updated.updatedAt},
+      tombstones: {...meta.tombstones},
+      groupTombstones: {...meta.groupTombstones}..remove(id),
+    );
+    await saveSyncMeta(newMeta);
+
+    VaultChangeBus.instance.notify();
+    return updated;
+  }
+
+  /// Delete the group identified by [id]. Idempotent. Any secrets
+  /// belonging to this group are NOT deleted, but they are "ungrouped"
+  /// (their groupId field is cleared).
+  Future<void> deleteGroup(String id) async {
+    await _secureStorage.delete(key: '$_groupPrefix$id');
+
+    final index = await _readGroupIndex();
+    final newIndex = index.where((e) => e['id'] != id).toList();
+    await _writeGroupIndex(newIndex);
+
+    // Ungroup member secrets.
+    final members = await loadByGroup(id);
+    for (final s in members) {
+      await upsert(s.copyWith(groupId: null));
+    }
+
+    final meta = await loadSyncMeta();
+    final now = DateTime.now().toUtc();
+    final newMeta = VaultSyncMeta(
+      updatedAt: {...meta.updatedAt}..remove(id),
+      tombstones: {...meta.tombstones},
+      groupTombstones: {...meta.groupTombstones, id: now},
     );
     await saveSyncMeta(newMeta);
 
@@ -201,21 +314,42 @@ class VaultStorage {
   }
 
   /// Replace the entire vault contents (used by the sync merge path).
-  /// Fires [VaultChangeBus] on completion so the [GlobalVaultRedactor]
-  /// and any per-screen vault snapshot listeners (terminal, server
-  /// edit, vault settings) pick up the freshly synced values without
-  /// a restart. The sync service is responsible for suppressing its
-  /// own debounced re-push around this call to avoid an upload loop.
+  /// Fires [VaultChangeBus] on completion.
   Future<void> applyMergedState({
     required List<VaultSecret> secrets,
+    required List<VaultGroup> groups,
     required VaultSyncMeta meta,
   }) async {
-    final existing = await _readIndex();
-    for (final entry in existing) {
+    // Clear existing secrets
+    final existingSecrets = await _readIndex();
+    for (final entry in existingSecrets) {
       await _secureStorage.delete(key: '$_valuePrefix${entry['id']}');
       await _secureStorage.delete(key: '$_metaPrefix${entry['id']}');
     }
 
+    // Clear existing groups
+    final existingGroups = await _readGroupIndex();
+    for (final entry in existingGroups) {
+      await _secureStorage.delete(key: '$_groupPrefix${entry['id']}');
+    }
+
+    // Write new groups
+    final newGroupIndex = <Map<String, String>>[];
+    for (final g in groups) {
+      await _secureStorage.write(
+        key: '$_groupPrefix${g.id}',
+        value: jsonEncode(g.toJson()),
+      );
+      newGroupIndex.add({
+        'id': g.id,
+        'name': g.name,
+        'type': g.type.name,
+        'tags': g.tags.join(','),
+      });
+    }
+    await _writeGroupIndex(newGroupIndex);
+
+    // Write new secrets
     final newIndex = <Map<String, String>>[];
     for (final s in secrets) {
       await _secureStorage.write(key: '$_valuePrefix${s.id}', value: s.value);
@@ -224,6 +358,9 @@ class VaultStorage {
         value: jsonEncode({
           'description': s.description,
           'updatedAt': s.updatedAt.toIso8601String(),
+          'groupId': s.groupId,
+          'lastUsedAt': s.lastUsedAt?.toIso8601String(),
+          'rotateBy': s.rotateBy?.toIso8601String(),
         }),
       );
       newIndex.add({
@@ -233,6 +370,7 @@ class VaultStorage {
       });
     }
     await _writeIndex(newIndex);
+
     await saveSyncMeta(meta);
     VaultChangeBus.instance.notify();
   }
@@ -276,7 +414,8 @@ class VaultStorage {
       if (decoded is! List) return [];
       return decoded
           .whereType<Map<dynamic, dynamic>>()
-          .map((e) => e.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')))
+          .map((e) =>
+              e.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')))
           .toList();
     } catch (_) {
       return [];
@@ -286,6 +425,29 @@ class VaultStorage {
   Future<void> _writeIndex(List<Map<String, String>> index) async {
     await _secureStorage.write(
       key: _indexKey,
+      value: jsonEncode(index),
+    );
+  }
+
+  Future<List<Map<String, String>>> _readGroupIndex() async {
+    final raw = await _secureStorage.read(key: _groupIndexKey);
+    if (raw == null || raw.trim().isEmpty) return [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+      return decoded
+          .whereType<Map<dynamic, dynamic>>()
+          .map((e) =>
+              e.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> _writeGroupIndex(List<Map<String, String>> index) async {
+    await _secureStorage.write(
+      key: _groupIndexKey,
       value: jsonEncode(index),
     );
   }

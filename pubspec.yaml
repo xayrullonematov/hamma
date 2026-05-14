@@ -27,6 +27,7 @@ dependencies:
   xterm: ^4.0.0
   sentry_flutter: ^9.17.0
   url_launcher: ^6.3.1
+  flutter_pty: ^0.4.2
   local_auth: ^2.2.0
   http: ^1.2.0
   encrypt: ^5.0.3

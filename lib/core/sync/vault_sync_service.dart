@@ -10,6 +10,7 @@ import '../backup/cloud_sync_adapter.dart';
 import '../storage/app_lock_storage.dart';
 import '../storage/backup_storage.dart';
 import '../vault/vault_change_bus.dart';
+import '../vault/vault_group.dart';
 import '../vault/vault_secret.dart';
 import '../vault/vault_storage.dart';
 
@@ -20,6 +21,7 @@ import '../vault/vault_storage.dart';
 class VaultSyncBlob {
   const VaultSyncBlob({
     required this.secrets,
+    required this.groups,
     required this.meta,
     required this.deviceId,
     required this.generatedAt,
@@ -28,6 +30,7 @@ class VaultSyncBlob {
   static const int wireVersion = 1;
 
   final List<VaultSecret> secrets;
+  final List<VaultGroup> groups;
   final VaultSyncMeta meta;
   final String deviceId;
   final DateTime generatedAt;
@@ -38,6 +41,7 @@ class VaultSyncBlob {
       'deviceId': deviceId,
       'generatedAt': generatedAt.toUtc().toIso8601String(),
       'secrets': secrets.map((s) => s.toJson()).toList(),
+      'groups': groups.map((g) => g.toJson()).toList(),
       'meta': meta.toJson(),
     });
     return Uint8List.fromList(utf8.encode(json));
@@ -56,6 +60,13 @@ class VaultSyncBlob {
         secrets.add(VaultSecret.fromJson(item));
       }
     }
+    final groupsRaw = raw['groups'];
+    final groups = <VaultGroup>[];
+    if (groupsRaw is List) {
+      for (final item in groupsRaw.whereType<Map<String, dynamic>>()) {
+        groups.add(VaultGroup.fromJson(item));
+      }
+    }
     final meta = raw['meta'] is Map
         ? VaultSyncMeta.fromJson(
             Map<String, dynamic>.from(raw['meta'] as Map),
@@ -63,6 +74,7 @@ class VaultSyncBlob {
         : VaultSyncMeta.empty;
     return VaultSyncBlob(
       secrets: secrets,
+      groups: groups,
       meta: meta,
       deviceId: (raw['deviceId'] ?? '').toString(),
       generatedAt:
@@ -76,41 +88,59 @@ class VaultSyncBlob {
 /// awareness so a freshly-synced peer can't resurrect a deleted secret.
 @immutable
 class VaultMergeResult {
-  const VaultMergeResult({required this.secrets, required this.meta});
+  const VaultMergeResult({
+    required this.secrets,
+    required this.groups,
+    required this.meta,
+  });
   final List<VaultSecret> secrets;
+  final List<VaultGroup> groups;
   final VaultSyncMeta meta;
 }
 
 VaultMergeResult mergeVaults({
   required List<VaultSecret> localSecrets,
+  required List<VaultGroup> localGroups,
   required VaultSyncMeta localMeta,
   required List<VaultSecret> remoteSecrets,
+  required List<VaultGroup> remoteGroups,
   required VaultSyncMeta remoteMeta,
 }) {
-  final localById = {for (final s in localSecrets) s.id: s};
-  final remoteById = {for (final s in remoteSecrets) s.id: s};
+  final localSecretsById = {for (final s in localSecrets) s.id: s};
+  final remoteSecretsById = {for (final s in remoteSecrets) s.id: s};
+  final localGroupsById = {for (final g in localGroups) g.id: g};
+  final remoteGroupsById = {for (final g in remoteGroups) g.id: g};
   final epoch = DateTime.fromMillisecondsSinceEpoch(0).toUtc();
 
-  final allIds = <String>{
-    ...localById.keys,
-    ...remoteById.keys,
+  final allSecretIds = <String>{
+    ...localSecretsById.keys,
+    ...remoteSecretsById.keys,
     ...localMeta.tombstones.keys,
     ...remoteMeta.tombstones.keys,
   };
 
+  final allGroupIds = <String>{
+    ...localGroupsById.keys,
+    ...remoteGroupsById.keys,
+    ...localMeta.groupTombstones.keys,
+    ...remoteMeta.groupTombstones.keys,
+  };
+
   final mergedSecrets = <VaultSecret>[];
+  final mergedGroups = <VaultGroup>[];
   final mergedUpdatedAt = <String, DateTime>{};
   final mergedTombstones = <String, DateTime>{};
+  final mergedGroupTombstones = <String, DateTime>{};
 
-  for (final id in allIds) {
-    final localSecret = localById[id];
-    final remoteSecret = remoteById[id];
+  for (final id in allSecretIds) {
+    final localSecret = localSecretsById[id];
+    final remoteSecret = remoteSecretsById[id];
     final localUpdated = localMeta.updatedAt[id] ?? epoch;
     final remoteUpdated = remoteMeta.updatedAt[id] ?? epoch;
     final localTomb = localMeta.tombstones[id];
     final remoteTomb = remoteMeta.tombstones[id];
 
-    final candidates = <_Candidate>[];
+    final candidates = <_Candidate<VaultSecret>>[];
     if (localSecret != null) {
       candidates.add(_Candidate.value(localSecret, localUpdated));
     }
@@ -124,27 +154,59 @@ VaultMergeResult mergeVaults({
     candidates.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     final winner = candidates.first;
 
-    if (winner.secret != null) {
-      mergedSecrets.add(winner.secret!);
+    if (winner.value != null) {
+      mergedSecrets.add(winner.value!);
       mergedUpdatedAt[id] = winner.timestamp;
     } else {
       mergedTombstones[id] = winner.timestamp;
     }
   }
 
+  for (final id in allGroupIds) {
+    final localGroup = localGroupsById[id];
+    final remoteGroup = remoteGroupsById[id];
+    final localUpdated = localMeta.updatedAt[id] ?? epoch;
+    final remoteUpdated = remoteMeta.updatedAt[id] ?? epoch;
+    final localTomb = localMeta.groupTombstones[id];
+    final remoteTomb = remoteMeta.groupTombstones[id];
+
+    final candidates = <_Candidate<VaultGroup>>[];
+    if (localGroup != null) {
+      candidates.add(_Candidate.value(localGroup, localUpdated));
+    }
+    if (remoteGroup != null) {
+      candidates.add(_Candidate.value(remoteGroup, remoteUpdated));
+    }
+    if (localTomb != null) candidates.add(_Candidate.tomb(localTomb));
+    if (remoteTomb != null) candidates.add(_Candidate.tomb(remoteTomb));
+
+    if (candidates.isEmpty) continue;
+    candidates.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final winner = candidates.first;
+
+    if (winner.value != null) {
+      mergedGroups.add(winner.value!);
+      mergedUpdatedAt[id] = winner.timestamp;
+    } else {
+      mergedGroupTombstones[id] = winner.timestamp;
+    }
+  }
+
   return VaultMergeResult(
     secrets: mergedSecrets,
+    groups: mergedGroups,
     meta: VaultSyncMeta(
       updatedAt: mergedUpdatedAt,
       tombstones: mergedTombstones,
+      groupTombstones: mergedGroupTombstones,
     ),
   );
 }
 
-class _Candidate {
-  _Candidate.value(this.secret, this.timestamp);
-  _Candidate.tomb(this.timestamp) : secret = null;
-  final VaultSecret? secret;
+class _Candidate<T> {
+  _Candidate.value(this.value, this.timestamp);
+  _Candidate.tomb(this.timestamp) : value = null;
+  final T? value;
   final DateTime timestamp;
 }
 
@@ -253,9 +315,11 @@ class VaultSyncService {
 
     final deviceId = await _deviceId();
     final localSecrets = await _vaultStorage.loadAll();
+    final localGroups = await _vaultStorage.loadAllGroups();
     final localMeta = await _vaultStorage.loadSyncMeta();
 
     var secretsToUpload = localSecrets;
+    var groupsToUpload = localGroups;
     var metaToUpload = localMeta;
 
     try {
@@ -266,8 +330,10 @@ class VaultSyncService {
         if (remote.deviceId != deviceId) {
           final merged = mergeVaults(
             localSecrets: localSecrets,
+            localGroups: localGroups,
             localMeta: localMeta,
             remoteSecrets: remote.secrets,
+            remoteGroups: remote.groups,
             remoteMeta: remote.meta,
           );
           // Suppress the bus event we're about to trigger so the
@@ -276,15 +342,18 @@ class VaultSyncService {
           _suppressNextBusEvent = true;
           await _vaultStorage.applyMergedState(
             secrets: merged.secrets,
+            groups: merged.groups,
             meta: merged.meta,
           );
           secretsToUpload = merged.secrets;
+          groupsToUpload = merged.groups;
           metaToUpload = merged.meta;
         }
       }
 
       final blob = VaultSyncBlob(
         secrets: secretsToUpload,
+        groups: groupsToUpload,
         meta: metaToUpload,
         deviceId: deviceId,
         generatedAt: DateTime.now().toUtc(),

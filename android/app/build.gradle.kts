@@ -20,7 +20,6 @@ fun signingValue(envKey: String, propKey: String): String? =
 android {
     namespace = "com.hamma.app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "26.1.10909125"
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
@@ -39,7 +38,7 @@ android {
         val keyPass   = signingValue("KEY_PASSWORD",       "keyPassword")
         if (storePath != null && storePass != null && alias != null && keyPass != null) {
             create("release") {
-                storeFile     = file(storePath)
+                storeFile     = rootProject.file(storePath)
                 storePassword = storePass
                 keyAlias      = alias
                 keyPassword   = keyPass

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
 import '../../core/local/local_shell_service.dart';
+import '../../core/shell/shell_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../processes/process_manager_screen.dart';
 import '../observability/health_tab.dart';
@@ -42,48 +43,20 @@ class _LocalDevelopmentScreenState extends State<LocalDevelopmentScreen> {
   }
 
   Future<void> _connect() async {
-    if (Platform.isWindows) {
-      final r = await Process.run('wsl.exe', ['--status'])
-        .catchError((_) => ProcessResult(-1, 1, '', ''));
-      if (r.exitCode != 0) {
-        if (mounted) {
-          setState(() => _isConnecting = false);
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            duration: Duration(seconds: 8),
-            content: Text('WSL required. Run: wsl --install in PowerShell, then restart.'),
-          ));
-        }
-        return;
-      }
-
-      // Check for passwordless sudo
-      final sudoCheck = await Process.run('wsl.exe', ['bash', '-c', 'sudo -n true'])
-        .catchError((_) => ProcessResult(-1, 1, '', ''));
-      if (sudoCheck.exitCode != 0) {
-        if (mounted) {
-          const setupCmd = 'echo "\$USER ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/hamma';
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            duration: const Duration(seconds: 15),
-            content: const Text(
-              'WSL is ready but needs one-time setup. Open WSL and run:\n'
-              '$setupCmd\n'
-              'Then reopen Local Development.'
-            ),
-            action: SnackBarAction(
-              label: 'COPY COMMAND',
-              onPressed: () {
-                Clipboard.setData(const ClipboardData(text: setupCmd));
-              },
-            ),
-          ));
-        }
-      }
-    }
-
     setState(() => _isConnecting = true);
-    await _shell.connect();
-    if (mounted) {
-      setState(() => _isConnecting = false);
+    try {
+      await _shell.connect();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString()),
+          duration: const Duration(seconds: 10),
+        ));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isConnecting = false);
+      }
     }
   }
 
@@ -180,7 +153,7 @@ class _LocalDevelopmentScreenState extends State<LocalDevelopmentScreen> {
 
 class _LocalTerminalTab extends StatefulWidget {
   const _LocalTerminalTab({required this.shell});
-  final LocalShellService shell;
+  final ShellService shell;
 
   @override
   State<_LocalTerminalTab> createState() => _LocalTerminalTabState();
@@ -189,7 +162,7 @@ class _LocalTerminalTab extends StatefulWidget {
 class _LocalTerminalTabState extends State<_LocalTerminalTab> {
   late final Terminal _terminal;
   final FocusNode _focusNode = FocusNode();
-  LocalShellSession? _session;
+  dynamic _session;
   StreamSubscription<Uint8List>? _stdoutSub;
   StreamSubscription<Uint8List>? _stderrSub;
 
@@ -200,28 +173,40 @@ class _LocalTerminalTabState extends State<_LocalTerminalTab> {
     _terminal.onOutput = (data) {
       _session?.write(utf8.encode(data));
     };
+    _terminal.onResize = (w, h, pw, ph) {
+      _session?.resizeTerminal(w, h);
+    };
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    widget.shell.statusNotifier.addListener(_onStatusChanged);
+    if (widget.shell.isConnected) {
       _openShell();
-    });
+    }
+  }
+
+  void _onStatusChanged() {
+    if (widget.shell.isConnected && _session == null) {
+      _openShell();
+    }
   }
 
   Future<void> _openShell() async {
     try {
-      final session = await widget.shell.startShell(
+      final dynamic session = await widget.shell.startShell(
         width: _terminal.viewWidth > 0 ? _terminal.viewWidth : 80,
         height: _terminal.viewHeight > 0 ? _terminal.viewHeight : 24,
       );
 
-      _stdoutSub = session.stdout.listen((data) {
+      _stdoutSub = (session.stdout as Stream<Uint8List>).listen((Uint8List data) {
         _terminal.write(utf8.decode(data, allowMalformed: true));
       });
 
-      _stderrSub = session.stderr.listen((data) {
-        _terminal.write(utf8.decode(data, allowMalformed: true));
-      });
+      if (session is LocalShellSession) {
+        _stderrSub = session.stderr.listen((Uint8List data) {
+          _terminal.write(utf8.decode(data, allowMalformed: true));
+        });
+      }
 
-      session.done.then((code) {
+      (session.done as Future<int>).then((int code) {
         if (mounted) {
           setState(() {
             _session = null;
@@ -242,6 +227,7 @@ class _LocalTerminalTabState extends State<_LocalTerminalTab> {
 
   @override
   void dispose() {
+    widget.shell.statusNotifier.removeListener(_onStatusChanged);
     _stdoutSub?.cancel();
     _stderrSub?.cancel();
     _session?.close();

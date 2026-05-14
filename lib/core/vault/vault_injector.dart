@@ -9,8 +9,10 @@ import 'vault_secret.dart';
 /// breadcrumbs. See [SshService.execute] for the call site.
 class VaultInjector {
   /// Server-scoped secrets shadow globals of the same name.
-  VaultInjector(List<VaultSecret> secrets)
-      : _byName = _buildLookup(secrets);
+  VaultInjector(List<VaultSecret> secrets,
+      {Map<String, List<VaultSecret>>? secretsByGroup})
+      : _byName = _buildLookup(secrets),
+        _byGroup = secretsByGroup ?? const {};
 
   static Map<String, VaultSecret> _buildLookup(List<VaultSecret> secrets) {
     final out = <String, VaultSecret>{};
@@ -24,20 +26,34 @@ class VaultInjector {
   }
 
   final Map<String, VaultSecret> _byName;
+  final Map<String, List<VaultSecret>> _byGroup;
 
   static final RegExp _placeholder =
-      RegExp(r'\$\{vault:([A-Za-z_][A-Za-z0-9_]*)\}');
+      RegExp(r'\$\{vault:([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?)\}');
+
+  VaultSecret? _lookupSecret(String name) {
+    if (name.contains('.')) {
+      final parts = name.split('.');
+      final groupName = parts[0].toUpperCase();
+      final fieldName = parts[1].toUpperCase();
+      final group = _byGroup[groupName];
+      if (group != null) {
+        for (final s in group) {
+          if (s.name.toUpperCase() == fieldName) {
+            return s;
+          }
+        }
+      }
+    }
+    return _byName[name];
+  }
 
   /// Returns true when [command] contains at least one
-  /// `${vault:NAME}` placeholder. Used by callers that want to know
-  /// whether substitution will mutate the string before they decide
-  /// what to keep in history.
+  /// `${vault:NAME}` or `${vault:GROUP.FIELD}` placeholder.
   bool hasPlaceholders(String command) => _placeholder.hasMatch(command);
 
   /// Returns the names of every placeholder appearing in [command],
-  /// in textual order with duplicates preserved. Useful for diagnostic
-  /// breadcrumbs ("ran command with vault: DB_PASSWORD") that don't
-  /// leak the value.
+  /// in textual order with duplicates preserved.
   List<String> placeholderNames(String command) {
     return _placeholder
         .allMatches(command)
@@ -46,21 +62,11 @@ class VaultInjector {
   }
 
   /// Substitute every placeholder. Throws [VaultInjectionException] if
-  /// a placeholder names a secret that isn't in scope — failing loud
-  /// is the right call here: silently passing the literal `${vault:X}`
-  /// to the remote shell would either confuse the user or leak the
-  /// placeholder shape into logs.
-  ///
-  /// **Prefer [buildEnvCommand] for live SSH execution** — literal
-  /// substitution puts the raw value into the command line, where it
-  /// can collide with shell metacharacters in the secret value and
-  /// (on interactive shells) be echoed back into history. [inject] is
-  /// kept for tests and code paths that explicitly need the resolved
-  /// string (e.g. dry-run preview that immediately discards it).
+  /// a placeholder names a secret that isn't in scope.
   String inject(String command) {
     return command.replaceAllMapped(_placeholder, (m) {
       final name = m.group(1)!;
-      final secret = _byName[name];
+      final secret = _lookupSecret(name);
       if (secret == null) {
         throw VaultInjectionException(
           'No vault secret named "$name" is in scope for this server.',
@@ -70,15 +76,13 @@ class VaultInjector {
     });
   }
 
-  /// Wraps [command] so vault placeholders resolve via env vars
-  /// instead of inline substitution. See `docs/secrets-vault.md`.
-  /// Throws [VaultInjectionException] on an unknown placeholder.
+  /// Wraps [command] so vault placeholders resolve via env vars.
   EnvInjectedCommand buildEnvCommand(String command) {
     final names = <String>{};
     final missing = <String>{};
     for (final m in _placeholder.allMatches(command)) {
       final name = m.group(1)!;
-      if (_byName.containsKey(name)) {
+      if (_lookupSecret(name) != null) {
         names.add(name);
       } else {
         missing.add(name);
@@ -98,7 +102,7 @@ class VaultInjector {
       );
     }
     final substituted = _shellAwareSubstitute(command);
-    final env = {for (final n in names) n: _byName[n]!.value};
+    final env = {for (final n in names) n: _lookupSecret(n)!.value};
     final exportPrefix = names
         .map((n) => '$n=${_singleQuote(env[n]!)}')
         .join(' ');
@@ -107,6 +111,35 @@ class VaultInjector {
     return EnvInjectedCommand(
       wrappedCommand: wrapped,
       placeholderNames: names.toList(growable: false),
+      env: env,
+    );
+  }
+
+  /// Injects all secrets in [groupName] as env vars and wraps [command].
+  EnvInjectedCommand buildGroupEnvCommand(String groupName, String command) {
+    final group = _byGroup[groupName.toUpperCase()];
+    if (group == null) {
+      throw VaultInjectionException(
+        'No vault group named "$groupName" is in scope.',
+      );
+    }
+
+    final env = <String, String>{};
+    final names = <String>[];
+    for (final s in group) {
+      env[s.name] = s.value;
+      names.add(s.name);
+    }
+
+    final exportPrefix = names
+        .map((n) => '$n=${_singleQuote(env[n]!)}')
+        .join(' ');
+
+    final wrapped = ' $exportPrefix bash -lc ${_singleQuote(command)}';
+
+    return EnvInjectedCommand(
+      wrappedCommand: wrapped,
+      placeholderNames: names,
       env: env,
     );
   }
@@ -151,7 +184,8 @@ class VaultInjector {
           final inside = command.substring(i + 2, close);
           if (inside.startsWith('vault:')) {
             final name = inside.substring(6);
-            if (RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(name)) {
+            if (RegExp(r'^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$')
+                .hasMatch(name)) {
               if (inSingle) {
                 // close ' then "${NAME}" then reopen '
                 out.write("'\"\${$name}\"'");

@@ -20,8 +20,10 @@ void main() {
     test('takes the newer of two updates to the same id', () {
       final result = mergeVaults(
         localSecrets: [_s('a', 'A', 'old', t0)],
+        localGroups: const [],
         localMeta: VaultSyncMeta(updatedAt: {'a': t0}, tombstones: const {}),
         remoteSecrets: [_s('a', 'A', 'new', t2)],
+        remoteGroups: const [],
         remoteMeta: VaultSyncMeta(updatedAt: {'a': t2}, tombstones: const {}),
       );
       expect(result.secrets.single.value, 'new');
@@ -31,8 +33,10 @@ void main() {
     test('a tombstone newer than a value deletes the secret', () {
       final result = mergeVaults(
         localSecrets: [_s('a', 'A', 'val', t0)],
+        localGroups: const [],
         localMeta: VaultSyncMeta(updatedAt: {'a': t0}, tombstones: const {}),
         remoteSecrets: const [],
+        remoteGroups: const [],
         remoteMeta:
             VaultSyncMeta(updatedAt: const {}, tombstones: {'a': t1}),
       );
@@ -43,8 +47,10 @@ void main() {
     test('a value newer than a tombstone resurrects the secret', () {
       final result = mergeVaults(
         localSecrets: [_s('a', 'A', 'fresh', t2)],
+        localGroups: const [],
         localMeta: VaultSyncMeta(updatedAt: {'a': t2}, tombstones: const {}),
         remoteSecrets: const [],
+        remoteGroups: const [],
         remoteMeta:
             VaultSyncMeta(updatedAt: const {}, tombstones: {'a': t1}),
       );
@@ -56,8 +62,10 @@ void main() {
     test('disjoint local + remote ids both survive', () {
       final result = mergeVaults(
         localSecrets: [_s('a', 'A', 'va', t0)],
+        localGroups: const [],
         localMeta: VaultSyncMeta(updatedAt: {'a': t0}, tombstones: const {}),
         remoteSecrets: [_s('b', 'B', 'vb', t1)],
+        remoteGroups: const [],
         remoteMeta: VaultSyncMeta(updatedAt: {'b': t1}, tombstones: const {}),
       );
       expect(result.secrets.map((s) => s.id).toSet(), {'a', 'b'});

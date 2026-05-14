@@ -19,6 +19,9 @@ class VaultSecret {
     this.scope,
     this.description = '',
     required this.updatedAt,
+    this.groupId,
+    this.lastUsedAt,
+    this.rotateBy,
   });
 
   /// Stable id assigned at create-time. Used as the merge key for sync
@@ -44,6 +47,18 @@ class VaultSecret {
   final String description;
 
   final DateTime updatedAt;
+
+  /// Optional link to a [VaultGroup]. If set, this secret is treated as
+  /// a component of a larger credential (e.g. the PASSWORD part of a
+  /// DB credential group).
+  final String? groupId;
+
+  /// Audit timestamp for the last time this secret was injected into
+  /// a command or retrieved for viewing.
+  final DateTime? lastUsedAt;
+
+  /// Recommended next rotation date.
+  final DateTime? rotateBy;
 
   bool get isGlobal => scope == null;
 
@@ -71,6 +86,9 @@ class VaultSecret {
     Object? scope = _scopeSentinel,
     String? description,
     DateTime? updatedAt,
+    Object? groupId = _scopeSentinel,
+    Object? lastUsedAt = _scopeSentinel,
+    Object? rotateBy = _scopeSentinel,
   }) {
     return VaultSecret(
       id: id ?? this.id,
@@ -79,6 +97,14 @@ class VaultSecret {
       scope: identical(scope, _scopeSentinel) ? this.scope : scope as String?,
       description: description ?? this.description,
       updatedAt: updatedAt ?? this.updatedAt,
+      groupId:
+          identical(groupId, _scopeSentinel) ? this.groupId : groupId as String?,
+      lastUsedAt: identical(lastUsedAt, _scopeSentinel)
+          ? this.lastUsedAt
+          : lastUsedAt as DateTime?,
+      rotateBy: identical(rotateBy, _scopeSentinel)
+          ? this.rotateBy
+          : rotateBy as DateTime?,
     );
   }
 
@@ -89,6 +115,9 @@ class VaultSecret {
         'scope': scope,
         'description': description,
         'updatedAt': updatedAt.toUtc().toIso8601String(),
+        'groupId': groupId,
+        'lastUsedAt': lastUsedAt?.toUtc().toIso8601String(),
+        'rotateBy': rotateBy?.toUtc().toIso8601String(),
       };
 
   factory VaultSecret.fromJson(Map<String, dynamic> json) {
@@ -100,6 +129,9 @@ class VaultSecret {
       description: (json['description'] ?? '').toString(),
       updatedAt: DateTime.tryParse((json['updatedAt'] ?? '').toString()) ??
           DateTime.fromMillisecondsSinceEpoch(0),
+      groupId: json['groupId']?.toString(),
+      lastUsedAt: DateTime.tryParse((json['lastUsedAt'] ?? '').toString()),
+      rotateBy: DateTime.tryParse((json['rotateBy'] ?? '').toString()),
     );
   }
 

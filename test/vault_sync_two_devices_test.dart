@@ -66,6 +66,7 @@ void main() {
     );
     final blobA = VaultSyncBlob(
       secrets: await storeA.loadAll(),
+      groups: await storeA.loadAllGroups(),
       meta: await storeA.loadSyncMeta(),
       deviceId: 'device-A',
       generatedAt: t,
@@ -145,6 +146,7 @@ void main() {
           updatedAt: DateTime.utc(2026, 5, 1),
         ),
       ],
+      groups: [],
       meta: VaultSyncMeta(
         updatedAt: {'x': DateTime.utc(2026, 5, 1)},
         tombstones: const {},

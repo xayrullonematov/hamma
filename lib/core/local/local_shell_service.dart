@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_pty/flutter_pty.dart';
 import '../ssh/connection_status.dart';
+import '../ssh/ssh_exception.dart';
 import '../shell/shell_service.dart';
 
 List<String> _resolveShell() {
@@ -17,45 +19,30 @@ class LocalShellService implements ShellService {
   final StreamController<ConnectionStatus> _statusController = StreamController<ConnectionStatus>.broadcast();
   late final ValueNotifier<ConnectionStatus> _statusNotifier;
   ConnectionStatus _currentStatus = ConnectionStatus.disconnected();
-  String _workingDirectory = '/root';
-  String _wslUsername = 'root';
+  String _workingDirectory = '';
+  String _wslUser = 'root';
   bool _isConnected = false;
 
   LocalShellService() {
-    if (!Platform.isWindows) {
-      _workingDirectory = Platform.environment['HOME'] ?? Directory.current.path;
-    }
     _statusNotifier = ValueNotifier<ConnectionStatus>(_currentStatus);
-    if (Platform.isWindows) {
-      unawaited(_initWslContext());
-    }
   }
 
-  Future<void> _initWslContext() async {
-    try {
-      final homeResult = await Process.run('wsl.exe', ['bash', '-c', 'echo \$HOME']);
-      if (homeResult.exitCode == 0) {
-        _workingDirectory = homeResult.stdout.toString().trim();
-      }
-      final userResult = await Process.run('wsl.exe', ['bash', '-c', 'echo \$USER']);
-      if (userResult.exitCode == 0) {
-        _wslUsername = userResult.stdout.toString().trim();
-      }
-    } catch (_) {
-      // Keep defaults
-    }
-  }
-
-  Map<String, String> _getEnvironment() {
+  Map<String, String> _getEnvironment(int width, int height) {
     if (Platform.isWindows) {
       return {
-        'TERM': 'xterm-256color',
         'HOME': _workingDirectory,
-        'USER': _wslUsername,
+        'USER': _wslUser,
+        'TERM': 'xterm-256color',
         'LANG': 'en_US.UTF-8',
+        'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
       };
     }
-    return Platform.environment;
+    return {
+      ...Platform.environment,
+      'TERM': 'xterm-256color',
+      'COLUMNS': '$width',
+      'LINES': '$height',
+    };
   }
 
   @override
@@ -77,26 +64,40 @@ class LocalShellService implements ShellService {
   }
 
   Future<void> connect({String? workingDirectory}) async {
+    _isConnected = false; // Always reset state fully
     _updateStatus(ConnectionStatus.connecting());
-    if (workingDirectory != null && workingDirectory.isNotEmpty) {
-      _workingDirectory = workingDirectory;
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 50));
 
-    if (Platform.isWindows) {
-      try {
+    try {
+      if (Platform.isWindows) {
+        // Verify wsl.exe is reachable
+        final check = await Process.run('wsl.exe', ['--status'])
+            .catchError((_) => ProcessResult(-1, 1, '', ''));
+        if (check.exitCode != 0) {
+          throw Exception('WSL not found. Please install WSL to use local shell on Windows.');
+        }
+
+        // Resolve WSL home directory and user
+        final homeR = await Process.run('wsl.exe', ['bash', '-c', 'echo \$HOME']);
+        _workingDirectory = (homeR.stdout as String).trim();
+        final userR = await Process.run('wsl.exe', ['bash', '-c', 'echo \$USER']);
+        _wslUser = (userR.stdout as String).trim();
+
+        // Passwordless sudo setup
         await Process.run('wsl.exe', [
-          'bash',
-          '-c',
-          'echo "\$USER ALL=(ALL) NOPASSWD:ALL" | sudo -S tee /etc/sudoers.d/hamma-nopasswd > /dev/null'
-        ]);
-      } catch (_) {
-        // Ignore errors, user might already have NOPASSWD set or no sudo access
+          'bash', '-c',
+          'echo "\$USER ALL=(ALL) NOPASSWD:ALL" | sudo SUDO_ASKPASS=/bin/true sudo -A tee /etc/sudoers.d/hamma-nopasswd >/dev/null 2>&1 || true'
+        ], environment: {'USER': _wslUser});
+      } else {
+        _workingDirectory = workingDirectory ?? Platform.environment['HOME'] ?? Directory.current.path;
       }
-    }
 
-    _isConnected = true;
-    _updateStatus(ConnectionStatus.connected());
+      _isConnected = true;
+      _updateStatus(ConnectionStatus.connected());
+    } catch (e) {
+      _isConnected = false;
+      _updateStatus(ConnectionStatus.failed(SshUnknownException(userMessage: e.toString())));
+      rethrow;
+    }
   }
 
   @override
@@ -111,14 +112,16 @@ class LocalShellService implements ShellService {
     try {
       final shell = _resolveShell();
       final shellFlag = '-c';
-      final wslCommand = Platform.isWindows ? 'cd $_workingDirectory && $command' : command;
+      final actualCommand = Platform.isWindows ? 'cd "$_workingDirectory" && $command' : command;
+      
       final result = await Process.run(
         shell.first,
-        [...shell.skip(1), shellFlag, wslCommand],
+        [...shell.skip(1), shellFlag, actualCommand],
         workingDirectory: Platform.isWindows ? null : _workingDirectory,
-        environment: _getEnvironment(),
+        environment: Platform.isWindows ? _getEnvironment(80, 24) : Platform.environment,
         runInShell: false,
       );
+      
       final stdout = result.stdout as String;
       final stderr = result.stderr as String;
       if (result.exitCode != 0 && stdout.isEmpty) {
@@ -135,34 +138,33 @@ class LocalShellService implements ShellService {
     if (!_isConnected) throw StateError('Local shell is not connected.');
     final shell = _resolveShell();
     final shellFlag = '-c';
-    final wslCommand = Platform.isWindows ? 'cd $_workingDirectory && $command' : command;
+    final actualCommand = Platform.isWindows ? 'cd "$_workingDirectory" && $command' : command;
+
     final process = await Process.start(
       shell.first,
-      [...shell.skip(1), shellFlag, wslCommand],
+      [...shell.skip(1), shellFlag, actualCommand],
       workingDirectory: Platform.isWindows ? null : _workingDirectory,
-      environment: _getEnvironment(),
+      environment: Platform.isWindows ? _getEnvironment(80, 24) : Platform.environment,
       runInShell: false,
     );
     return LocalShellSession(process);
   }
 
   @override
-  Future<LocalShellSession> startShell({int width = 80, int height = 24}) async {
+  Future<LocalPtySession> startShell({int width = 80, int height = 24}) async {
     if (!_isConnected) throw StateError('Local shell is not connected.');
     final shell = _resolveShell();
-    final process = await Process.start(
+    
+    final pty = Pty.start(
       shell.first,
-      shell.skip(1).toList(),
+      arguments: shell.skip(1).toList(),
+      columns: width,
+      rows: height,
+      environment: _getEnvironment(width, height),
       workingDirectory: Platform.isWindows ? null : _workingDirectory,
-      environment: {
-        ..._getEnvironment(),
-        'TERM': 'xterm-256color',
-        'COLUMNS': '$width',
-        'LINES': '$height',
-      },
-      runInShell: false,
     );
-    return LocalShellSession(process);
+    
+    return LocalPtySession(pty);
   }
 
   @override
@@ -207,8 +209,33 @@ class LocalShellSession {
   Future<int> get done => _process.exitCode;
 
   void resizeTerminal(int width, int height) {
-    // No-op: Local process TTY resizing is not easily portable in dart:io
+    // No-op for direct process
   }
 
   Future<int> get exitCode => _process.exitCode;
+}
+
+class LocalPtySession {
+  LocalPtySession(this._pty);
+
+  final Pty _pty;
+
+  Stream<Uint8List> get stdout => _pty.output;
+  Stream<Uint8List> get stderr => const Stream.empty();
+
+  void write(Uint8List data) {
+    _pty.write(data);
+  }
+
+  Future<void> close() async {
+    _pty.kill();
+  }
+
+  Future<int> get done => _pty.exitCode;
+
+  void resizeTerminal(int width, int height) {
+    _pty.resize(height, width); // flutter_pty uses (rows, columns)
+  }
+
+  Future<int> get exitCode => _pty.exitCode;
 }
