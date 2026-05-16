@@ -10,6 +10,8 @@ import 'package:window_manager/window_manager.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../core/ai/ai_provider.dart';
+import '../../core/ai/bundled_engine.dart';
+import '../../core/ai/bundled_engine_controller.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/shell/shell_service.dart';
 import '../../core/ssh/connection_status.dart';
@@ -72,6 +74,9 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
   StreamSubscription<Uint8List>? _stderrSubscription;
   String _recentTerminalOutput = '';
   bool _isFullScreen = false;
+
+  // FIX 1: live BundledEngine endpoint resolved asynchronously in initState.
+  String? _resolvedLocalEndpoint;
 
   @override
   bool get wantKeepAlive => true;
@@ -137,6 +142,10 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
     // again as soon as the vault loads.
     _refreshVaultSnapshot();
 
+    // FIX 1: resolve the live BundledEngine loopback URL so _openCopilot
+    // can hand the correct port to AiCopilotSheet / LocalEngineHealthMonitor.
+    _resolveLocalEndpoint();
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.sshService.isConnected) {
         _openShell();
@@ -148,6 +157,36 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       }
     });
   }
+
+  /// Asks [BundledEngineController] for the live loopback URL the engine
+  /// actually bound to (e.g. `http://127.0.0.1:54231`). Falls back to
+  /// [widget.localEndpoint] (the value saved in Settings) when the engine
+  /// hasn't been started or is unavailable on this build.
+  ///
+  /// Called once from [initState]; no-op if the engine returns null.
+  Future<void> _resolveLocalEndpoint() async {
+    if (widget.aiProvider != AiProvider.local) return;
+    try {
+      final engine = await BundledEngineController.instance;
+      final live = engine.endpoint; // null while engine is stopped
+      if (mounted && live != null && live.isNotEmpty) {
+        setState(() => _resolvedLocalEndpoint = live);
+      }
+    } catch (_) {
+      // BundledEngine unavailable on this build (e.g. no native binary).
+      // Fall through: _effectiveLocalEndpoint returns widget.localEndpoint.
+    }
+  }
+
+  /// The endpoint handed to [AiCopilotSheet] / [LocalEngineHealthMonitor].
+  ///
+  /// Priority:
+  ///   1. Live BundledEngine URL (resolved asynchronously in [initState]).
+  ///   2. Persisted value from Settings (covers external Ollama / LM Studio).
+  String? get _effectiveLocalEndpoint =>
+      (_resolvedLocalEndpoint?.isNotEmpty ?? false)
+          ? _resolvedLocalEndpoint
+          : widget.localEndpoint;
 
   Future<void> _loadTerminalPreferences() async {
     final size = await widget.appPrefsStorage.getTerminalFontSize();
@@ -323,7 +362,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
           provider: widget.aiProvider,
           apiKeyStorage: widget.apiKeyStorage,
           openRouterModel: widget.openRouterModel,
-          localEndpoint: widget.localEndpoint,
+          localEndpoint: _effectiveLocalEndpoint, // FIX 1: was widget.localEndpoint
           localModel: widget.localModel,
           executionTarget: AiCopilotExecutionTarget.terminal,
           canRunCommands: () =>
