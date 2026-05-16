@@ -10,7 +10,6 @@ import 'package:window_manager/window_manager.dart';
 import 'package:xterm/xterm.dart';
 
 import '../../core/ai/ai_provider.dart';
-import '../../core/ai/bundled_engine.dart';
 import '../../core/ai/bundled_engine_controller.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/shell/shell_service.dart';

@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 
 import '../../../core/ai/ai_command_service.dart';
 import '../../../core/ai/ai_provider.dart';
-import '../../../core/ai/bundled_engine.dart';
 import '../../../core/ai/bundled_engine_controller.dart';
 import '../../../core/ai/log_triage/log_batcher.dart';
 import '../../../core/ai/log_triage/log_triage_models.dart';
