@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/ai/ai_provider.dart';
+import '../../core/ai/bundled_engine.dart';
+import '../../core/ai/bundled_engine_controller.dart';
 import '../../core/ai/local_engine_detector.dart';
 import '../../core/ai/ollama_client.dart';
 import '../../core/background/background_keepalive.dart';
@@ -52,8 +54,7 @@ class SettingsScreen extends StatefulWidget {
     String? openRouterModel,
     String? localEndpoint,
     String? localModel,
-  )
-  onSaveAiSettings;
+  ) onSaveAiSettings;
   final Future<void> Function()? onBackupImported;
 
   @override
@@ -72,6 +73,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _localModelController;
   bool _isTestingLocalConnection = false;
   String? _localConnectionTestResult;
+
+  StreamSubscription<BundledEngineSnapshot>? _bundledEngineSub;
 
   bool get _isLocalEndpointValid {
     final raw = _localEndpointController.text.trim();
@@ -576,7 +579,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
-
   /// "Watch with AI" lines-per-batch cadence. Loaded from
   /// [LogTriagePrefs] on init, persisted on slider change.
   final LogTriagePrefs _logTriagePrefs = const LogTriagePrefs();
@@ -663,6 +665,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_selectedProvider == AiProvider.openRouter) {
       _loadOpenRouterModels();
     }
+
+    // FIX 2A: watch the BundledEngine so we learn its ephemeral port as soon
+    // as it starts (either now or later in the app's lifetime).
+    _subscribeToBundledEngine();
+  }
+
+  /// Subscribes to [BundledEngine.snapshots].
+  /// Whenever the engine transitions to a running state with a live endpoint
+  /// we auto-fill the UI and call [widget.onSaveAiSettings] immediately.
+  Future<void> _subscribeToBundledEngine() async {
+    try {
+      final engine = await BundledEngineController.instance;
+      _bundledEngineSub = engine.snapshots.listen((snapshot) {
+        if (!mounted) return;
+        final liveEndpoint = snapshot.endpoint;
+        if (liveEndpoint == null || liveEndpoint.isEmpty) return;
+        if (_selectedProvider != AiProvider.local) return;
+        if (_localEndpointController.text == liveEndpoint) return;
+
+        setState(() => _localEndpointController.text = liveEndpoint);
+
+        unawaited(widget.onSaveAiSettings(
+          _selectedProvider,
+          _apiKeyForProvider(_selectedProvider),
+          _openRouterModel,
+          liveEndpoint,
+          snapshot.modelId.isNotEmpty ? snapshot.modelId : _localModelController.text,
+        ));
+      });
+    } catch (_) {
+      // BundledEngine unavailable on this build. No-op.
+    }
   }
 
   Future<void> _loadLogTriageSettings() async {
@@ -699,6 +733,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
+    _bundledEngineSub?.cancel();
     _openAiApiKeyController.dispose();
     _geminiApiKeyController.dispose();
     _openRouterApiKeyController.dispose();
@@ -1150,11 +1185,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
       _openRouterModelController.text = _openRouterModel ?? '';
     } on TimeoutException {
-      // Silently fall through: the OpenRouter model row remains
-      // editable as a free-text chevron, which is the documented
-      // fallback when the model index is unreachable.
+      // Silently fall through
     } catch (_) {
-      // Same fallback as the timeout path above.
+      // Same fallback
     } finally {
       if (mounted) {
         setState(() {
@@ -1181,17 +1214,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (provider == AiProvider.openRouter) {
       _loadOpenRouterModels();
     } else if (provider == AiProvider.local) {
-      // Best-effort: probe loopback once and, if nothing answers and the
-      // user has never seen the wizard, walk them through install + pull.
-      // We never block provider selection on the result.
       unawaited(_maybeAutoLaunchLocalAiOnboarding());
     }
   }
 
-  /// Detects engines on loopback. If none are found and the user has
-  /// not yet acknowledged the Local AI onboarding wizard, push the
-  /// wizard automatically. Persists the "seen" flag the first time the
-  /// wizard is shown so subsequent provider switches do not nag.
   Future<void> _maybeAutoLaunchLocalAiOnboarding() async {
     final alreadySeen = await _appPrefsStorage.isLocalAiOnboardingSeen();
     if (alreadySeen || !mounted) return;
@@ -1201,11 +1227,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       engines = await LocalEngineDetector().detect();
     } catch (_) {
-      // Ignore detector failures — treat as "no engines reachable".
+      // Ignore detector failures
     }
     if (!mounted || _selectedProvider != AiProvider.local) return;
     if (engines.isNotEmpty) {
-      // Engine already running; record the auto-fill and skip the wizard.
       if (_localEndpointController.text.trim() == 'http://localhost:11434') {
         setState(() {
           _localEndpointController.text = engines.first.endpoint;
@@ -1234,8 +1259,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? 'No engines responded on localhost. Is Ollama / LM Studio running?'
             : null;
       });
-      // Auto-fill the endpoint with the first detected engine if the
-      // current value is still the default and we found something usable.
       if (engines.isNotEmpty &&
           _localEndpointController.text.trim() == 'http://localhost:11434') {
         _localEndpointController.text = engines.first.endpoint;
@@ -1272,31 +1295,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // FIX 2B: Opening LocalAiOnboardingScreen via the BundledEngineController
+  // singleton and persisting the live endpoint dynamically.
   Future<void> _runLocalAiOnboarding() async {
-    final endpoint = await Navigator.of(context).push<String?>(
-      MaterialPageRoute(
-        builder: (_) => const LocalAiOnboardingScreen(),
+    BundledEngine? engine;
+    try {
+      engine = await BundledEngineController.instance;
+    } catch (_) {
+      // Bundled engine not available; open wizard anyway.
+    }
+    if (!mounted) return;
+
+    final returnedEndpoint = await Navigator.of(context).push<String?>(
+      MaterialPageRoute<String?>(
+        builder: (_) => LocalAiOnboardingScreen(engine: engine),
       ),
     );
+
     if (!mounted) return;
-    if (endpoint != null && endpoint.isNotEmpty) {
+    if (returnedEndpoint == null || returnedEndpoint.isEmpty) return;
+
+    setState(() {
+      _localEndpointController.text = returnedEndpoint;
+      _isDirty = true;
+      _bumpSaveBar();
+    });
+
+    await widget.onSaveAiSettings(
+      AiProvider.local,
+      _apiKeyForProvider(AiProvider.local),
+      _openRouterModel,
+      returnedEndpoint,
+      _localModelController.text.trim(),
+    );
+
+    if (mounted) {
       setState(() {
-        _localEndpointController.text = endpoint;
+        _isDirty = false;
+        _bumpSaveBar();
       });
-
-      // Auto-save the built-in engine endpoint immediately.
-      await widget.onSaveAiSettings(
-        AiProvider.local,
-        '', // built-in needs no key
-        null,
-        endpoint,
-        _localModelController.text.trim(),
-      );
-
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Built-in engine saved — $endpoint'),
+          content: Text('Built-in engine saved — $returnedEndpoint'),
           backgroundColor: AppColors.accent,
         ),
       );
@@ -1379,8 +1419,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             final listPadding =
                 EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24);
 
-            // Desktop: rail + selected-category detail pane.
-            // Active search overrides master-detail so users see all matches.
             if (showRail) {
               final restrict =
                   hasSearch ? null : <String>{_activeCategoryId};
@@ -1407,7 +1445,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             }
 
-            // Mobile/tablet with active search: show all matching cards inline.
             if (hasSearch) {
               return Center(
                 child: ConstrainedBox(
@@ -1422,8 +1459,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
             }
 
-            // Mobile/tablet without search: tappable category list that
-            // pushes a detail route per category.
             return _buildMobileCategoryList(theme, listPadding);
           },
         ),
