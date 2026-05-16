@@ -1,9 +1,26 @@
+// lib/core/storage/api_key_storage.dart
+//
+// FIX 3 (partial): Changed _defaultLocalModel from 'gemma3' (Ollama shortname)
+// to 'gemma3-1b-it-q4' (BundledModel.id of the recommended catalog entry).
+// This ensures that when no localModel has been explicitly saved, the model
+// string in every OpenAI-compatible request matches the id the BundledEngine
+// loaded — so LocalEngineHealthMonitor's /v1/models check finds a match and
+// reports "online" rather than silently treating the engine as offline.
+//
+// The Ollama default 'gemma3' is still valid for users running an external
+// Ollama daemon (who should have saved their model name via settings), but
+// it was never the right fallback for the bundled engine.
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../ai/ai_provider.dart';
 
 const _defaultLocalEndpoint = 'http://localhost:11434';
-const _defaultLocalModel = 'gemma3';
+
+// CHANGED: was 'gemma3' — must match BundledModelCatalog.defaultPick.id.
+// If you change the recommended model in bundled_model_catalog.dart, update
+// this constant to match.
+const _defaultLocalModel = 'gemma3-1b-it-q4';
 
 class AiSettings {
   const AiSettings({
@@ -227,6 +244,8 @@ class ApiKeyStorage {
 
     await _secureStorage.write(
       key: _localModelStorageKey,
+      // CHANGED: falls back to the new _defaultLocalModel constant
+      // ('gemma3-1b-it-q4') instead of the old 'gemma3' Ollama shortname.
       value: trimmedLocalModel.isEmpty ? _defaultLocalModel : trimmedLocalModel,
     );
   }
