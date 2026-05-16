@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 
 import '../../../core/ai/ai_command_service.dart';
 import '../../../core/ai/ai_provider.dart';
+import '../../../core/ai/bundled_engine.dart';
+import '../../../core/ai/bundled_engine_controller.dart';
 import '../../../core/ai/log_triage/log_batcher.dart';
 import '../../../core/ai/log_triage/log_triage_models.dart';
 import '../../../core/ai/log_triage/log_triage_service.dart';
@@ -79,6 +81,7 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
   int _batchSize = LogTriagePrefs.defaultBatchSize;
   bool _starting = true;
   String? _bootError;
+  String? _resolvedLocalEndpoint;
 
   InsightUpdate? _latest;
   bool _analyzing = false;
@@ -99,6 +102,32 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
     unawaited(_boot());
   }
 
+
+  /// Resolves the live loopback URL from [BundledEngineController].
+  /// Mutates [_resolvedLocalEndpoint]; must be awaited before [_boot] builds
+  /// the [AiCommandService] so the service gets the correct port.
+  Future<void> _resolveLocalEndpoint() async {
+    try {
+      final engine = await BundledEngineController.instance;
+      final live = engine.endpoint;
+      if (live != null && live.isNotEmpty) {
+        _resolvedLocalEndpoint = live; // intentionally no setState: called before build
+      }
+    } catch (_) {
+      // BundledEngine unavailable; fall through to the stored endpoint.
+    }
+  }
+
+  /// The endpoint used for all AI calls in this screen.
+  ///
+  /// Priority:
+  ///   1. Live BundledEngine URL (resolved in [_boot]).
+  ///   2. Persisted value from [widget.aiSettings.localEndpoint].
+  String? get _effectiveLocalEndpoint =>
+      (_resolvedLocalEndpoint?.isNotEmpty ?? false)
+          ? _resolvedLocalEndpoint
+          : widget.aiSettings.localEndpoint;
+
   Future<void> _boot() async {
     if (widget.aiSettings.provider != AiProvider.local) {
       setState(() {
@@ -107,12 +136,15 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
       });
       return;
     }
+    // FIX 1: resolve the live BundledEngine endpoint BEFORE building the
+    // AiCommandService so requests go to the correct ephemeral port.
+    await _resolveLocalEndpoint();
     try {
       _batchSize = await widget.prefs.loadBatchSize();
       _aiService = AiCommandService.forProvider(
         provider: AiProvider.local,
         apiKey: '',
-        localEndpoint: widget.aiSettings.localEndpoint,
+        localEndpoint: _effectiveLocalEndpoint,
         localModel: widget.aiSettings.localModel,
       );
       _triage = await LogTriageService.create(
@@ -300,7 +332,7 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
           provider: settings.provider,
           apiKeyStorage: const ApiKeyStorage(),
           openRouterModel: settings.openRouterModel,
-          localEndpoint: settings.localEndpoint,
+          localEndpoint: _effectiveLocalEndpoint,
           localModel: settings.localModel,
           initialPrompt: prompt.toString(),
           executionTarget: AiCopilotExecutionTarget.dashboard,
