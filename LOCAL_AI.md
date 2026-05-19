@@ -7,7 +7,7 @@
 
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:000000,50:00FF88,100:000000&height=140&section=header&text=LOCAL_AI.md&fontSize=42&fontColor=FFFFFF&animation=fadeIn&fontAlignY=55&descColor=00FF88" alt="Local AI" width="100%"/>
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:000000,50:00FF88,100:000000&height=140&section=header&text=LocalAI&fontSize=42&fontColor=FFFFFF&animation=fadeIn&fontAlignY=55&descColor=00FF88" alt="Local AI" width="100%"/>
 
 <p>
   <img src="https://img.shields.io/badge/INFERENCE-ON_DEVICE-00FF88?style=flat-square&labelColor=000000"/>
