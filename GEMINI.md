@@ -1,25 +1,26 @@
-# Gemini Context: Hamma (AI Server V2)
+# Gemini Context: Hamma
 
-This project, internally referred to as **Hamma** or **AI Server V2**, is a mobile-first Flutter application designed for managing remote servers directly via SSH from the device, augmented by AI-driven command suggestions and safety assessments.
+This project is a multi-platform Flutter application (Linux, Windows, macOS, Android, iOS) designed for managing remote servers directly via SSH from the device, augmented by local AI-driven command suggestions, safety assessments, and visual management tools.
 
 ## Current Project Status
 
-- **Phase 1: Core SSH / AI**: complete
-- **Phase 2: UI Polish & Security**: complete
-- **Current Stage**: Beta Release Candidate
+- **Phase 1: Core SSH / SFTP / Vault**: complete
+- **Phase 2: Local AI & Security**: complete
+- **Current Stage**: Beta Release Candidate (v1.1.0)
 - **MVP**: complete
 
-Future roadmap items such as SFTP file explorer, sync, and extended history remain intentionally outside the current release candidate scope.
+The core feature set includes a full terminal, visual SFTP file explorer, Docker & services management, fleet dashboard, and a zero-trust local AI copilot.
 
 ## Project Vision & Core Principles
 
 **Product One-Liner:** "Manage your server without writing commands."
 
-1.  **Direct SSH First:** All SSH connections must happen **directly from the Flutter app** using `dartssh2`. No backend SSH proxies or session pooling should be used for core transport.
-2.  **AI as Assistant, Not Transport:** AI is used to explain problems and suggest commands, but it does not replace the SSH layer.
-3.  **Terminal as Fallback:** While raw terminal access (via `xterm`) is provided for power users, the main UX should prioritize simplified actions and buttons.
-4.  **Safety Before Execution:** Never blindly execute AI-generated commands. Visibility, editability, and explicit user confirmation are mandatory.
-5.  **Avoid "Fake States":** Do not report "Connected" or "Healthy" unless verified by an actual SSH check.
+1.  **Direct SSH First:** All SSH and SFTP connections happen **directly from the app** using `dartssh2`. No backend SSH proxies are used.
+2.  **AI as Assistant, Not Transport:** AI explains problems and suggests commands, but it does not replace the protocol layer.
+3.  **Terminal as Fallback:** High-level visual tools (SFTP, Docker, Services) are prioritized, with raw terminal access (`xterm`) available for power users.
+4.  **Safety Before Execution:** AI-generated commands are never executed blindly; visibility, editability, and explicit user confirmation via `CommandRiskAssessor` are mandatory.
+5.  **Zero-Trust AI:** Local AI prompts are hard-locked to loopback (`127.0.0.1`) by `LoopbackGuard` to ensure data privacy.
+6.  **Avoid "Fake States":** Do not report "Connected" or "Healthy" unless verified by an actual SSH check.
 
 ## Architecture
 

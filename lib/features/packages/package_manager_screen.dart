@@ -379,7 +379,10 @@ class _StreamConsole extends StatefulWidget {
 }
 
 class _StreamConsoleState extends State<_StreamConsole> {
+  static const int _maxLogLines = 500;
   final List<_ConsoleLine> _output = [];
+  final List<_ConsoleLine> _pendingLines = [];
+  Timer? _batchTimer;
   final ScrollController _scrollController = ScrollController();
   StreamSubscription<String>? _stdoutSub;
   StreamSubscription<String>? _stderrSub;
@@ -393,6 +396,7 @@ class _StreamConsoleState extends State<_StreamConsole> {
 
   @override
   void dispose() {
+    _batchTimer?.cancel();
     _stdoutSub?.cancel();
     _stderrSub?.cancel();
     super.dispose();
@@ -408,32 +412,44 @@ class _StreamConsoleState extends State<_StreamConsole> {
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .transform(const LineSplitter())
-          .listen((line) {
-            if (mounted) {
-              setState(() => _output.add(_ConsoleLine(line, isError: false)));
-              _scrollToBottom();
-            }
-          });
+          .listen((line) => _handleLine(line, isError: false));
 
       _stderrSub = session.stderr
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .transform(const LineSplitter())
-          .listen((line) {
-            if (mounted) {
-              setState(() => _output.add(_ConsoleLine(line, isError: true)));
-              _scrollToBottom();
-            }
-          });
+          .listen((line) => _handleLine(line, isError: true));
       
       await session.done;
       if (mounted) {
+        _flushBatch();
         setState(() => _isDone = true);
         widget.onDone?.call();
       }
     } catch (e) {
-      if (mounted) setState(() => _output.add(_ConsoleLine('Error: $e', isError: true)));
+      if (mounted) _handleLine('Error: $e', isError: true);
     }
+  }
+
+  void _handleLine(String line, {required bool isError}) {
+    if (!mounted) return;
+    _pendingLines.add(_ConsoleLine(line, isError: isError));
+    _batchTimer ??= Timer(const Duration(milliseconds: 100), _flushBatch);
+  }
+
+  void _flushBatch() {
+    _batchTimer = null;
+    if (!mounted || _pendingLines.isEmpty) return;
+
+    setState(() {
+      _output.addAll(_pendingLines);
+      _pendingLines.clear();
+
+      if (_output.length > _maxLogLines) {
+        _output.removeRange(0, _output.length - _maxLogLines);
+      }
+    });
+    _scrollToBottom();
   }
 
   void _scrollToBottom() {

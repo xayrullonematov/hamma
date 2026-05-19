@@ -19,7 +19,7 @@
   <a href="https://github.com/xayrullonematov/hamma/actions/workflows/main.yml"><img src="https://github.com/xayrullonematov/hamma/actions/workflows/main.yml/badge.svg?branch=main" alt="CI"/></a>
   <img src="https://img.shields.io/badge/VERSION-1.1.0-FFFFFF?style=flat-square&labelColor=000000" alt="Version"/>
   <img src="https://img.shields.io/badge/STATUS-BETA--RC-00FF88?style=flat-square&labelColor=000000" alt="Status"/>
-  <img src="https://img.shields.io/badge/TESTS-65%2F65-00FF88?style=flat-square&labelColor=000000" alt="Tests"/>
+  <img src="https://img.shields.io/badge/TESTS-746%2F747-00FF88?style=flat-square&labelColor=000000" alt="Tests"/>
   <img src="https://img.shields.io/badge/MODEL-1.4K%2B%20Downloads-00FF88?style=flat-square&labelColor=000000" alt="Downloads"/>
 </p>
 
@@ -71,7 +71,7 @@ HAMMA streams responses token-by-token from a local inference engine. AI traffic
 
 ### The HAMMA Model (Recommended)
 
-We fine-tuned a custom Gemma 4 LoRA adapter specifically for DevOps failure diagnosis — trained on **3,701 curated Linux sysadmin problem-solution pairs** across 39 topics:
+We fine-tuned a custom Gemma 4 LoRA adapter specifically for DevOps failure diagnosis — trained on **1,500+ curated Linux sysadmin problem-solution pairs** synthesized from Ubuntu man pages, Nginx documentation, and systemd failure states.
 
 - File permissions, SELinux, AppArmor
 - systemd, Cron, kernel panics
@@ -89,7 +89,7 @@ Compiled to **Q4_K_M GGUF (5.34 GB)** — runs on any standard developer laptop 
 1,400+ downloads in the first 48 hours of release.
 ```
 
-> 🤗 [**Download the HAMMA model on Hugging Face →**](https://huggingface.co/xayrullonematov)
+> 🤗 [**Download the HAMMA model on Hugging Face →**](https://huggingface.co/xayrullonematov/hamma-gemma-4-devops-GGUF)
 
 ### Other Supported Providers
 
@@ -115,7 +115,7 @@ Cloud providers are an **explicit opt-in**. Local is the default.
 ```
 1. Download HAMMA          →  Releases page
 2. Set App PIN             →  Settings → Security
-3. Load the HAMMA model    →  Settings → AI → Local → HAMMA-Gemma4
+3. Load the HAMMA model    →  Settings → AI → Local → hamma
 4. Add a server            →  Servers tab → +
 5. Connect                 →  Tap server → Open Terminal
 ```
@@ -127,7 +127,7 @@ git clone https://github.com/xayrullonematov/hamma.git
 cd hamma
 flutter pub get
 flutter analyze        # → No issues found
-flutter test           # → 65/65 passed
+flutter test           # → 746/747 passed
 flutter run
 ```
 

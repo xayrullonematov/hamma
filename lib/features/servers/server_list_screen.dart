@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../core/ai/ai_provider.dart';
@@ -380,6 +379,15 @@ class _ServerListScreenState extends State<ServerListScreen> {
               tooltip: 'Fleet Command Center',
             ),
             IconButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const LocalDevelopmentScreen(),
+                ),
+              ),
+              icon: const Icon(Icons.computer),
+              tooltip: 'Local Development',
+            ),
+            IconButton(
               onPressed: _openSettings,
               icon: const Icon(Icons.settings),
             ),
@@ -474,19 +482,6 @@ class _ServerListScreenState extends State<ServerListScreen> {
                           ),
                         ),
                       ),
-                      if (!Platform.isAndroid && !Platform.isIOS)
-                        SliverToBoxAdapter(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                            child: _LocalDevelopmentCard(
-                              onOpen: () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => const LocalDevelopmentScreen(),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
                       if (filteredServers.isEmpty && _isSearching)
                         const SliverFillRemaining(
                           hasScrollBody: false,
@@ -701,78 +696,6 @@ class _ServerDashboardCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LocalDevelopmentCard extends StatelessWidget {
-  const _LocalDevelopmentCard({required this.onOpen});
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onOpen,
-        borderRadius: BorderRadius.zero,
-        child: Ink(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.zero,
-            border: Border.all(color: AppColors.accent, width: 1),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              children: [
-                Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.zero,
-                  ),
-                  child: const Icon(
-                    Icons.computer_rounded,
-                    color: AppColors.accent,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'LOCAL DEVELOPMENT',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                          color: AppColors.accent,
-                          fontFamily: AppColors.monoFamily,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Terminal, files, processes and AI on this machine',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  size: 16,
-                  color: AppColors.textMuted,
                 ),
               ],
             ),

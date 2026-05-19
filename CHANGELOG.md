@@ -22,7 +22,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Settings screen now validates the Local AI endpoint inline; the Test, Detect, and Manage Models buttons gate on a passing validation so misconfigured endpoints can't trigger network calls.
 
 ### Security
-- Added a runtime guard that prevents non-loopback Local AI endpoints from ever being instantiated, backed by `local_ai_loopback_guard_test.dart` (3 tests) and `zero_trust_network_guard_test.dart` (4 tests). Total suite is now 65/65 green.
+- Added a runtime guard that prevents non-loopback Local AI endpoints from ever being instantiated, backed by `local_ai_loopback_guard_test.dart` (3 tests) and `zero_trust_network_guard_test.dart` (4 tests). Total suite is now 746/747 green.
 
 ### Suggested next step
 - Tag and push to trigger the existing release pipeline:

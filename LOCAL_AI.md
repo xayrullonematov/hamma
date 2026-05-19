@@ -73,15 +73,15 @@ Root cause. Exact command. Verification step. Nothing else.
 
 | Parameter | Value |
 |---|---|
-| Base model | Gemma 4 (google/gemma-4-it) |
+| Base model | Gemma 4 (google/gemma-4-e4b-it) |
 | Fine-tuning method | LoRA (Unsloth) |
-| Training pairs | 3,701 curated problem-solution pairs |
+| Training pairs | 1,500+ curated problem-solution pairs |
 | Topics covered | 39 Linux/DevOps failure categories |
 | Sub-angles | 273 distinct failure modes |
 | Output constraint | Zero conversational padding enforced |
 | Quantization | Q4_K_M GGUF |
 | File size | 5.34 GB |
-| VRAM required | ~6 GB (runs on most developer laptops) |
+| VRAM required | ~6 GB |
 | HuggingFace downloads | 1,400+ in first 48 hours |
 
 ### Topics covered
@@ -175,7 +175,7 @@ LM Studio gives you a GUI to browse and load GGUF models.
 ```
 Settings → AI Configuration → Provider: LM Studio
 Base URL: http://127.0.0.1:1234
-Model: hamma-gemma4
+Model: hamma-gemma-4-devops-q4
 ```
 
 ---
@@ -186,16 +186,16 @@ For advanced users who want direct control over inference parameters.
 
 ```bash
 # Clone and build
-git clone https://github.com/ggerganov/llama.cpp
+git clone https://github.com/gerganov/llama.cpp
 cd llama.cpp
 make -j$(nproc)
 
 # Download the GGUF
-wget https://huggingface.co/xayrullonematov/hamma-gemma4-GGUF/resolve/main/hamma-gemma4-Q4_K_M.gguf
+wget https://huggingface.co/xayrullonematov/hamma-gemma-4-devops-q4-GGUF/resolve/main/hamma-gemma-4-devops-q4-Q4_K_M.gguf
 
 # Start the server
 ./llama-server \
-  -m hamma-gemma4-Q4_K_M.gguf \
+  -m hamma-gemma-4-devops-q4-Q4_K_M.gguf \
   --host 127.0.0.1 \
   --port 8080 \
   -c 4096 \
@@ -225,7 +225,7 @@ Jan is a fully offline ChatGPT alternative with a local server mode.
 ```
 Settings → AI Configuration → Provider: Jan
 Base URL: http://127.0.0.1:1337
-Model: hamma-gemma4
+Model: hamma-gemma-4-devops-q4
 ```
 
 ---
@@ -234,9 +234,9 @@ Model: hamma-gemma4
 
 | Setup | VRAM | RAM | Notes |
 |---|---|---|---|
-| HAMMA-Gemma4 Q4_K_M (5.34 GB) | ~6 GB | 8 GB | Runs on most dev laptops |
-| HAMMA-Gemma4 Q8 | ~9 GB | 16 GB | Higher accuracy |
-| CPU-only (no GPU) | — | 16 GB | Slower, but works |
+| Gemma 4 E2B Q4_K_M (~2 GB) | ~2.5 GB | 4 GB | Fast on any laptop |
+| Gemma 4 E4B Q4_K_M (~5.34 GB) | ~6 GB | 8 GB | Recommended (HAMMA Default) |
+| Gemma 4 31B Q4_K_M (~18 GB) | ~20 GB | 32 GB | High-end workstation |
 
 **Tested on:**
 - MacBook Pro M2 16 GB — fast, no issues
@@ -273,11 +273,12 @@ Before executing any AI-suggested command, HAMMA scores it for risk:
 
 | Risk Level | Color | Examples |
 |---|---|---|
-| **Safe** | 🟢 Green | `systemctl status nginx`, `df -h`, `journalctl -u sshd` |
-| **Caution** | 🟡 Yellow | `systemctl restart nginx`, `chmod 755 /var/www` |
-| **Destructive** | 🔴 Red | `rm -rf`, `iptables -F`, `dd if=...`, `kill -9` |
+| **Low** | 🟢 Green | `systemctl status nginx`, `df -h`, `journalctl -u sshd` |
+| **Moderate** | 🟠 Orange | `systemctl restart nginx`, `chmod 755 /var/www` |
+| **High** | 🔴 Red | `systemctl stop nginx`, `kill -9 <PID>` |
+| **Critical** | 🟣 Purple | `rm -rf /`, `iptables -F`, `dd if=...` |
 
-Red-level commands require an explicit confirmation tap before HAMMA will paste them into the terminal. The AI also prepends a `WARNING:` line before any destructive command in its response.
+High and Critical commands require an explicit confirmation tap before HAMMA will execute them. The AI also prepends a `WARNING:` line before any destructive command in its response.
 
 ---
 

@@ -35,10 +35,14 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
   static const _mutedColor = AppColors.textMuted;
   static const _dangerColor = AppColors.danger;
 
+  static const int _maxLogLines = 500;
+
   @override
   bool get wantKeepAlive => true;
 
   final List<_LogEntry> _logEntries = [];
+  final List<_LogEntry> _pendingEntries = [];
+  Timer? _batchTimer;
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _filterController = TextEditingController();
   final TextEditingController _customPathController = TextEditingController();
@@ -61,6 +65,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
 
   @override
   void dispose() {
+    _batchTimer?.cancel();
     _stopStreaming();
     _scrollController.dispose();
     _filterController.dispose();
@@ -140,6 +145,7 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
     
     setState(() {
       _logEntries.clear();
+      _pendingEntries.clear();
       _logEntries.add(_LogEntry('--- Starting stream for ${_selectedSource.label} ---', isError: false));
     });
 
@@ -157,43 +163,48 @@ class _LogViewerScreenState extends State<LogViewerScreen> with AutomaticKeepAli
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .transform(const LineSplitter())
-          .listen((String line) {
-            if (!_isPaused && mounted) {
-              setState(() {
-                _logEntries.add(_LogEntry(line, isError: false));
-                if (_logEntries.length > 2000) _logEntries.removeAt(0);
-              });
-              if (_autoScroll) {
-                _scrollToBottom();
-              }
-            }
-          });
+          .listen((line) => _handleIncomingLine(line, isError: false));
 
       _stderrSubscription = (session.stderr as Stream<Uint8List>)
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .transform(const LineSplitter())
-          .listen((String line) {
-            if (!_isPaused && mounted) {
-              setState(() {
-                _logEntries.add(_LogEntry(line, isError: true));
-                if (_logEntries.length > 2000) _logEntries.removeAt(0);
-              });
-              if (_autoScroll) {
-                _scrollToBottom();
-              }
-            }
-          });
+          .listen((line) => _handleIncomingLine(line, isError: true));
           
       (session.done as Future).then((_) {
         if (mounted) {
-          setState(() => _logEntries.add(_LogEntry('--- Stream closed by server ---', isError: false)));
+          _handleIncomingLine('--- Stream closed by server ---', isError: false);
         }
       });
     } catch (e) {
       if (mounted) {
-        setState(() => _logEntries.add(_LogEntry('Error: $e', isError: true)));
+        _handleIncomingLine('Error: $e', isError: true);
       }
+    }
+  }
+
+  void _handleIncomingLine(String line, {required bool isError}) {
+    if (_isPaused || !mounted) return;
+
+    _pendingEntries.add(_LogEntry(line, isError: isError));
+    _batchTimer ??= Timer(const Duration(milliseconds: 100), _flushBatch);
+  }
+
+  void _flushBatch() {
+    _batchTimer = null;
+    if (!mounted || _pendingEntries.isEmpty) return;
+
+    setState(() {
+      _logEntries.addAll(_pendingEntries);
+      _pendingEntries.clear();
+      
+      if (_logEntries.length > _maxLogLines) {
+        _logEntries.removeRange(0, _logEntries.length - _maxLogLines);
+      }
+    });
+
+    if (_autoScroll) {
+      _scrollToBottom();
     }
   }
 

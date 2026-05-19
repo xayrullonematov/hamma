@@ -64,6 +64,8 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
   static const _maxRawLines = 1000;
 
   final List<_RawLine> _rawLines = [];
+  final List<_RawLine> _pendingLines = [];
+  Timer? _batchTimer;
   final ScrollController _rawScroll = ScrollController();
   bool _autoScroll = true;
 
@@ -206,15 +208,28 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
 
   void _onLine(String line, {bool isError = false}) {
     if (!mounted) return;
+    
+    _pendingLines.add(_RawLine(line, isError: isError));
+    _batchTimer ??= Timer(const Duration(milliseconds: 100), _flushBatch);
+    
+    _lineBus?.add(line);
+  }
+
+  void _flushBatch() {
+    _batchTimer = null;
+    if (!mounted || _pendingLines.isEmpty) return;
+
     setState(() {
-      _rawLines.add(_RawLine(line, isError: isError));
+      _rawLines.addAll(_pendingLines);
+      _pendingLines.clear();
+
       while (_rawLines.length > _maxRawLines) {
         _rawLines.removeAt(0);
       }
       // We only mark "analyzing" when we know a batch is forming.
       _analyzing = true;
     });
-    _lineBus?.add(line);
+
     if (_autoScroll) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_rawScroll.hasClients && _autoScroll) {
@@ -405,6 +420,7 @@ class _WatchWithAiScreenState extends State<WatchWithAiScreen> {
 
   @override
   void dispose() {
+    _batchTimer?.cancel();
     unawaited(_stopStreaming());
     _rawScroll.dispose();
     super.dispose();

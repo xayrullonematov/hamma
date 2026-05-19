@@ -23,6 +23,9 @@ class LocalShellService implements ShellService {
   String _wslUser = 'root';
   bool _isConnected = false;
 
+  /// Tracks the currently active long-running process started via [streamCommand].
+  Process? _activeProcess;
+
   LocalShellService() {
     _statusNotifier = ValueNotifier<ConnectionStatus>(_currentStatus);
   }
@@ -103,6 +106,8 @@ class LocalShellService implements ShellService {
   @override
   Future<void> disconnect({bool updateStatus = true, bool cancelAuto = true}) async {
     _isConnected = false;
+    _activeProcess?.kill();
+    _activeProcess = null;
     if (updateStatus) _updateStatus(ConnectionStatus.disconnected());
   }
 
@@ -136,6 +141,14 @@ class LocalShellService implements ShellService {
   @override
   Future<LocalShellSession> streamCommand(String command) async {
     if (!_isConnected) throw StateError('Local shell is not connected.');
+
+    // Ensure only one long-running process is active at a time to prevent zombie processes
+    // and port collisions on restart.
+    if (_activeProcess != null) {
+      _activeProcess!.kill();
+      _activeProcess = null;
+    }
+
     final shell = _resolveShell();
     final shellFlag = '-c';
     final actualCommand = Platform.isWindows ? 'cd "$_workingDirectory" && $command' : command;
@@ -145,8 +158,25 @@ class LocalShellService implements ShellService {
       [...shell.skip(1), shellFlag, actualCommand],
       workingDirectory: Platform.isWindows ? null : _workingDirectory,
       environment: Platform.isWindows ? _getEnvironment(80, 24) : Platform.environment,
-      runInShell: false,
+      runInShell: true,
     );
+
+    _activeProcess = process;
+
+    // Monitor for unexpected process termination to prevent UI state desync.
+    process.exitCode.then((code) {
+      if (_activeProcess == process) {
+        _activeProcess = null;
+        if (code != 0) {
+          _updateStatus(ConnectionStatus.failed(
+            SshUnknownException(userMessage: 'Local process exited unexpectedly with code $code'),
+          ));
+        } else {
+          _updateStatus(ConnectionStatus.disconnected());
+        }
+      }
+    });
+
     return LocalShellSession(process);
   }
 

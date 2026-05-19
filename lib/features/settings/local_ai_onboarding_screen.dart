@@ -997,6 +997,28 @@ class _ModelRow extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (model.recommended) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            border: Border.all(
+                                color: const Color(0xFF00FF88), width: 1),
+                          ),
+                          child: const Text(
+                            'RECOMMENDED',
+                            style: TextStyle(
+                              color: Color(0xFF00FF88),
+                              fontFamily: AppColors.monoFamily,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
                       Text(
                         '${(model.sizeBytes / (1024 * 1024)).toStringAsFixed(0)} MB',
                         style: TextStyle(

@@ -79,7 +79,7 @@ The foundation. A fully featured SSH/SFTP client that works as a daily driver ac
 - [x] Local port forwarding
 - [x] Ed25519, RSA, ECDSA key support
 - [x] Cross-platform: Linux, macOS, Windows, Android, iOS
-- [x] 65/65 unit tests passing
+- [x] 746/747 unit tests passing
 
 ---
 

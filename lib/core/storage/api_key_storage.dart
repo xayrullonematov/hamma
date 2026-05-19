@@ -17,10 +17,10 @@ import '../ai/ai_provider.dart';
 
 const _defaultLocalEndpoint = 'http://localhost:11434';
 
-// CHANGED: was 'gemma3' — must match BundledModelCatalog.defaultPick.id.
+// CHANGED: was 'gemma3-1b-it-q4' — must match BundledModelCatalog.defaultPick.id.
 // If you change the recommended model in bundled_model_catalog.dart, update
 // this constant to match.
-const _defaultLocalModel = 'gemma3-1b-it-q4';
+const _defaultLocalModel = 'hamma-gemma-4-devops-q4';
 
 class AiSettings {
   const AiSettings({

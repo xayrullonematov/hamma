@@ -70,49 +70,47 @@ HAMMA is a modular, layered application. The UI layer never talks to the network
 
 ### Frontend
 
-| Technology | Version | Role |
-|---|---|---|
-| **Flutter** | 3.22+ | Cross-platform UI framework |
-| **Dart** | 3.4+ | Application language |
-| **xterm.dart** | Latest | Full VT100/xterm terminal emulation |
-| **flutter_riverpod** | 2.x | State management |
-| **go_router** | Latest | Navigation |
+| Technology | Role |
+|---|---|
+| **Flutter** | Cross-platform UI framework (Material 3) |
+| **Dart** | Application language |
+| **xterm.dart** | Full VT100/xterm terminal emulation |
+| **Sentry** | Crash reporting and error scrubbing |
+| **Window Manager** | Desktop window customization (title bar, size) |
 
 ### Networking & SSH
 
 | Technology | Role |
 |---|---|
 | **dartssh2** | SSH2 protocol implementation, SFTP subsystem |
-| **dart:io** | Raw socket management, loopback enforcement |
-| **ssh_key** | Key parsing (RSA, Ed25519, ECDSA) |
+| **dio** | Robust HTTP client for AI provider APIs |
+| **http** | Lightweight HTTP for simple probes |
 
 ### AI Inference
 
 | Technology | Role |
 |---|---|
-| **Ollama API** | Primary local inference server (OpenAI-compatible) |
-| **llama.cpp server** | Alternative inference backend |
-| **LM Studio API** | Alternative inference backend |
-| **Jan API** | Alternative inference backend |
-| **http (Dart)** | Streaming HTTP client for token-by-token response |
+| **fllama** | Native llama.cpp bindings (FFI) for on-device inference |
+| **Ollama API** | Local inference server integration |
+| **LM Studio / Jan** | Alternative local inference backends |
 
 ### Security & Storage
 
 | Technology | Role |
 |---|---|
-| **Argon2id** | Key derivation for vault encryption |
-| **AES-256-GCM** | Vault data encryption at rest |
+| **Argon2id** | Key derivation (via `pointycastle`) |
+| **AES-256-GCM** | Vault data encryption (via `pinenacl`) |
 | **local_auth** | Biometric authentication (FaceID, TouchID, fingerprint) |
-| **flutter_secure_storage** | OS keychain integration |
-| **hive** | Local structured data (server configs, settings) |
+| **flutter_secure_storage** | OS keychain integration for KDF salt |
+| **Hive** | Local structured data storage |
 
 ### Developer Tooling
 
 | Technology | Role |
 |---|---|
-| **flutter_test** | Unit and widget testing (65/65 passing) |
+| **flutter_test** | Unit and widget testing (746/747 passing) |
 | **mocktail** | Service mocking in tests |
-| **very_good_analysis** | Strict lint rules |
+| **flutter_lints** | Standard lint rules |
 | **GitHub Actions** | CI pipeline |
 
 ---
@@ -122,85 +120,57 @@ HAMMA is a modular, layered application. The UI layer never talks to the network
 ```
 hamma/
 ├── lib/
-│   ├── main.dart                    # App entry point, provider scope
-│   ├── app/
-│   │   ├── router.dart              # go_router route definitions
-│   │   └── theme.dart               # Brutalist design tokens
+│   ├── main.dart                    # App entry point, bootstrap, theme
 │   │
 │   ├── features/
 │   │   ├── terminal/                # SSH terminal feature
-│   │   │   ├── terminal_screen.dart
-│   │   │   ├── terminal_controller.dart
-│   │   │   └── keyboard_row.dart    # Custom function key row
+│   │   │   └── terminal_screen.dart
 │   │   │
 │   │   ├── sftp/                    # Visual SFTP browser
-│   │   │   ├── sftp_screen.dart
-│   │   │   ├── sftp_controller.dart
-│   │   │   ├── file_editor.dart     # Syntax-highlighted editor
-│   │   │   └── permission_dialog.dart
+│   │   │   ├── file_explorer_screen.dart
+│   │   │   └── file_editor_screen.dart
 │   │   │
-│   │   ├── ai/                      # AI copilot
-│   │   │   ├── ai_chat_screen.dart
-│   │   │   ├── ai_service.dart      # Loopback enforcement lives here
-│   │   │   ├── risk_assessor.dart   # Command risk scoring
-│   │   │   └── provider_config.dart # Ollama / llama.cpp / cloud settings
+│   │   ├── ai_assistant/            # AI chat and copilot
+│   │   │   ├── global_command_palette.dart
+│   │   │   └── ai_copilot_sheet.dart
 │   │   │
-│   │   ├── fleet/                   # Multi-server dashboard
-│   │   │   ├── fleet_screen.dart
-│   │   │   ├── server_card.dart
-│   │   │   └── health_poller.dart
+│   │   ├── servers/                 # Server management
+│   │   │   ├── server_list_screen.dart
+│   │   │   └── server_dashboard_screen.dart
 │   │   │
-│   │   ├── docker/                  # Docker & systemd panel
-│   │   │   ├── docker_screen.dart
-│   │   │   ├── container_list.dart
-│   │   │   └── service_panel.dart
-│   │   │
-│   │   └── vault/                   # Encrypted credential vault
-│   │       ├── vault_screen.dart
-│   │       ├── vault_service.dart   # Argon2id + AES-256-GCM
-│   │       └── biometric_guard.dart
+│   │   └── security/                # App lock and vault UI
+│   │       └── app_lock_screen.dart
 │   │
 │   ├── core/
 │   │   ├── ssh/
 │   │   │   ├── ssh_service.dart     # dartssh2 wrapper
 │   │   │   └── sftp_service.dart
-│   │   ├── models/
-│   │   │   ├── server.dart
-│   │   │   ├── credential.dart
-│   │   │   └── ai_message.dart
-│   │   └── utils/
-│   │       ├── loopback_guard.dart  # Rejects non-127.x AI URLs
-│   │       └── ansi_parser.dart
-│   │
-├── test/
-│   ├── features/
+│   │   │
 │   │   ├── ai/
-│   │   │   ├── ai_service_test.dart
-│   │   │   └── risk_assessor_test.dart
+│   │   │   ├── ai_command_service.dart # AI provider management
+│   │   │   ├── ollama_client.dart      # Loopback enforcement seatbelt
+│   │   │   └── inference_engine.dart   # Native llama.cpp (fllama) loader
+│   │   │
 │   │   ├── vault/
-│   │   │   └── vault_service_test.dart
-│   │   └── ssh/
-│   │       └── ssh_service_test.dart
-│   └── core/
-│       └── loopback_guard_test.dart
+│   │   │   ├── vault_storage.dart   # Argon2id + AES-256-GCM
+│   │   │   └── vault_redactor.dart  # Data masking logic
+│   │   │
+│   │   ├── storage/
+│   │   │   ├── saved_servers_storage.dart
+│   │   │   └── api_key_storage.dart
+│   │   │
+│   │   └── models/
+│   │       ├── server_profile.dart
+│   │       └── ai_provider.dart
+│   │
+│   ├── ui/                          # Shared UI components
+│   └── plugins/                     # Built-in modular plugins
 │
-├── assets/
-│   ├── images/
-│   │   └── logo.png
-│   └── fonts/
-│
-├── android/
-├── ios/
-├── linux/
-├── macos/
-├── windows/
-│
-├── LOCAL_AI.md
-├── SECURITY.md
-├── ARCHITECTURE.md
-├── ROADMAP.md
-├── threat_model.md
-└── README.md
+├── test/
+│   ├── ai_command_service_test.dart
+│   ├── api_key_storage_test.dart
+│   ├── local_ai_loopback_guard_test.dart
+│   └── ... (flat structure for discovery)
 ```
 
 ---
@@ -210,44 +180,43 @@ hamma/
 The AI feature is the most security-critical component. Here is the full request lifecycle:
 
 ```
-User types prompt in AI Chat screen
+User types prompt or requests analysis
             │
             ▼
-   AIService.sendMessage()
+   AiCommandService.sendMessage()
             │
             ▼
-   LoopbackGuard.validate(url)
+   OllamaClient.isLoopbackEndpoint(url)
    ┌─────────────────────────┐
    │ Is host 127.x.x.x?      │
    │ YES → proceed            │
    │ NO  → throw              │
-   │       SecurityException  │
+   │       ArgumentError      │
    └─────────────────────────┘
-            │ (local only)
+            │ (local mode enforcement)
             ▼
-   HTTP POST to inference server
-   (Ollama / llama.cpp / Jan)
+   HTTP/FFI request to engine
+   (Ollama / llama.cpp / Jan / fllama)
             │
             ▼
    Stream response tokens
             │
             ▼
-   RiskAssessor.score(response)
+   CommandRiskAssessor.score(cmd)
    ┌──────────────────────────────────────┐
    │ Contains rm -rf / iptables -F / dd?  │
-   │  → RED   : require explicit confirm  │
-   │ Contains restart / chmod / kill?     │
-   │  → YELLOW: show caution badge        │
-   │ Read-only commands?                  │
-   │  → GREEN : display normally          │
+   │  → CRITICAL: extra friction          │
+   │ Contains systemctl stop / kill?      │
+   │  → HIGH    : caution badge           │
    └──────────────────────────────────────┘
             │
             ▼
    Render in chat with risk badge
-   User taps "Run" → pastes into terminal
+   User taps "Execute" → runs via SshService
 ```
 
-The `LoopbackGuard` runs on every single AI request. It cannot be bypassed by user configuration — it is enforced at the service layer, below the settings UI.
+The loopback check is enforced at the constructor and request level for local providers. It cannot be bypassed by UI configuration.
+
 
 ---
 
@@ -339,7 +308,7 @@ flutter pub get
 
 # Verify
 flutter analyze        # → No issues found
-flutter test           # → 65/65 passed
+flutter test           # → 746/747 passed
 
 # Run on your platform
 flutter run            # uses connected device / emulator

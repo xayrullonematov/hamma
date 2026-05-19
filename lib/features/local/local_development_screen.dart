@@ -61,6 +61,12 @@ class _LocalDevelopmentScreenState extends State<LocalDevelopmentScreen> {
   }
 
   @override
+  void dispose() {
+    _shell.disconnect();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     const mono = TextStyle(fontFamily: AppColors.monoFamily, fontSize: 11, color: AppColors.textMuted);
 
