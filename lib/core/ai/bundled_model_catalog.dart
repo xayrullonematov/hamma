@@ -96,16 +96,16 @@ class BundledModelCatalog {
 
   static const List<BundledModel> _entries = [
     BundledModel(
-      id: 'hamma-gemma-4-devops-q4',
+      id: 'hamma-gemma-devops',
       displayName: 'Hamma Gemma 4 (DevOps)',
       summary:
           "Custom Gemma model fine-tuned specifically for Hamma's DevOps, "
           "SSH, and server management agents.",
       downloadUrl:
           'https://huggingface.co/xayrullonematov/hamma-gemma-4-devops-GGUF/'
-          'resolve/main/hamma-gemma-4-devops-Q4_K_M.gguf',
-      sizeBytes: 5733892096,
-      parameterCount: '4B',
+          'resolve/main/gemma-4-e4b-it.Q4_K_M.gguf',
+      sizeBytes: 5335290240,
+      parameterCount: '8B',
       quantization: 'Q4_K_M',
       recommended: true,
     ),

@@ -12,7 +12,7 @@ void main() {
 {
   "models": [
     {
-      "name": "gemma3:latest",
+      "name": "hamma-gemma-devops:latest",
       "modified_at": "2024-01-01T00:00:00Z",
       "size": 5368709120,
       "digest": "abc123",
@@ -48,7 +48,7 @@ void main() {
           .toList();
 
       expect(models, hasLength(2));
-      expect(models.first.name, 'gemma3:latest');
+      expect(models.first.name, 'hamma-gemma-devops:latest');
       expect(models.first.sizeBytes, 5368709120);
       expect(models.first.parameterSize, '7B');
       expect(models.first.family, 'gemma');
@@ -145,7 +145,7 @@ void main() {
           req.response.write(jsonEncode({
             'models': [
               {
-                'name': 'gemma3:latest',
+                'name': 'hamma-gemma-devops:latest',
                 'modified_at': '2024-01-01T00:00:00Z',
                 'size': 5368709120,
               }
@@ -158,7 +158,7 @@ void main() {
           req.response.headers.contentType = ContentType.json;
           req.response.write(jsonEncode({
             'models': [
-              {'name': 'gemma3:latest', 'size': 5368709120, 'expires_at': ''}
+              {'name': 'hamma-gemma-devops:latest', 'size': 5368709120, 'expires_at': ''}
             ]
           }));
           await req.response.close();
@@ -205,22 +205,22 @@ void main() {
     test('listModels returns parsed models', () async {
       final models = await client.listModels();
       expect(models, hasLength(1));
-      expect(models.first.name, 'gemma3:latest');
+      expect(models.first.name, 'hamma-gemma-devops:latest');
     });
 
     test('listLoadedModels returns parsed loaded models', () async {
       final loaded = await client.listLoadedModels();
       expect(loaded, hasLength(1));
-      expect(loaded.first.name, 'gemma3:latest');
+      expect(loaded.first.name, 'hamma-gemma-devops:latest');
     });
 
     test('deleteModel issues a DELETE', () async {
-      await client.deleteModel('gemma3:latest');
+      await client.deleteModel('hamma-gemma-devops:latest');
       expect(requestLog, contains('DELETE /api/delete'));
     });
 
     test('pullModel streams NDJSON progress events', () async {
-      final events = await client.pullModel('gemma3:latest').toList();
+      final events = await client.pullModel('hamma-gemma-devops:latest').toList();
       expect(events.map((e) => e.status), [
         'pulling manifest',
         'downloading',
@@ -233,7 +233,7 @@ void main() {
     test('streamChat yields incremental content deltas', () async {
       final out = <String>[];
       await for (final delta in client.streamChat(
-        model: 'gemma3:latest',
+        model: 'hamma-gemma-devops:latest',
         messages: [
           {'role': 'user', 'content': 'hi'}
         ],

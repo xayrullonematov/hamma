@@ -629,12 +629,12 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Download a small starter model. Gemma 3 is a good default — '
-          'about 5 GB on disk.',
+          'Download a small starter model. Hamma Gemma DevOps is a good '
+          'default — about 5.3 GB on disk.',
           style: TextStyle(color: AppColors.textMuted, height: 1.4),
         ),
         const SizedBox(height: 16),
-        const _CodeBlock(snippet: 'ollama pull gemma3'),
+        const _CodeBlock(snippet: 'ollama run hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M'),
         const SizedBox(height: 12),
         const Text(
           'You can also use the in-app model manager later (Settings → '

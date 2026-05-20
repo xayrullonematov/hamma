@@ -33,7 +33,7 @@ abstract class InferenceBackend {
   bool get isAvailable;
 
   /// Identifier the OpenAI-compatible shim returns for `model` in
-  /// `/v1/models`. Typically the active model id (e.g. `gemma3-1b-it-q4`).
+  /// `/v1/models`. Typically the active model id (e.g. `hamma-gemma-devops`).
   String get currentModelId;
 
   /// Load a GGUF model from [modelPath]. Calling [loadModel] a second

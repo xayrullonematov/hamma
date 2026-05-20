@@ -27,7 +27,7 @@ void main() {
         initialApiKey: '',
         initialOpenRouterModel: null,
         initialLocalEndpoint: 'http://localhost:11434',
-        initialLocalModel: 'gemma3',
+        initialLocalModel: 'hamma-gemma-devops',
         onSaveAiSettings: (
           AiProvider provider,
           String apiKey,
@@ -92,7 +92,7 @@ void main() {
             initialApiKey: '',
             initialOpenRouterModel: null,
             initialLocalEndpoint: 'http://localhost:11434',
-            initialLocalModel: 'gemma3',
+            initialLocalModel: 'hamma-gemma-devops',
             onSaveAiSettings: (p, k, m, le, lm) async {
               saves++;
               lastProvider = p;

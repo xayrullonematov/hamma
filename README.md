@@ -95,7 +95,7 @@ Compiled to **Q4_K_M GGUF (5.34 GB)** — runs on any standard developer laptop 
 
 | Provider | Type | How to use |
 |---|---|---|
-| **Ollama** | Local | `ollama pull hamma` |
+| **Ollama** | Local | `ollama run hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M` |
 | **LM Studio** | Local | Load any GGUF |
 | **llama.cpp** | Local | Point to server URL |
 | **Jan** | Local | Load model in Jan |

@@ -151,7 +151,7 @@ Phase 2 (current):          Phase 4 (target):
 ──────────────────          ─────────────────
 Install HAMMA          →    Install HAMMA
 Install Ollama         →    (done)
-ollama pull hamma      →    (done)
+ollama run hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M      →    (done)
 Configure provider     →    (done)
 ```
 

@@ -58,7 +58,7 @@ class LocalEngineHealth {
 /// The probe is two-tier:
 ///   1. **Ollama native API** (`/api/version` + `/api/ps`) — gives us
 ///      the engine version *and* the list of warm models, so the UI can
-///      show "Online · gemma3" or "Loading model…" when the engine is
+///      show "Online · hamma-gemma-devops" or "Loading model…" when the engine is
 ///      up but no model is in RAM yet.
 ///   2. **OpenAI-compatible fallback** (`/v1/models`) — used for engines
 ///      that don't speak Ollama (LM Studio, llama.cpp server, Jan,

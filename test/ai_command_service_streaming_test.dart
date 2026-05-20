@@ -100,7 +100,7 @@ void main() {
         provider: AiProvider.local,
         apiKey: '',
         localEndpoint: localEndpoint,
-        localModel: 'gemma3',
+        localModel: 'hamma-gemma-devops',
       );
       final out = <String>[];
       await for (final delta in svc.streamChatResponse('hi')) {
@@ -114,7 +114,7 @@ void main() {
         provider: AiProvider.local,
         apiKey: '',
         localEndpoint: localEndpoint,
-        localModel: 'gemma3',
+        localModel: 'hamma-gemma-devops',
       );
       await expectLater(
         svc.streamChatResponse('   ').toList(),

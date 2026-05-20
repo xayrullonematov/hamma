@@ -20,7 +20,7 @@ class _FakeAiCommandService extends AiCommandService {
             provider: AiProvider.local,
             apiKey: '',
             localEndpoint: 'http://127.0.0.1:11434',
-            localModel: 'gemma3',
+            localModel: 'hamma-gemma-devops',
           ),
         );
 

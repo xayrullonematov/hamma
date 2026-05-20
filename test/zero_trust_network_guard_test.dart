@@ -137,7 +137,7 @@ void main() {
             throwsA(isA<OllamaUnavailableException>()));
         await expectLater(
           client.streamChat(
-            model: 'gemma3',
+            model: 'hamma-gemma-devops',
             messages: const [
               {'role': 'user', 'content': 'hi'},
             ],
@@ -259,7 +259,7 @@ void main() {
           provider: AiProvider.local,
           apiKey: '',
           localEndpoint: endpoint,
-          localModel: 'gemma3',
+          localModel: 'hamma-gemma-devops',
         );
         final out = await svc.streamChatResponse('hi').toList();
         expect(out, ['ok']);

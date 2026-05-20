@@ -54,7 +54,7 @@ no cloud, no traffic leaves localhost.**
 1. Install a local engine — Ollama is the easiest:
    - macOS / Linux: `curl -fsSL https://ollama.com/install.sh | sh`
    - Windows: `winget install Ollama.Ollama`
-2. Pull a model: `ollama pull gemma3` (≈5 GB).
+2. Pull a model: `ollama run hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M` (≈5 GB).
 3. In **Settings → AI Configuration**, choose **Local AI**.
 4. Tap **DETECT ENGINES** — Hamma scans the usual ports (Ollama 11434,
    LM Studio 1234, llama.cpp 8080, Jan 1337) and pre-fills the endpoint.

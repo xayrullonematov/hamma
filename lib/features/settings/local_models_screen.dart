@@ -52,10 +52,10 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
   // `ollama pull <tag>` on a stock daemon.
   static const List<_CatalogEntry> _catalog = [
     _CatalogEntry(
-      tag: 'gemma3',
-      label: 'Gemma 3',
-      summary: 'Google general-purpose chat model. Good default.',
-      approxSize: '~5 GB',
+      tag: 'hamma-gemma-devops',
+      label: 'Hamma DevOps',
+      summary: 'Specialized for server management and diagnostics. RECOMMENDED.',
+      approxSize: '~5.3 GB',
     ),
     _CatalogEntry(
       tag: 'llama3.2',
@@ -625,7 +625,7 @@ class _PullSheetState extends State<_PullSheet> {
   Future<void> _start() async {
     final tag = widget.tagController.text.trim();
     if (tag.isEmpty) {
-      setState(() => _error = 'Enter a model tag, e.g. "gemma3".');
+      setState(() => _error = 'Enter a model tag, e.g. "hamma-gemma-devops".');
       return;
     }
     setState(() {
@@ -782,7 +782,7 @@ class _PullSheetState extends State<_PullSheet> {
             enabled: !_isPulling,
             decoration: const InputDecoration(
               labelText: 'Model tag',
-              hintText: 'gemma3',
+              hintText: 'hamma-gemma-devops',
             ),
             style: TextStyle(fontFamily: AppColors.monoFamily, fontSize: 13),
           ),

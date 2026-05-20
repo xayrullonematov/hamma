@@ -93,7 +93,7 @@ void main() {
     test('reports online + loaded model name when Ollama is healthy', () async {
       server = _FakeEngineServer(
         ollamaVersion: '0.6.4',
-        ollamaLoadedModels: ['gemma3:latest'],
+        ollamaLoadedModels: ['hamma-gemma-devops:latest'],
       );
       await server.start();
       monitor = LocalEngineHealthMonitor(
@@ -104,7 +104,7 @@ void main() {
       final h = await monitor.probeNow();
       expect(h.status, LocalEngineHealthStatus.online);
       expect(h.version, '0.6.4');
-      expect(h.loadedModels, ['gemma3:latest']);
+      expect(h.loadedModels, ['hamma-gemma-devops:latest']);
       expect(h.isReachable, isTrue);
     });
 
@@ -166,7 +166,7 @@ void main() {
     test('emits initial loading event then a real probe event', () async {
       server = _FakeEngineServer(
         ollamaVersion: '0.6.4',
-        ollamaLoadedModels: ['gemma3'],
+        ollamaLoadedModels: ['hamma-gemma-devops'],
       );
       await server.start();
       monitor = LocalEngineHealthMonitor(
@@ -182,7 +182,7 @@ void main() {
 
       expect(events.first.status, LocalEngineHealthStatus.loading);
       expect(events.last.status, LocalEngineHealthStatus.online);
-      expect(events.last.loadedModels, ['gemma3']);
+      expect(events.last.loadedModels, ['hamma-gemma-devops']);
     });
 
     test('deduplicates concurrent probes through _inflight', () async {

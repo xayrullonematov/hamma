@@ -106,7 +106,7 @@ LLAMA_SERVER_MODEL=/path/to/some-tiny.gguf \
 ```
 
 The bundled model catalog (`lib/core/ai/bundled_model_catalog.dart`)
-lists four sane defaults; the smallest is Gemma 3 1B Q4 at ~750 MB.
+lists four sane defaults; the recommended pick is Hamma Gemma 4 (DevOps) (~5 GB).
 
 ## Why a subprocess side-car instead of FFI?
 

@@ -86,7 +86,7 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
         };
 
         // Online label includes the first loaded-in-RAM model, mirroring
-        // the spec ("Online · gemma3"). Falls back to plain ONLINE when
+        // the spec ("Online · hamma-gemma-devops"). Falls back to plain ONLINE when
         // the engine is up but the engine doesn't expose a model list.
         String label;
         switch (status) {

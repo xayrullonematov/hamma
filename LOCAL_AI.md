@@ -74,6 +74,7 @@ Root cause. Exact command. Verification step. Nothing else.
 | Parameter | Value |
 |---|---|
 | Base model | Gemma 4 (google/gemma-4-e4b-it) |
+| Parameters | 8B |
 | Fine-tuning method | LoRA (Unsloth) |
 | Training pairs | 1,500+ curated problem-solution pairs |
 | Topics covered | 39 Linux/DevOps failure categories |
@@ -111,10 +112,10 @@ Root cause. Exact command. Verification step. Nothing else.
 
 ```bash
 # Via Ollama (easiest)
-ollama pull hamma
+ollama run hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M
 
 # Direct GGUF download
-# → https://huggingface.co/xayrullonematov
+# → https://huggingface.co/xayrullonematov/hamma-gemma-4-devops-GGUF
 ```
 
 ---
@@ -138,17 +139,17 @@ curl -fsSL https://ollama.com/install.sh | sh
 **Pull the HAMMA model:**
 
 ```bash
-ollama pull hamma
+ollama run hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M
 ```
 
 **Verify it's running:**
 
 ```bash
 ollama list
-# Should show: hamma   [size]   [modified]
+# Should show: hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M   [size]   [modified]
 
 curl http://localhost:11434/api/tags
-# Should return JSON with hamma in the models list
+# Should return JSON with hamma-gemma-devops in the models list
 ```
 
 **Connect HAMMA app:**
@@ -156,7 +157,7 @@ curl http://localhost:11434/api/tags
 ```
 Settings → AI Configuration → Provider: Ollama
 Base URL: http://127.0.0.1:11434
-Model: hamma
+Model: hamma-gemma-devops
 ```
 
 ---
@@ -166,7 +167,7 @@ Model: hamma
 LM Studio gives you a GUI to browse and load GGUF models.
 
 1. Download LM Studio from [lmstudio.ai](https://lmstudio.ai)
-2. Search for `hamma` or download the GGUF from HuggingFace and load it manually
+2. Search for `hamma-gemma-devops` or download the GGUF from HuggingFace and load it manually
 3. Start the local server: **Local Server tab → Start Server**
 4. Default port: `1234`
 
@@ -175,7 +176,7 @@ LM Studio gives you a GUI to browse and load GGUF models.
 ```
 Settings → AI Configuration → Provider: LM Studio
 Base URL: http://127.0.0.1:1234
-Model: hamma-gemma-4-devops-q4
+Model: hamma-gemma-devops
 ```
 
 ---
@@ -191,11 +192,11 @@ cd llama.cpp
 make -j$(nproc)
 
 # Download the GGUF
-wget https://huggingface.co/xayrullonematov/hamma-gemma-4-devops-q4-GGUF/resolve/main/hamma-gemma-4-devops-q4-Q4_K_M.gguf
+wget https://huggingface.co/xayrullonematov/hamma-gemma-4-devops-GGUF/resolve/main/gemma-4-e4b-it.Q4_K_M.gguf
 
 # Start the server
 ./llama-server \
-  -m hamma-gemma-4-devops-q4-Q4_K_M.gguf \
+  -m gemma-4-e4b-it.Q4_K_M.gguf \
   --host 127.0.0.1 \
   --port 8080 \
   -c 4096 \
@@ -207,6 +208,7 @@ wget https://huggingface.co/xayrullonematov/hamma-gemma-4-devops-q4-GGUF/resolve
 ```
 Settings → AI Configuration → Provider: llama.cpp
 Base URL: http://127.0.0.1:8080
+Model: hamma-gemma-devops
 ```
 
 ---
@@ -225,7 +227,7 @@ Jan is a fully offline ChatGPT alternative with a local server mode.
 ```
 Settings → AI Configuration → Provider: Jan
 Base URL: http://127.0.0.1:1337
-Model: hamma-gemma-4-devops-q4
+Model: hamma-gemma-devops
 ```
 
 ---

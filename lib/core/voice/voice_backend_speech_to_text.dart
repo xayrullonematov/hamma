@@ -79,9 +79,11 @@ class SpeechToTextBackend implements VoiceBackend {
     _activeOnError = onError;
     try {
       await _stt.listen(
-        onDevice: true,
-        partialResults: true,
-        cancelOnError: true,
+        listenOptions: SpeechListenOptions(
+          onDevice: true,
+          partialResults: true,
+          cancelOnError: true,
+        ),
         onResult: (r) => onResult(r.recognizedWords, r.finalResult),
       );
     } catch (e) {

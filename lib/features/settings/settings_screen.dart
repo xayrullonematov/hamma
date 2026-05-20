@@ -323,7 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: 'Model Name',
       currentValue: _localModelController.text,
       helperText: 'Exact model tag as shown by "ollama list".',
-      hintText: 'gemma3',
+      hintText: 'hamma-gemma-devops',
       monospace: true,
     );
     if (result == null || !mounted) return;
@@ -617,7 +617,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       text: widget.initialLocalEndpoint ?? 'http://localhost:11434',
     );
     _localModelController = TextEditingController(
-      text: widget.initialLocalModel ?? 'gemma3',
+      text: widget.initialLocalModel ?? 'hamma-gemma-devops',
     );
 
     _backupConfig = const BackupConfig(destination: BackupDestination.local);
@@ -854,7 +854,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? 'http://localhost:11434'
             : _localEndpointController.text.trim(),
         _localModelController.text.trim().isEmpty
-            ? 'gemma3'
+            ? 'hamma-gemma-devops'
             : _localModelController.text.trim(),
       );
 
@@ -1618,7 +1618,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 icon: Icons.memory_rounded,
                                 label: 'Local Model',
                                 value: _localModelController.text.isEmpty
-                                    ? 'gemma3'
+                                    ? 'hamma-gemma-devops'
                                     : _localModelController.text,
                                 enabled: !_isBusy,
                                 onTap: _isBusy ? null : _editLocalModelRow,

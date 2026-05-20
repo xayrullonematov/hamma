@@ -92,7 +92,7 @@ Architecture (`lib/core/ai/`):
   - `LlamaCppBackend` (FFI, **future / disabled**) — bindings in `llama_cpp_bindings.dart` cover the symbols a complete implementation would need but its `isAvailable` returns `false` until a generation loop is wired up. Kept as an escape hatch for future iOS / sandboxed-environment support where subprocess spawning isn't viable. The HTTP-API approach was chosen over FFI because llama.cpp's C struct ABI (`llama_batch`, `llama_*_params`) shifts across upstream releases while the HTTP API has been stable for a year+.
   - `EchoBackend` is a pure-Dart fake used by tests and for "demo mode" without a model loaded.
   Plus `BundledEngine`, which loads a model and starts a loopback `HttpServer` on an OS-assigned ephemeral port. The server speaks an OpenAI-compatible subset (`GET /v1/models`, `POST /v1/chat/completions` both streaming SSE and non-streaming) and an Ollama-compat `GET /api/version` so `LocalEngineHealthMonitor` works against it unchanged.
-- `bundled_model_catalog.dart` — curated GGUF list (Gemma 3 1B, Qwen2.5-Coder 3B, Llama 3.2 3B, Phi 3.5 Mini). All entries are HTTPS-only (validated programmatically). The "recommended" pick (Gemma 3 1B) is the smallest/fastest.
+- `bundled_model_catalog.dart` — curated GGUF list (Hamma Gemma 4 DevOps, Gemma 3 1B, Qwen2.5-Coder 3B, Llama 3.2 3B, Phi 3.5 Mini). All entries are HTTPS-only (validated programmatically). The "recommended" pick is Hamma Gemma 4 (DevOps).
 - `bundled_model_downloader.dart` — streamed HTTPS-only download to `<appSupportDir>/bundled_models/<id>.gguf`. Writes to a `.partial` file and renames atomically on success; cancellation drops the partial. Refuses redirects that leave HTTPS.
 - `bundled_engine_controller.dart` — process-wide singleton (`BundledEngineController.instance`) so the AI assistant, copilot sheet and settings all share one warm-loaded model. `overrideForTesting` / `resetForTesting` swap in fakes.
 - `llama_cpp_bindings.dart` — minimal `dart:ffi` typedefs for `llama_backend_init`, `llama_load_model_from_file`, `llama_new_context_with_model` and friends. `LlamaCppLibrary.openOrNull()` returns `null` when no library is bundled — never throws. Currently used only by the disabled FFI backend.
@@ -128,7 +128,7 @@ The `test/zero_trust_network_guard_test.dart` suite enforces — at the unit-tes
 ### Quick start (existing Ollama)
 ```bash
 ollama serve          # start the engine
-ollama pull gemma3    # download the model (~5 GB)
+ollama run hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M    # download and run the model (~5 GB)
 ```
 
 ## Backup Encryption
