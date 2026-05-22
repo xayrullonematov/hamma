@@ -54,7 +54,8 @@ class SettingsScreen extends StatefulWidget {
     String? openRouterModel,
     String? localEndpoint,
     String? localModel,
-  ) onSaveAiSettings;
+  )
+  onSaveAiSettings;
   final Future<void> Function()? onBackupImported;
 
   @override
@@ -81,6 +82,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isMobile = Platform.isAndroid || Platform.isIOS;
     return raw.isEmpty || isMobile || OllamaClient.isLoopbackEndpoint(raw);
   }
+
   bool _isDetectingLocalEngines = false;
   List<DetectedEngine> _detectedLocalEngines = const [];
   String? _detectError;
@@ -161,15 +163,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// reused inside a category — e.g. SFTP / WebDAV "Username").
   static const Map<String, Map<String, String>> _categoryRowKeywords = {
     'ai': {
-      'Default Provider':
-          'ai provider openai gemini openrouter local default',
+      'Default Provider': 'ai provider openai gemini openrouter local default',
       'OpenAI Key': 'openai key api',
       'Gemini Key': 'gemini key api',
       'OpenRouter Key': 'openrouter key api',
       'OpenRouter Model': 'openrouter model gpt claude llama',
-      'Engine Endpoint':
-          'local endpoint loopback ollama llamacpp lmstudio url',
-      'Local Model': 'local model ollama tag pull',
+      'Engine Endpoint': 'local endpoint loopback ollama llamacpp lmstudio url',
+      'Local Model': 'local model ollama registered name install',
       'Test Connection': 'test ping connection probe',
       'Detect Engines': 'detect scan engines local',
       'Manage Models': 'manage pull models tags',
@@ -177,8 +177,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'first run setup wizard onboarding install local engine',
     },
     'triage': {
-      'Batch Size':
-          'log triage cadence batch lines analyse every watch',
+      'Batch Size': 'log triage cadence batch lines analyse every watch',
     },
     'health': {
       'Enable Background Monitoring':
@@ -186,18 +185,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'Check Interval': 'check interval minutes frequency every',
     },
     'security': {
-      'App PIN':
-          'security app pin biometric lock unlock vault master password',
+      'App PIN': 'security app pin biometric lock unlock vault master password',
     },
     'terminal': {
       'Font Size': 'terminal font size text scale bigger smaller',
       'Font Family': 'terminal font family typeface mono jetbrains geist',
-      'Color Theme': 'terminal theme color style dark solarized monochrome brutalist',
+      'Color Theme':
+          'terminal theme color style dark solarized monochrome brutalist',
     },
     'backup': {
       'Backup Destination':
           'destination sftp webdav webdav url syncthing local host '
-              'port username password url path token nextcloud',
+          'port username password url path token nextcloud',
       'SFTP Host': 'sftp host server hostname',
       'SFTP Username': 'sftp username user',
       'SFTP Port': 'sftp port',
@@ -211,18 +210,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
           'daily automatic auto backup schedule wifi background',
       'Backup Now': 'backup now export run',
       'Restore': 'restore import backup',
-      'Cloud Sync (Encrypted)':
-          'cloud sync encrypted end to end device e2e',
-      'Snippet Sync (Cross-Device)':
-          'snippet sync cross device share command',
+      'Cloud Sync (Encrypted)': 'cloud sync encrypted end to end device e2e',
+      'Snippet Sync (Cross-Device)': 'snippet sync cross device share command',
     },
     'support': {
-      'Help Center':
-          'help center guides faqs troubleshooting documentation',
+      'Help Center': 'help center guides faqs troubleshooting documentation',
       'Extensions': 'extensions plugins manage installed',
       'Vault': 'vault secrets encrypted credentials',
-      'Contact Support':
-          'contact support feedback email hamma team',
+      'Contact Support': 'contact support feedback email hamma team',
     },
   };
 
@@ -247,8 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// Renders the "current value" for any secret chevron row. We never
   /// echo any portion of the underlying secret regardless of length —
   /// the row only conveys whether a secret is saved.
-  String _secretValueLabel(String key) =>
-      key.isEmpty ? 'Not set' : 'Set';
+  String _secretValueLabel(String key) => key.isEmpty ? 'Not set' : 'Set';
 
   Future<void> _editApiKey({
     required TextEditingController controller,
@@ -276,13 +270,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       title: 'Default Provider',
       currentValue: _selectedProvider,
-      choices: AiProvider.values
-          .map((p) => SettingsChoice<AiProvider>(
-                value: p,
-                label: p.label,
-                subtitle: p.helperText,
-              ))
-          .toList(),
+      choices:
+          AiProvider.values
+              .map(
+                (p) => SettingsChoice<AiProvider>(
+                  value: p,
+                  label: p.label,
+                  subtitle: p.helperText,
+                ),
+              )
+              .toList(),
     );
     if (picked == null || !mounted) return;
     _handleProviderChanged(picked);
@@ -293,12 +290,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       title: 'Engine Endpoint',
       currentValue: _localEndpointController.text,
-      helperText: (Platform.isAndroid || Platform.isIOS)
-          ? 'Base URL of your local AI server (e.g. on your desktop).'
-          : 'Base URL of your local AI server (loopback only — no LAN/internet).',
-      hintText: (Platform.isAndroid || Platform.isIOS)
-          ? 'http://192.168.1.x:11434'
-          : 'http://localhost:11434',
+      helperText:
+          (Platform.isAndroid || Platform.isIOS)
+              ? 'Base URL of your local AI server (e.g. on your desktop).'
+              : 'Base URL of your local AI server (loopback only — no LAN/internet).',
+      hintText:
+          (Platform.isAndroid || Platform.isIOS)
+              ? 'http://192.168.1.x:11434'
+              : 'http://localhost:11434',
       monospace: true,
       validator: (v) {
         if (v.isEmpty) return null;
@@ -322,8 +321,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       title: 'Model Name',
       currentValue: _localModelController.text,
-      helperText: 'Exact model tag as shown by "ollama list".',
-      hintText: 'hamma-gemma-devops',
+      helperText: 'Exact registered local model name, e.g. from Manage Models.',
+      hintText: 'hamma-devops',
       monospace: true,
     );
     if (result == null || !mounted) return;
@@ -340,9 +339,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _loadOpenRouterModels();
     }
     if (!mounted) return;
-    final choices = _openRouterModels
-        .map((id) => SettingsChoice<String>(value: id, label: id))
-        .toList();
+    final choices =
+        _openRouterModels
+            .map((id) => SettingsChoice<String>(value: id, label: id))
+            .toList();
     if (choices.isEmpty) {
       // Fall back to free-text edit so the user can paste a model id.
       final result = await pushSettingsTextEdit(
@@ -384,8 +384,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       currentValue: _logTriageBatchSize,
       min: LogTriagePrefs.minBatchSize,
       max: LogTriagePrefs.maxBatchSize,
-      divisions: (LogTriagePrefs.maxBatchSize - LogTriagePrefs.minBatchSize) ~/
-          10,
+      divisions:
+          (LogTriagePrefs.maxBatchSize - LogTriagePrefs.minBatchSize) ~/ 10,
       labelBuilder: (v) => 'Analyse every $v lines',
       helperText:
           'Range: ${LogTriagePrefs.minBatchSize}–${LogTriagePrefs.maxBatchSize} '
@@ -410,8 +410,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       max: 120,
       divisions: 7,
       labelBuilder: (v) => '$v minutes',
-      helperText:
-          'How often saved servers are probed in the background.',
+      helperText: 'How often saved servers are probed in the background.',
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -442,9 +441,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _pickTerminalFontFamily() async {
     final choices = [
-      SettingsChoice(value: 'JetBrains Mono', label: 'JetBrains Mono', subtitle: 'Default professional mono'),
-      SettingsChoice(value: 'Inter', label: 'Inter', subtitle: 'Geometric sans-serif'),
-      SettingsChoice(value: 'Courier', label: 'Courier', subtitle: 'Classic typewriter'),
+      SettingsChoice(
+        value: 'JetBrains Mono',
+        label: 'JetBrains Mono',
+        subtitle: 'Default professional mono',
+      ),
+      SettingsChoice(
+        value: 'Inter',
+        label: 'Inter',
+        subtitle: 'Geometric sans-serif',
+      ),
+      SettingsChoice(
+        value: 'Courier',
+        label: 'Courier',
+        subtitle: 'Classic typewriter',
+      ),
     ];
     final picked = await pushSettingsChoiceEdit<String>(
       context: context,
@@ -462,10 +473,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _pickTerminalTheme() async {
     final choices = [
-      SettingsChoice(value: 'brutalist', label: 'BRUTALIST', subtitle: 'Default monochrome (black/white)'),
-      SettingsChoice(value: 'solarized', label: 'SOLARIZED', subtitle: 'Classic high-contrast blue'),
-      SettingsChoice(value: 'matrix', label: 'MATRIX', subtitle: 'Phosphor green on black'),
-      SettingsChoice(value: 'ocean', label: 'OCEAN', subtitle: 'Soft deep blue and cyan'),
+      SettingsChoice(
+        value: 'brutalist',
+        label: 'BRUTALIST',
+        subtitle: 'Default monochrome (black/white)',
+      ),
+      SettingsChoice(
+        value: 'solarized',
+        label: 'SOLARIZED',
+        subtitle: 'Classic high-contrast blue',
+      ),
+      SettingsChoice(
+        value: 'matrix',
+        label: 'MATRIX',
+        subtitle: 'Phosphor green on black',
+      ),
+      SettingsChoice(
+        value: 'ocean',
+        label: 'OCEAN',
+        subtitle: 'Soft deep blue and cyan',
+      ),
     ];
     final picked = await pushSettingsChoiceEdit<String>(
       context: context,
@@ -490,22 +517,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _pickBackupDestination() async {
-    final allowed = BackupDestination.values
-        .where((d) =>
-            d != BackupDestination.s3Compat &&
-            d != BackupDestination.iCloud &&
-            d != BackupDestination.dropbox)
-        .toList();
+    final allowed =
+        BackupDestination.values
+            .where(
+              (d) =>
+                  d != BackupDestination.s3Compat &&
+                  d != BackupDestination.iCloud &&
+                  d != BackupDestination.dropbox,
+            )
+            .toList();
     final picked = await pushSettingsChoiceEdit<BackupDestination>(
       context: context,
       title: 'Backup Destination',
       currentValue: _backupConfig.destination,
-      choices: allowed
-          .map((d) => SettingsChoice<BackupDestination>(
-                value: d,
-                label: d.name.toUpperCase(),
-              ))
-          .toList(),
+      choices:
+          allowed
+              .map(
+                (d) => SettingsChoice<BackupDestination>(
+                  value: d,
+                  label: d.name.toUpperCase(),
+                ),
+              )
+              .toList(),
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -617,7 +650,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       text: widget.initialLocalEndpoint ?? 'http://localhost:11434',
     );
     _localModelController = TextEditingController(
-      text: widget.initialLocalModel ?? 'hamma-gemma-devops',
+      text: widget.initialLocalModel ?? 'hamma-devops',
     );
 
     _backupConfig = const BackupConfig(destination: BackupDestination.local);
@@ -656,10 +689,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadLogTriageSettings();
     _loadHealthMonitoringSettings();
     _loadTerminalSettings();
-    Future.wait([
-      _loadStoredApiKeys(),
-      _loadBackupSettings(),
-    ]).whenComplete(() {
+    Future.wait([_loadStoredApiKeys(), _loadBackupSettings()]).whenComplete(() {
       if (mounted) _loadingFromStorage = false;
     });
     if (_selectedProvider == AiProvider.openRouter) {
@@ -686,13 +716,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
         setState(() => _localEndpointController.text = liveEndpoint);
 
-        unawaited(widget.onSaveAiSettings(
-          _selectedProvider,
-          _apiKeyForProvider(_selectedProvider),
-          _openRouterModel,
-          liveEndpoint,
-          snapshot.modelId.isNotEmpty ? snapshot.modelId : _localModelController.text,
-        ));
+        unawaited(
+          widget.onSaveAiSettings(
+            _selectedProvider,
+            _apiKeyForProvider(_selectedProvider),
+            _openRouterModel,
+            liveEndpoint,
+            snapshot.modelId.isNotEmpty
+                ? snapshot.modelId
+                : _localModelController.text,
+          ),
+        );
       });
     } catch (_) {
       // BundledEngine unavailable on this build. No-op.
@@ -854,7 +888,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ? 'http://localhost:11434'
             : _localEndpointController.text.trim(),
         _localModelController.text.trim().isEmpty
-            ? 'hamma-gemma-devops'
+            ? 'hamma-devops'
             : _localModelController.text.trim(),
       );
 
@@ -868,9 +902,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await _appPrefsStorage.setTerminalTheme(_terminalTheme);
 
       if (_healthMonitoringEnabled) {
-        await BackgroundKeepalive.enable(
-          intervalMinutes: _healthCheckInterval,
-        );
+        await BackgroundKeepalive.enable(intervalMinutes: _healthCheckInterval);
       } else {
         await BackgroundKeepalive.disable();
       }
@@ -1255,9 +1287,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!mounted) return;
       setState(() {
         _detectedLocalEngines = engines;
-        _detectError = engines.isEmpty
-            ? 'No engines responded on localhost. Is Ollama / LM Studio running?'
-            : null;
+        _detectError =
+            engines.isEmpty
+                ? 'No engines responded on localhost. Is Ollama / LM Studio running?'
+                : null;
       });
       if (engines.isNotEmpty &&
           _localEndpointController.text.trim() == 'http://localhost:11434') {
@@ -1274,17 +1307,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openLocalModelManager() async {
-    final endpoint = _localEndpointController.text.trim().isEmpty
-        ? 'http://localhost:11434'
-        : _localEndpointController.text.trim();
+    final endpoint =
+        _localEndpointController.text.trim().isEmpty
+            ? 'http://localhost:11434'
+            : _localEndpointController.text.trim();
     final newDefault = await Navigator.of(context).push<String?>(
       MaterialPageRoute(
-        builder: (_) => LocalModelsScreen(
-          endpoint: endpoint,
-          currentDefault: _localModelController.text.trim().isEmpty
-              ? null
-              : _localModelController.text.trim(),
-        ),
+        builder:
+            (_) => LocalModelsScreen(
+              endpoint: endpoint,
+              currentDefault:
+                  _localModelController.text.trim().isEmpty
+                      ? null
+                      : _localModelController.text.trim(),
+            ),
       ),
     );
     if (!mounted) return;
@@ -1344,9 +1380,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _testLocalConnection() async {
-    final endpoint = _localEndpointController.text.trim().isEmpty
-        ? 'http://localhost:11434'
-        : _localEndpointController.text.trim();
+    final endpoint =
+        _localEndpointController.text.trim().isEmpty
+            ? 'http://localhost:11434'
+            : _localEndpointController.text.trim();
 
     setState(() {
       _isTestingLocalConnection = true;
@@ -1355,9 +1392,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     try {
       final uri = Uri.parse('$endpoint/v1/models');
-      final response = await http
-          .get(uri)
-          .timeout(const Duration(seconds: 6));
+      final response = await http.get(uri).timeout(const Duration(seconds: 6));
 
       if (!mounted) return;
 
@@ -1370,21 +1405,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
         } catch (_) {}
         setState(() {
           _isTestingLocalConnection = false;
-          _localConnectionTestResult = modelCount > 0
-              ? 'ENGINE ONLINE — $modelCount model${modelCount == 1 ? "" : "s"} available'
-              : 'ENGINE ONLINE — connected (no models loaded yet)';
+          _localConnectionTestResult =
+              modelCount > 0
+                  ? 'ENGINE ONLINE — $modelCount model${modelCount == 1 ? "" : "s"} available'
+                  : 'ENGINE ONLINE — connected (no models loaded yet)';
         });
       } else {
         setState(() {
           _isTestingLocalConnection = false;
-          _localConnectionTestResult = 'ENGINE UNREACHABLE — HTTP ${response.statusCode}';
+          _localConnectionTestResult =
+              'ENGINE UNREACHABLE — HTTP ${response.statusCode}';
         });
       }
     } on TimeoutException {
       if (!mounted) return;
       setState(() {
         _isTestingLocalConnection = false;
-        _localConnectionTestResult = 'CONNECTION TIMED OUT — is Ollama running?';
+        _localConnectionTestResult =
+            'CONNECTION TIMED OUT — is Ollama running?';
       });
     } catch (e) {
       if (!mounted) return;
@@ -1394,7 +1432,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       });
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -1416,12 +1453,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (context, constraints) {
             final showRail = constraints.maxWidth >= 1100;
             final hasSearch = _settingsSearchQuery.trim().isNotEmpty;
-            final listPadding =
-                EdgeInsets.fromLTRB(16, 12, 16, bottomInset + 24);
+            final listPadding = EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              bottomInset + 24,
+            );
 
             if (showRail) {
-              final restrict =
-                  hasSearch ? null : <String>{_activeCategoryId};
+              final restrict = hasSearch ? null : <String>{_activeCategoryId};
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -1483,764 +1523,771 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSettingsSearchField(theme),
           const SizedBox(height: 16),
         ],
-                _wrapCategorySection(
-                  'ai',
-                  SettingsSectionCard(
-                    title: 'AI Configuration',
-                  subtitle:
-                      'Choose your default AI provider and manage the saved keys used by the copilot.',
-                  icon: Icons.smart_toy_outlined,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SettingsRowGroup(
-                        header: 'PROVIDER',
-                        children: [
-                          if (_rowMatches('ai', 'Default Provider'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_ai_provider'),
-                              iconColor: AppColors.accentAi,
-                              icon: Icons.bolt_rounded,
-                              label: 'Default Provider',
-                              value: _selectedProvider.label,
-                              enabled: !_isBusy,
-                              onTap: _isBusy ? null : _pickAiProvider,
-                            ),
-                        ],
+        _wrapCategorySection(
+          'ai',
+          SettingsSectionCard(
+            title: 'AI Configuration',
+            subtitle:
+                'Choose your default AI provider and manage the saved keys used by the copilot.',
+            icon: Icons.smart_toy_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SettingsRowGroup(
+                  header: 'PROVIDER',
+                  children: [
+                    if (_rowMatches('ai', 'Default Provider'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_ai_provider'),
+                        iconColor: AppColors.accentAi,
+                        icon: Icons.bolt_rounded,
+                        label: 'Default Provider',
+                        value: _selectedProvider.label,
+                        enabled: !_isBusy,
+                        onTap: _isBusy ? null : _pickAiProvider,
                       ),
-                      const SizedBox(height: 16),
-                      SettingsRowGroup(
-                        header: 'API KEYS',
-                        children: [
-                          if (_rowMatches('ai', 'OpenAI Key'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_openai_key'),
-                              iconColor: AppColors.accentAi,
-                              icon: Icons.vpn_key_rounded,
-                              label: 'OpenAI Key',
-                              value: _secretValueLabel(
-                                  _openAiApiKeyController.text),
-                              enabled: !_isBusy,
-                              onTap: _isBusy
-                                  ? null
-                                  : () => _editApiKey(
-                                        controller: _openAiApiKeyController,
-                                        title: 'OpenAI Key',
-                                        helperText:
-                                            'Leave blank to clear the saved OpenAI key.',
-                                      ),
-                            ),
-                          if (_rowMatches('ai', 'Gemini Key'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_gemini_key'),
-                              iconColor: AppColors.accentAi,
-                              icon: Icons.vpn_key_rounded,
-                              label: 'Gemini Key',
-                              value: _secretValueLabel(
-                                  _geminiApiKeyController.text),
-                              enabled: !_isBusy,
-                              onTap: _isBusy
-                                  ? null
-                                  : () => _editApiKey(
-                                        controller: _geminiApiKeyController,
-                                        title: 'Gemini Key',
-                                        helperText:
-                                            'Leave blank to clear the saved Gemini key.',
-                                      ),
-                            ),
-                          if (_rowMatches('ai', 'OpenRouter Key'))
-                            SettingsRow.chevron(
-                              key: const ValueKey(
-                                  'settings_row_openrouter_key'),
-                              iconColor: AppColors.accentAi,
-                              icon: Icons.vpn_key_rounded,
-                              label: 'OpenRouter Key',
-                              value: _secretValueLabel(
-                                  _openRouterApiKeyController.text),
-                              enabled: !_isBusy,
-                              onTap: _isBusy
-                                  ? null
-                                  : () => _editApiKey(
-                                        controller:
-                                            _openRouterApiKeyController,
-                                        title: 'OpenRouter Key',
-                                        helperText:
-                                            'Leave blank to clear the saved OpenRouter key.',
-                                      ),
-                            ),
-                        ],
-                      ),
-                      if (_selectedProvider == AiProvider.openRouter) ...[
-                        const SizedBox(height: 16),
-                        SettingsRowGroup(
-                          header: 'OPENROUTER',
-                          children: [
-                            if (_rowMatches('ai', 'OpenRouter Model'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_openrouter_model'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.memory_rounded,
-                                label: 'OpenRouter Model',
-                                value: _openRouterModel ?? 'Default',
-                                enabled: !_isBusy,
-                                onTap:
-                                    _isBusy ? null : _editOpenRouterModelRow,
-                              ),
-                          ],
-                        ),
-                      ],
-                      if (_selectedProvider == AiProvider.local) ...[
-                        const SizedBox(height: 16),
-                        SettingsRowGroup(
-                          header: 'LOCAL ENGINE',
-                          children: [
-                            if (_rowMatches('ai', 'Engine Endpoint'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_local_endpoint'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.dns_rounded,
-                                label: 'Engine Endpoint',
-                                value: _localEndpointController.text.isEmpty
-                                    ? (Platform.isAndroid || Platform.isIOS
-                                        ? 'http://192.168.1.x:11434'
-                                        : 'http://localhost:11434')
-                                    : _localEndpointController.text,
-                                enabled: !_isBusy,
-                                onTap: _isBusy ? null : _editLocalEndpointRow,
-                              ),
-                            if (_rowMatches('ai', 'Local Model'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_local_model'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.memory_rounded,
-                                label: 'Local Model',
-                                value: _localModelController.text.isEmpty
-                                    ? 'hamma-gemma-devops'
-                                    : _localModelController.text,
-                                enabled: !_isBusy,
-                                onTap: _isBusy ? null : _editLocalModelRow,
-                              ),
-                            if (_rowMatches('ai', 'Test Connection'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_test_local_connection'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.electrical_services_rounded,
-                                label: 'Test Connection',
-                                value: _localConnectionTestResult ??
-                                    (Platform.isAndroid || Platform.isIOS
-                                        ? 'Probe your network for a running engine'
-                                        : 'Probe loopback for a running engine'),
-                                enabled: !_isBusy &&
-                                    !_isTestingLocalConnection &&
-                                    _isLocalEndpointValid,
-                                onTap: _testLocalConnection,
-                              ),
-                            if (_rowMatches('ai', 'Detect Engines'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_detect_engines'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.radar_rounded,
-                                label: 'Detect Engines',
-                                value: _detectError ??
-                                    (_detectedLocalEngines.isEmpty
-                                        ? (Platform.isAndroid || Platform.isIOS
-                                            ? 'Scan local network for installed engines'
-                                            : 'Scan loopback for installed engines')
-                                        : '${_detectedLocalEngines.length} engine(s) found'),
-                                enabled: !_isBusy && !_isDetectingLocalEngines,
-                                onTap: _detectLocalEngines,
-                              ),
-                            if (_rowMatches('ai', 'Manage Models'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_manage_models'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.dns_rounded,
-                                label: 'Manage Models',
-                                value: 'Pull, list, or remove local models',
-                                enabled: !_isBusy && _isLocalEndpointValid,
-                                onTap: _openLocalModelManager,
-                              ),
-                            if (_rowMatches('ai', 'First-Run Setup'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_first_run_setup'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.auto_fix_high_rounded,
-                                label: 'First-Run Setup',
-                                value: 'Walk through install + initial pull',
-                                enabled: !_isBusy,
-                                onTap: _runLocalAiOnboarding,
-                              ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                  ),
-                  restrictToIds: restrictToIds,
+                  ],
                 ),
-                _wrapCategorySection(
-                  'triage',
-                  SettingsSectionCard(
-                  title: 'AI Log Triage Cadence',
-                  subtitle:
-                      'How many log lines accumulate before "Watch with AI" sends a batch to the local model. Smaller = more frequent insights and more model calls. Local AI only.',
-                  icon: Icons.tune,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SettingsRowGroup(
-                        header: 'BATCH CADENCE',
-                        children: [
-                          if (_rowMatches('triage', 'Batch Size'))
-                            SettingsRow.chevron(
-                              key: const ValueKey(
-                                  'settings_row_triage_batch_size'),
-                              iconColor: AppColors.accentTriage,
-                              icon: Icons.tune_rounded,
-                              label: 'Batch Size',
-                              value: _isLogTriageBatchSizeLoaded
-                                  ? 'Analyse every $_logTriageBatchSize lines'
-                                  : 'Loading…',
-                              enabled:
-                                  _isLogTriageBatchSizeLoaded && !_isBusy,
-                              onTap: _editLogTriageBatchSizeRow,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  ),
-                  restrictToIds: restrictToIds,
-                ),
-                _wrapCategorySection(
-                  'health',
-                  SettingsSectionCard(
-                  title: 'Health Monitoring',
-                  subtitle:
-                      'Monitor server health in the background and receive alerts for downtime or high resource usage.',
-                  icon: Icons.health_and_safety_outlined,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SettingsRowGroup(
-                        header: 'BACKGROUND MONITORING',
-                        children: [
-                          if (_rowMatches('health', 'Enable Background Monitoring'))
-                            SettingsRow.toggle(
-                              key: const ValueKey(
-                                  'settings_row_health_enabled'),
-                              iconColor: AppColors.accentHealth,
-                              icon: Icons.monitor_heart_rounded,
-                              label: 'Enable Background Monitoring',
-                              value:
-                                  'Periodically check all saved servers',
-                              toggleValue: _healthMonitoringEnabled,
-                              enabled: !_isBusy,
-                              onToggle: _isBusy
-                                  ? null
-                                  : _setHealthMonitoringEnabled,
-                            ),
-                          if (_healthMonitoringEnabled &&
-                              _rowMatches('health', 'Check Interval'))
-                            SettingsRow.chevron(
-                              key: const ValueKey(
-                                  'settings_row_health_interval'),
-                              iconColor: AppColors.accentHealth,
-                              icon: Icons.timer_rounded,
-                              label: 'Check Interval',
-                              value: '$_healthCheckInterval minutes',
-                              enabled: !_isBusy,
-                              onTap: _isBusy ? null : _editHealthIntervalRow,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  ),
-                  restrictToIds: restrictToIds,
-                ),
-                _wrapCategorySection(
-                  'security',
-                  SettingsSectionCard(
-                  title: 'Security',
-                  subtitle:
-                      'Protect local app access with a custom 4-digit PIN and optional biometric unlock.',
-                  icon: Icons.lock_outline,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SettingsRowGroup(
-                        header: 'APP LOCK',
-                        children: [
-                          if (_rowMatches('security', 'App PIN'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_app_pin'),
-                              iconColor: AppColors.accentSecurity,
-                              icon: _hasAppPin == true
-                                  ? Icons.lock_open_outlined
-                                  : Icons.pin_outlined,
-                              label: 'App PIN',
-                              value: _hasAppPin == null
-                                  ? 'Checking app lock status…'
-                                  : _hasAppPin!
-                                      ? 'Enabled — tap to remove'
-                                      : 'Not set — tap to add',
-                              enabled: _hasAppPin != null && !_isBusy,
-                              onTap: _hasAppPin == null || _isBusy
-                                  ? null
-                                  : _openAppLockSettings,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  ),
-                  restrictToIds: restrictToIds,
-                ),
-                _wrapCategorySection(
-                  'terminal',
-                  SettingsSectionCard(
-                    title: 'Terminal Customization',
-                    subtitle: 'Adjust the terminal appearance, typography, and color schemes.',
-                    icon: Icons.terminal_rounded,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SettingsRowGroup(
-                          header: 'TYPOGRAPHY',
-                          children: [
-                            if (_rowMatches('terminal', 'Font Size'))
-                              SettingsRow.chevron(
-                                key: const ValueKey('settings_row_terminal_font_size'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.format_size_rounded,
-                                label: 'Font Size',
-                                value: '${_terminalFontSize.toInt()} pt',
-                                enabled: !_isBusy,
-                                onTap: _isBusy ? null : _editTerminalFontSizeRow,
-                              ),
-                            if (_rowMatches('terminal', 'Font Family'))
-                              SettingsRow.chevron(
-                                key: const ValueKey('settings_row_terminal_font_family'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.font_download_rounded,
-                                label: 'Font Family',
-                                value: _terminalFontFamily,
-                                enabled: !_isBusy,
-                                onTap: _isBusy ? null : _pickTerminalFontFamily,
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        SettingsRowGroup(
-                          header: 'APPEARANCE',
-                          children: [
-                            if (_rowMatches('terminal', 'Color Theme'))
-                              SettingsRow.chevron(
-                                key: const ValueKey('settings_row_terminal_theme'),
-                                iconColor: AppColors.accentAi,
-                                icon: Icons.palette_rounded,
-                                label: 'Color Theme',
-                                value: _terminalTheme.toUpperCase(),
-                                enabled: !_isBusy,
-                                onTap: _isBusy ? null : _pickTerminalTheme,
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  restrictToIds: restrictToIds,
-                ),
-                _wrapCategorySection(
-                  'backup',
-                  SettingsSectionCard(
-                  title: 'Backup & Restore',
-                  subtitle:
-                      'Securely backup your servers, AI keys, and chat history to your own server or local storage.',
-                  icon: Icons.cloud_sync_outlined,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SettingsRowGroup(
-                        header: 'DESTINATION',
-                        children: [
-                          if (_rowMatches('backup', 'Backup Destination'))
-                            SettingsRow.chevron(
-                              key: const ValueKey(
-                                  'settings_row_backup_destination'),
-                              iconColor: AppColors.accentBackup,
-                              icon: Icons.folder_zip_rounded,
-                              label: 'Backup Destination',
-                              value: _backupConfig.destination.name
-                                  .toUpperCase(),
-                              enabled: !_isBusy,
-                              onTap:
-                                  _isBusy ? null : _pickBackupDestination,
-                            ),
-                        ],
-                      ),
-                      if (_backupConfig.destination ==
-                          BackupDestination.sftp) ...[
-                        const SizedBox(height: 16),
-                        SettingsRowGroup(
-                          header: 'SFTP',
-                          children: [
-                            if (_rowMatches('backup', 'SFTP Host'))
-                              SettingsRow.chevron(
-                                key: const ValueKey('settings_row_sftp_host'),
-                                iconColor: AppColors.accentBackup,
-                                icon: Icons.dns_rounded,
-                                label: 'SFTP Host',
-                                value: _sftpHostController.text.isEmpty
-                                    ? 'Not set'
-                                    : _sftpHostController.text,
-                                enabled: !_isBusy,
-                                onTap: () => _editBackupTextField(
-                                  controller: _sftpHostController,
-                                  title: 'SFTP Host',
-                                  helperText: 'Hostname or IP of your server',
-                                ),
-                              ),
-                            if (_rowMatches('backup', 'SFTP Username'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_sftp_username'),
-                                iconColor: AppColors.accentBackup,
-                                icon: Icons.person_outline_rounded,
-                                label: 'Username',
-                                value: _sftpUsernameController.text.isEmpty
-                                    ? 'Not set'
-                                    : _sftpUsernameController.text,
-                                enabled: !_isBusy,
-                                onTap: () => _editBackupTextField(
-                                  controller: _sftpUsernameController,
-                                  title: 'SFTP Username',
-                                ),
-                              ),
-                            if (_rowMatches('backup', 'SFTP Port'))
-                              SettingsRow.chevron(
-                                key: const ValueKey('settings_row_sftp_port'),
-                                iconColor: AppColors.accentBackup,
-                                icon: Icons.numbers_rounded,
-                                label: 'Port',
-                                value: _sftpPortController.text.isEmpty
-                                    ? '22'
-                                    : _sftpPortController.text,
-                                enabled: !_isBusy,
-                                onTap: () => _editBackupTextField(
-                                  controller: _sftpPortController,
-                                  title: 'SFTP Port',
-                                  keyboardType: TextInputType.number,
-                                ),
-                              ),
-                            if (_rowMatches('backup', 'SFTP Password'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_sftp_password'),
-                                iconColor: AppColors.accentBackup,
-                                icon: Icons.password_rounded,
-                                label: 'Password',
-                                value: _secretValueLabel(
-                                    _sftpPasswordController.text),
-                                enabled: !_isBusy,
-                                onTap: () => _editBackupTextField(
-                                  controller: _sftpPasswordController,
-                                  title: 'SFTP Password',
-                                  helperText: 'SSH Password',
-                                  obscure: true,
-                                ),
-                              ),
-                            if (_rowMatches('backup', 'SFTP Backup Directory'))
-                              SettingsRow.chevron(
-                                key: const ValueKey('settings_row_sftp_path'),
-                                iconColor: AppColors.accentBackup,
-                                icon: Icons.folder_outlined,
-                                label: 'Backup Directory',
-                                value: _sftpPathController.text.isEmpty
-                                    ? 'Not set'
-                                    : _sftpPathController.text,
-                                enabled: !_isBusy,
-                                onTap: () => _editBackupTextField(
-                                  controller: _sftpPathController,
-                                  title: 'Backup Directory',
-                                  helperText: 'Absolute path on server',
-                                  monospace: true,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                      if (_backupConfig.destination ==
-                          BackupDestination.webdav) ...[
-                        const SizedBox(height: 16),
-                        SettingsRowGroup(
-                          header: 'WEBDAV',
-                          children: [
-                            if (_rowMatches('backup', 'WebDAV URL'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_webdav_url'),
-                                iconColor: AppColors.accentBackup,
-                                icon: Icons.link_rounded,
-                                label: 'WebDAV URL',
-                                value: _webdavUrlController.text.isEmpty
-                                    ? 'Not set'
-                                    : _webdavUrlController.text,
-                                enabled: !_isBusy,
-                                onTap: () => _editBackupTextField(
-                                  controller: _webdavUrlController,
-                                  title: 'WebDAV URL',
+                const SizedBox(height: 16),
+                SettingsRowGroup(
+                  header: 'API KEYS',
+                  children: [
+                    if (_rowMatches('ai', 'OpenAI Key'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_openai_key'),
+                        iconColor: AppColors.accentAi,
+                        icon: Icons.vpn_key_rounded,
+                        label: 'OpenAI Key',
+                        value: _secretValueLabel(_openAiApiKeyController.text),
+                        enabled: !_isBusy,
+                        onTap:
+                            _isBusy
+                                ? null
+                                : () => _editApiKey(
+                                  controller: _openAiApiKeyController,
+                                  title: 'OpenAI Key',
                                   helperText:
-                                      'e.g. https://nextcloud.com/remote.php/dav/files/user/',
-                                  monospace: true,
+                                      'Leave blank to clear the saved OpenAI key.',
                                 ),
-                              ),
-                            if (_rowMatches('backup', 'WebDAV Username'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_webdav_username'),
-                                iconColor: AppColors.accentBackup,
-                                icon: Icons.person_outline_rounded,
-                                label: 'Username',
-                                value: _webdavUsernameController.text.isEmpty
-                                    ? 'Not set'
-                                    : _webdavUsernameController.text,
-                                enabled: !_isBusy,
-                                onTap: () => _editBackupTextField(
-                                  controller: _webdavUsernameController,
-                                  title: 'WebDAV Username',
-                                ),
-                              ),
-                            if (_rowMatches('backup', 'WebDAV Password'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_webdav_password'),
-                                iconColor: AppColors.accentBackup,
-                                icon: Icons.password_rounded,
-                                label: 'Password / App Token',
-                                value: _secretValueLabel(
-                                    _webdavPasswordController.text),
-                                enabled: !_isBusy,
-                                onTap: () => _editBackupTextField(
-                                  controller: _webdavPasswordController,
-                                  title: 'WebDAV Password',
-                                  obscure: true,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                      if (_backupConfig.destination ==
-                          BackupDestination.syncthing) ...[
-                        const SizedBox(height: 16),
-                        SettingsRowGroup(
-                          header: 'SYNCTHING',
-                          children: [
-                            if (_rowMatches('backup', 'Syncthing Local Path'))
-                              SettingsRow.chevron(
-                                key: const ValueKey(
-                                    'settings_row_syncthing_path'),
-                                iconColor: AppColors.accentBackup,
-                                icon: Icons.folder_outlined,
-                                label: 'Syncthing Local Path',
-                                value: _syncthingPathController.text.isEmpty
-                                    ? 'Not set'
-                                    : _syncthingPathController.text,
-                                enabled: !_isBusy,
-                                onTap: () => _editBackupTextField(
-                                  controller: _syncthingPathController,
-                                  title: 'Syncthing Local Path',
+                      ),
+                    if (_rowMatches('ai', 'Gemini Key'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_gemini_key'),
+                        iconColor: AppColors.accentAi,
+                        icon: Icons.vpn_key_rounded,
+                        label: 'Gemini Key',
+                        value: _secretValueLabel(_geminiApiKeyController.text),
+                        enabled: !_isBusy,
+                        onTap:
+                            _isBusy
+                                ? null
+                                : () => _editApiKey(
+                                  controller: _geminiApiKeyController,
+                                  title: 'Gemini Key',
                                   helperText:
-                                      'The folder Syncthing monitors on this device',
-                                  monospace: true,
+                                      'Leave blank to clear the saved Gemini key.',
                                 ),
-                              ),
-                          ],
+                      ),
+                    if (_rowMatches('ai', 'OpenRouter Key'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_openrouter_key'),
+                        iconColor: AppColors.accentAi,
+                        icon: Icons.vpn_key_rounded,
+                        label: 'OpenRouter Key',
+                        value: _secretValueLabel(
+                          _openRouterApiKeyController.text,
                         ),
-                      ],
-                      const SizedBox(height: 16),
-                      SettingsRowGroup(
-                        header: 'AUTOMATION',
-                        children: [
-                          if (_rowMatches('backup', 'Daily Automatic Backup'))
-                            SettingsRow.toggle(
-                              key: const ValueKey(
-                                  'settings_row_daily_auto_backup'),
-                              iconColor: AppColors.accentBackup,
-                              icon: Icons.schedule_rounded,
-                              label: 'Daily Automatic Backup',
-                              value: 'Background backup over Wi-Fi',
-                              toggleValue: _backupConfig.autoBackupEnabled,
-                              enabled: !_isBusy,
-                              onToggle: _setAutoBackupEnabled,
-                            ),
-                        ],
+                        enabled: !_isBusy,
+                        onTap:
+                            _isBusy
+                                ? null
+                                : () => _editApiKey(
+                                  controller: _openRouterApiKeyController,
+                                  title: 'OpenRouter Key',
+                                  helperText:
+                                      'Leave blank to clear the saved OpenRouter key.',
+                                ),
                       ),
-                      const SizedBox(height: 16),
-                      SettingsRowGroup(
-                        header: 'ACTIONS',
-                        children: [
-                          if (_rowMatches('backup', 'Backup Now'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_backup_now'),
-                              iconColor: AppColors.accentBackup,
-                              icon: Icons.backup_outlined,
-                              label: 'Backup Now',
-                              value: _backupConfig.lastBackupTime != null
-                                  ? 'Last: ${_backupConfig.lastBackupTime!.toLocal().toString().split('.')[0]} '
-                                      '(${_backupConfig.lastBackupStatus ?? 'Unknown'})'
-                                  : 'Never run',
-                              enabled: !_isBusy && !_isExportingBackup,
-                              onTap: _exportBackup,
-                            ),
-                          if (_rowMatches('backup', 'Restore'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_restore'),
-                              iconColor: AppColors.accentBackup,
-                              icon: Icons.restore_outlined,
-                              label: 'Restore',
-                              value: 'Import a previous backup file',
-                              enabled: !_isBusy && !_isImportingBackup,
-                              onTap: _importBackup,
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      SettingsRowGroup(
-                        header: 'SYNC',
-                        children: [
-                          if (_rowMatches('backup', 'Cloud Sync (Encrypted)'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_cloud_sync'),
-                              iconColor: AppColors.accentBackup,
-                              icon: Icons.cloud_outlined,
-                              label: 'Cloud Sync (Encrypted)',
-                              value: 'End-to-end encrypted device sync',
-                              enabled: !_isBusy,
-                              onTap: _isBusy
-                                  ? null
-                                  : () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                          builder: (_) =>
-                                              const CloudSyncScreen(),
-                                        ),
-                                      );
-                                    },
-                            ),
-                          if (_rowMatches('backup', 'Snippet Sync (Cross-Device)'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_snippet_sync'),
-                              iconColor: AppColors.accentBackup,
-                              icon: Icons.sync_alt_outlined,
-                              label: 'Snippet Sync (Cross-Device)',
-                              value: 'Share command snippets between devices',
-                              enabled: !_isBusy,
-                              onTap: _isBusy
-                                  ? null
-                                  : () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                            builder: (_) =>
-                                                const SnippetSyncScreen()),
-                                      );
-                                    },
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  ),
-                  restrictToIds: restrictToIds,
+                  ],
                 ),
-                _wrapCategorySection(
-                  'support',
-                  SettingsSectionCard(
-                  title: 'Support',
-                  subtitle: 'Access the help center and documentation.',
-                  icon: Icons.support_agent_outlined,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                if (_selectedProvider == AiProvider.openRouter) ...[
+                  const SizedBox(height: 16),
+                  SettingsRowGroup(
+                    header: 'OPENROUTER',
                     children: [
-                      SettingsRowGroup(
-                        header: 'RESOURCES',
-                        children: [
-                          if (_rowMatches('support', 'Help Center'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_help_center'),
-                              iconColor: AppColors.accentSupport,
-                              icon: Icons.help_center_outlined,
-                              label: 'Help Center',
-                              value: 'Guides, FAQs, and troubleshooting',
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => const HelpCenterScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          if (_rowMatches('support', 'Extensions'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_extensions'),
-                              iconColor: AppColors.accentSupport,
-                              icon: Icons.extension_outlined,
-                              label: 'Extensions',
-                              value: 'Manage installed Hamma extensions',
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => const ExtensionsScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                          if (_rowMatches('support', 'Vault'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_vault'),
-                              iconColor: AppColors.accentSupport,
-                              icon: Icons.lock_outline,
-                              label: 'Vault',
-                              value: 'Secrets and encrypted credentials',
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => const VaultScreen(),
-                                  ),
-                                );
-                              },
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      SettingsRowGroup(
-                        header: 'FEEDBACK',
-                        children: [
-                          if (_rowMatches('support', 'Contact Support'))
-                            SettingsRow.chevron(
-                              key: const ValueKey('settings_row_contact'),
-                              iconColor: AppColors.accentSupport,
-                              icon: Icons.mail_outline,
-                              label: 'Contact Support',
-                              value: 'Email the Hamma team',
-                              enabled: !_isBusy,
-                              onTap: _isBusy ? null : _launchFeedbackEmail,
-                            ),
-                        ],
-                      ),
+                      if (_rowMatches('ai', 'OpenRouter Model'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_openrouter_model'),
+                          iconColor: AppColors.accentAi,
+                          icon: Icons.memory_rounded,
+                          label: 'OpenRouter Model',
+                          value: _openRouterModel ?? 'Default',
+                          enabled: !_isBusy,
+                          onTap: _isBusy ? null : _editOpenRouterModelRow,
+                        ),
                     ],
                   ),
+                ],
+                if (_selectedProvider == AiProvider.local) ...[
+                  const SizedBox(height: 16),
+                  SettingsRowGroup(
+                    header: 'LOCAL ENGINE',
+                    children: [
+                      if (_rowMatches('ai', 'Engine Endpoint'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_local_endpoint'),
+                          iconColor: AppColors.accentAi,
+                          icon: Icons.dns_rounded,
+                          label: 'Engine Endpoint',
+                          value:
+                              _localEndpointController.text.isEmpty
+                                  ? (Platform.isAndroid || Platform.isIOS
+                                      ? 'http://192.168.1.x:11434'
+                                      : 'http://localhost:11434')
+                                  : _localEndpointController.text,
+                          enabled: !_isBusy,
+                          onTap: _isBusy ? null : _editLocalEndpointRow,
+                        ),
+                      if (_rowMatches('ai', 'Local Model'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_local_model'),
+                          iconColor: AppColors.accentAi,
+                          icon: Icons.memory_rounded,
+                          label: 'Local Model',
+                          value:
+                              _localModelController.text.isEmpty
+                                  ? 'hamma-devops'
+                                  : _localModelController.text,
+                          enabled: !_isBusy,
+                          onTap: _isBusy ? null : _editLocalModelRow,
+                        ),
+                      if (_rowMatches('ai', 'Test Connection'))
+                        SettingsRow.chevron(
+                          key: const ValueKey(
+                            'settings_row_test_local_connection',
+                          ),
+                          iconColor: AppColors.accentAi,
+                          icon: Icons.electrical_services_rounded,
+                          label: 'Test Connection',
+                          value:
+                              _localConnectionTestResult ??
+                              (Platform.isAndroid || Platform.isIOS
+                                  ? 'Probe your network for a running engine'
+                                  : 'Probe loopback for a running engine'),
+                          enabled:
+                              !_isBusy &&
+                              !_isTestingLocalConnection &&
+                              _isLocalEndpointValid,
+                          onTap: _testLocalConnection,
+                        ),
+                      if (_rowMatches('ai', 'Detect Engines'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_detect_engines'),
+                          iconColor: AppColors.accentAi,
+                          icon: Icons.radar_rounded,
+                          label: 'Detect Engines',
+                          value:
+                              _detectError ??
+                              (_detectedLocalEngines.isEmpty
+                                  ? (Platform.isAndroid || Platform.isIOS
+                                      ? 'Scan local network for installed engines'
+                                      : 'Scan loopback for installed engines')
+                                  : '${_detectedLocalEngines.length} engine(s) found'),
+                          enabled: !_isBusy && !_isDetectingLocalEngines,
+                          onTap: _detectLocalEngines,
+                        ),
+                      if (_rowMatches('ai', 'Manage Models'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_manage_models'),
+                          iconColor: AppColors.accentAi,
+                          icon: Icons.dns_rounded,
+                          label: 'Manage Models',
+                          value: 'Pull, list, or remove local models',
+                          enabled: !_isBusy && _isLocalEndpointValid,
+                          onTap: _openLocalModelManager,
+                        ),
+                      if (_rowMatches('ai', 'First-Run Setup'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_first_run_setup'),
+                          iconColor: AppColors.accentAi,
+                          icon: Icons.auto_fix_high_rounded,
+                          label: 'First-Run Setup',
+                          value: 'Walk through install + initial pull',
+                          enabled: !_isBusy,
+                          onTap: _runLocalAiOnboarding,
+                        ),
+                    ],
                   ),
-                  restrictToIds: restrictToIds,
+                ],
+              ],
+            ),
+          ),
+          restrictToIds: restrictToIds,
+        ),
+        _wrapCategorySection(
+          'triage',
+          SettingsSectionCard(
+            title: 'AI Log Triage Cadence',
+            subtitle:
+                'How many log lines accumulate before "Watch with AI" sends a batch to the local model. Smaller = more frequent insights and more model calls. Local AI only.',
+            icon: Icons.tune,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SettingsRowGroup(
+                  header: 'BATCH CADENCE',
+                  children: [
+                    if (_rowMatches('triage', 'Batch Size'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_triage_batch_size'),
+                        iconColor: AppColors.accentTriage,
+                        icon: Icons.tune_rounded,
+                        label: 'Batch Size',
+                        value:
+                            _isLogTriageBatchSizeLoaded
+                                ? 'Analyse every $_logTriageBatchSize lines'
+                                : 'Loading…',
+                        enabled: _isLogTriageBatchSizeLoaded && !_isBusy,
+                        onTap: _editLogTriageBatchSizeRow,
+                      ),
+                  ],
                 ),
+              ],
+            ),
+          ),
+          restrictToIds: restrictToIds,
+        ),
+        _wrapCategorySection(
+          'health',
+          SettingsSectionCard(
+            title: 'Health Monitoring',
+            subtitle:
+                'Monitor server health in the background and receive alerts for downtime or high resource usage.',
+            icon: Icons.health_and_safety_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SettingsRowGroup(
+                  header: 'BACKGROUND MONITORING',
+                  children: [
+                    if (_rowMatches('health', 'Enable Background Monitoring'))
+                      SettingsRow.toggle(
+                        key: const ValueKey('settings_row_health_enabled'),
+                        iconColor: AppColors.accentHealth,
+                        icon: Icons.monitor_heart_rounded,
+                        label: 'Enable Background Monitoring',
+                        value: 'Periodically check all saved servers',
+                        toggleValue: _healthMonitoringEnabled,
+                        enabled: !_isBusy,
+                        onToggle: _isBusy ? null : _setHealthMonitoringEnabled,
+                      ),
+                    if (_healthMonitoringEnabled &&
+                        _rowMatches('health', 'Check Interval'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_health_interval'),
+                        iconColor: AppColors.accentHealth,
+                        icon: Icons.timer_rounded,
+                        label: 'Check Interval',
+                        value: '$_healthCheckInterval minutes',
+                        enabled: !_isBusy,
+                        onTap: _isBusy ? null : _editHealthIntervalRow,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          restrictToIds: restrictToIds,
+        ),
+        _wrapCategorySection(
+          'security',
+          SettingsSectionCard(
+            title: 'Security',
+            subtitle:
+                'Protect local app access with a custom 4-digit PIN and optional biometric unlock.',
+            icon: Icons.lock_outline,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SettingsRowGroup(
+                  header: 'APP LOCK',
+                  children: [
+                    if (_rowMatches('security', 'App PIN'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_app_pin'),
+                        iconColor: AppColors.accentSecurity,
+                        icon:
+                            _hasAppPin == true
+                                ? Icons.lock_open_outlined
+                                : Icons.pin_outlined,
+                        label: 'App PIN',
+                        value:
+                            _hasAppPin == null
+                                ? 'Checking app lock status…'
+                                : _hasAppPin!
+                                ? 'Enabled — tap to remove'
+                                : 'Not set — tap to add',
+                        enabled: _hasAppPin != null && !_isBusy,
+                        onTap:
+                            _hasAppPin == null || _isBusy
+                                ? null
+                                : _openAppLockSettings,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          restrictToIds: restrictToIds,
+        ),
+        _wrapCategorySection(
+          'terminal',
+          SettingsSectionCard(
+            title: 'Terminal Customization',
+            subtitle:
+                'Adjust the terminal appearance, typography, and color schemes.',
+            icon: Icons.terminal_rounded,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SettingsRowGroup(
+                  header: 'TYPOGRAPHY',
+                  children: [
+                    if (_rowMatches('terminal', 'Font Size'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_terminal_font_size'),
+                        iconColor: AppColors.accentAi,
+                        icon: Icons.format_size_rounded,
+                        label: 'Font Size',
+                        value: '${_terminalFontSize.toInt()} pt',
+                        enabled: !_isBusy,
+                        onTap: _isBusy ? null : _editTerminalFontSizeRow,
+                      ),
+                    if (_rowMatches('terminal', 'Font Family'))
+                      SettingsRow.chevron(
+                        key: const ValueKey(
+                          'settings_row_terminal_font_family',
+                        ),
+                        iconColor: AppColors.accentAi,
+                        icon: Icons.font_download_rounded,
+                        label: 'Font Family',
+                        value: _terminalFontFamily,
+                        enabled: !_isBusy,
+                        onTap: _isBusy ? null : _pickTerminalFontFamily,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SettingsRowGroup(
+                  header: 'APPEARANCE',
+                  children: [
+                    if (_rowMatches('terminal', 'Color Theme'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_terminal_theme'),
+                        iconColor: AppColors.accentAi,
+                        icon: Icons.palette_rounded,
+                        label: 'Color Theme',
+                        value: _terminalTheme.toUpperCase(),
+                        enabled: !_isBusy,
+                        onTap: _isBusy ? null : _pickTerminalTheme,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          restrictToIds: restrictToIds,
+        ),
+        _wrapCategorySection(
+          'backup',
+          SettingsSectionCard(
+            title: 'Backup & Restore',
+            subtitle:
+                'Securely backup your servers, AI keys, and chat history to your own server or local storage.',
+            icon: Icons.cloud_sync_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SettingsRowGroup(
+                  header: 'DESTINATION',
+                  children: [
+                    if (_rowMatches('backup', 'Backup Destination'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_backup_destination'),
+                        iconColor: AppColors.accentBackup,
+                        icon: Icons.folder_zip_rounded,
+                        label: 'Backup Destination',
+                        value: _backupConfig.destination.name.toUpperCase(),
+                        enabled: !_isBusy,
+                        onTap: _isBusy ? null : _pickBackupDestination,
+                      ),
+                  ],
+                ),
+                if (_backupConfig.destination == BackupDestination.sftp) ...[
+                  const SizedBox(height: 16),
+                  SettingsRowGroup(
+                    header: 'SFTP',
+                    children: [
+                      if (_rowMatches('backup', 'SFTP Host'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_sftp_host'),
+                          iconColor: AppColors.accentBackup,
+                          icon: Icons.dns_rounded,
+                          label: 'SFTP Host',
+                          value:
+                              _sftpHostController.text.isEmpty
+                                  ? 'Not set'
+                                  : _sftpHostController.text,
+                          enabled: !_isBusy,
+                          onTap:
+                              () => _editBackupTextField(
+                                controller: _sftpHostController,
+                                title: 'SFTP Host',
+                                helperText: 'Hostname or IP of your server',
+                              ),
+                        ),
+                      if (_rowMatches('backup', 'SFTP Username'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_sftp_username'),
+                          iconColor: AppColors.accentBackup,
+                          icon: Icons.person_outline_rounded,
+                          label: 'Username',
+                          value:
+                              _sftpUsernameController.text.isEmpty
+                                  ? 'Not set'
+                                  : _sftpUsernameController.text,
+                          enabled: !_isBusy,
+                          onTap:
+                              () => _editBackupTextField(
+                                controller: _sftpUsernameController,
+                                title: 'SFTP Username',
+                              ),
+                        ),
+                      if (_rowMatches('backup', 'SFTP Port'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_sftp_port'),
+                          iconColor: AppColors.accentBackup,
+                          icon: Icons.numbers_rounded,
+                          label: 'Port',
+                          value:
+                              _sftpPortController.text.isEmpty
+                                  ? '22'
+                                  : _sftpPortController.text,
+                          enabled: !_isBusy,
+                          onTap:
+                              () => _editBackupTextField(
+                                controller: _sftpPortController,
+                                title: 'SFTP Port',
+                                keyboardType: TextInputType.number,
+                              ),
+                        ),
+                      if (_rowMatches('backup', 'SFTP Password'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_sftp_password'),
+                          iconColor: AppColors.accentBackup,
+                          icon: Icons.password_rounded,
+                          label: 'Password',
+                          value: _secretValueLabel(
+                            _sftpPasswordController.text,
+                          ),
+                          enabled: !_isBusy,
+                          onTap:
+                              () => _editBackupTextField(
+                                controller: _sftpPasswordController,
+                                title: 'SFTP Password',
+                                helperText: 'SSH Password',
+                                obscure: true,
+                              ),
+                        ),
+                      if (_rowMatches('backup', 'SFTP Backup Directory'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_sftp_path'),
+                          iconColor: AppColors.accentBackup,
+                          icon: Icons.folder_outlined,
+                          label: 'Backup Directory',
+                          value:
+                              _sftpPathController.text.isEmpty
+                                  ? 'Not set'
+                                  : _sftpPathController.text,
+                          enabled: !_isBusy,
+                          onTap:
+                              () => _editBackupTextField(
+                                controller: _sftpPathController,
+                                title: 'Backup Directory',
+                                helperText: 'Absolute path on server',
+                                monospace: true,
+                              ),
+                        ),
+                    ],
+                  ),
+                ],
+                if (_backupConfig.destination == BackupDestination.webdav) ...[
+                  const SizedBox(height: 16),
+                  SettingsRowGroup(
+                    header: 'WEBDAV',
+                    children: [
+                      if (_rowMatches('backup', 'WebDAV URL'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_webdav_url'),
+                          iconColor: AppColors.accentBackup,
+                          icon: Icons.link_rounded,
+                          label: 'WebDAV URL',
+                          value:
+                              _webdavUrlController.text.isEmpty
+                                  ? 'Not set'
+                                  : _webdavUrlController.text,
+                          enabled: !_isBusy,
+                          onTap:
+                              () => _editBackupTextField(
+                                controller: _webdavUrlController,
+                                title: 'WebDAV URL',
+                                helperText:
+                                    'e.g. https://nextcloud.com/remote.php/dav/files/user/',
+                                monospace: true,
+                              ),
+                        ),
+                      if (_rowMatches('backup', 'WebDAV Username'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_webdav_username'),
+                          iconColor: AppColors.accentBackup,
+                          icon: Icons.person_outline_rounded,
+                          label: 'Username',
+                          value:
+                              _webdavUsernameController.text.isEmpty
+                                  ? 'Not set'
+                                  : _webdavUsernameController.text,
+                          enabled: !_isBusy,
+                          onTap:
+                              () => _editBackupTextField(
+                                controller: _webdavUsernameController,
+                                title: 'WebDAV Username',
+                              ),
+                        ),
+                      if (_rowMatches('backup', 'WebDAV Password'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_webdav_password'),
+                          iconColor: AppColors.accentBackup,
+                          icon: Icons.password_rounded,
+                          label: 'Password / App Token',
+                          value: _secretValueLabel(
+                            _webdavPasswordController.text,
+                          ),
+                          enabled: !_isBusy,
+                          onTap:
+                              () => _editBackupTextField(
+                                controller: _webdavPasswordController,
+                                title: 'WebDAV Password',
+                                obscure: true,
+                              ),
+                        ),
+                    ],
+                  ),
+                ],
+                if (_backupConfig.destination ==
+                    BackupDestination.syncthing) ...[
+                  const SizedBox(height: 16),
+                  SettingsRowGroup(
+                    header: 'SYNCTHING',
+                    children: [
+                      if (_rowMatches('backup', 'Syncthing Local Path'))
+                        SettingsRow.chevron(
+                          key: const ValueKey('settings_row_syncthing_path'),
+                          iconColor: AppColors.accentBackup,
+                          icon: Icons.folder_outlined,
+                          label: 'Syncthing Local Path',
+                          value:
+                              _syncthingPathController.text.isEmpty
+                                  ? 'Not set'
+                                  : _syncthingPathController.text,
+                          enabled: !_isBusy,
+                          onTap:
+                              () => _editBackupTextField(
+                                controller: _syncthingPathController,
+                                title: 'Syncthing Local Path',
+                                helperText:
+                                    'The folder Syncthing monitors on this device',
+                                monospace: true,
+                              ),
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16),
+                SettingsRowGroup(
+                  header: 'AUTOMATION',
+                  children: [
+                    if (_rowMatches('backup', 'Daily Automatic Backup'))
+                      SettingsRow.toggle(
+                        key: const ValueKey('settings_row_daily_auto_backup'),
+                        iconColor: AppColors.accentBackup,
+                        icon: Icons.schedule_rounded,
+                        label: 'Daily Automatic Backup',
+                        value: 'Background backup over Wi-Fi',
+                        toggleValue: _backupConfig.autoBackupEnabled,
+                        enabled: !_isBusy,
+                        onToggle: _setAutoBackupEnabled,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SettingsRowGroup(
+                  header: 'ACTIONS',
+                  children: [
+                    if (_rowMatches('backup', 'Backup Now'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_backup_now'),
+                        iconColor: AppColors.accentBackup,
+                        icon: Icons.backup_outlined,
+                        label: 'Backup Now',
+                        value:
+                            _backupConfig.lastBackupTime != null
+                                ? 'Last: ${_backupConfig.lastBackupTime!.toLocal().toString().split('.')[0]} '
+                                    '(${_backupConfig.lastBackupStatus ?? 'Unknown'})'
+                                : 'Never run',
+                        enabled: !_isBusy && !_isExportingBackup,
+                        onTap: _exportBackup,
+                      ),
+                    if (_rowMatches('backup', 'Restore'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_restore'),
+                        iconColor: AppColors.accentBackup,
+                        icon: Icons.restore_outlined,
+                        label: 'Restore',
+                        value: 'Import a previous backup file',
+                        enabled: !_isBusy && !_isImportingBackup,
+                        onTap: _importBackup,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SettingsRowGroup(
+                  header: 'SYNC',
+                  children: [
+                    if (_rowMatches('backup', 'Cloud Sync (Encrypted)'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_cloud_sync'),
+                        iconColor: AppColors.accentBackup,
+                        icon: Icons.cloud_outlined,
+                        label: 'Cloud Sync (Encrypted)',
+                        value: 'End-to-end encrypted device sync',
+                        enabled: !_isBusy,
+                        onTap:
+                            _isBusy
+                                ? null
+                                : () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const CloudSyncScreen(),
+                                    ),
+                                  );
+                                },
+                      ),
+                    if (_rowMatches('backup', 'Snippet Sync (Cross-Device)'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_snippet_sync'),
+                        iconColor: AppColors.accentBackup,
+                        icon: Icons.sync_alt_outlined,
+                        label: 'Snippet Sync (Cross-Device)',
+                        value: 'Share command snippets between devices',
+                        enabled: !_isBusy,
+                        onTap:
+                            _isBusy
+                                ? null
+                                : () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => const SnippetSyncScreen(),
+                                    ),
+                                  );
+                                },
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          restrictToIds: restrictToIds,
+        ),
+        _wrapCategorySection(
+          'support',
+          SettingsSectionCard(
+            title: 'Support',
+            subtitle: 'Access the help center and documentation.',
+            icon: Icons.support_agent_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SettingsRowGroup(
+                  header: 'RESOURCES',
+                  children: [
+                    if (_rowMatches('support', 'Help Center'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_help_center'),
+                        iconColor: AppColors.accentSupport,
+                        icon: Icons.help_center_outlined,
+                        label: 'Help Center',
+                        value: 'Guides, FAQs, and troubleshooting',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const HelpCenterScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    if (_rowMatches('support', 'Extensions'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_extensions'),
+                        iconColor: AppColors.accentSupport,
+                        icon: Icons.extension_outlined,
+                        label: 'Extensions',
+                        value: 'Manage installed Hamma extensions',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const ExtensionsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    if (_rowMatches('support', 'Vault'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_vault'),
+                        iconColor: AppColors.accentSupport,
+                        icon: Icons.lock_outline,
+                        label: 'Vault',
+                        value: 'Secrets and encrypted credentials',
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const VaultScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SettingsRowGroup(
+                  header: 'FEEDBACK',
+                  children: [
+                    if (_rowMatches('support', 'Contact Support'))
+                      SettingsRow.chevron(
+                        key: const ValueKey('settings_row_contact'),
+                        iconColor: AppColors.accentSupport,
+                        icon: Icons.mail_outline,
+                        label: 'Contact Support',
+                        value: 'Email the Hamma team',
+                        enabled: !_isBusy,
+                        onTap: _isBusy ? null : _launchFeedbackEmail,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          restrictToIds: restrictToIds,
+        ),
         Text(
           'Hamma v1.0.0',
           textAlign: TextAlign.center,
@@ -2313,9 +2360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         key: const ValueKey('settings_sticky_save_bar'),
         decoration: const BoxDecoration(
           color: AppColors.panel,
-          border: Border(
-            top: BorderSide(color: AppColors.border, width: 1),
-          ),
+          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
         ),
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         child: Row(
@@ -2325,9 +2370,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _isSaving ? 'Saving…' : 'Unsaved changes',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: _mutedColor,
-                ),
+                style: theme.textTheme.bodySmall?.copyWith(color: _mutedColor),
               ),
             ),
             const SizedBox(width: 12),
@@ -2338,17 +2381,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   horizontal: 20,
                   vertical: 14,
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.zero,
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
               ),
-              icon: _isSaving
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.save_rounded, size: 16),
+              icon:
+                  _isSaving
+                      ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                      : const Icon(Icons.save_rounded, size: 16),
               label: const Text('SAVE'),
             ),
           ],
@@ -2367,43 +2409,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
             settings: RouteSettings(name: 'settings_category_detail/$id'),
             builder: (routeContext) {
               final routeTheme = Theme.of(routeContext);
-              final inset =
-                  MediaQuery.of(routeContext).viewInsets.bottom;
+              final inset = MediaQuery.of(routeContext).viewInsets.bottom;
               // AnimatedBuilder rebuilds on dirty/saving state changes so
               // the save bar appears in the pushed route too.
               return AnimatedBuilder(
                 animation: _saveBarTrigger,
-                builder: (innerCtx, _) => Scaffold(
-                key: ValueKey('settings_category_detail_$id'),
-                appBar: AppBar(
-                  title: Text(meta.title.toUpperCase()),
-                  leading: IconButton(
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    onPressed: () => Navigator.of(routeContext).pop(),
-                  ),
-                ),
-                bottomNavigationBar: _buildStickySaveBar(routeTheme),
-                body: SafeArea(
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 800),
-                      child: _buildSectionList(
-                        routeContext,
-                        routeTheme,
-                        controller: ctrl,
-                        padding: EdgeInsets.fromLTRB(
-                          16,
-                          12,
-                          16,
-                          inset + 24,
+                builder:
+                    (innerCtx, _) => Scaffold(
+                      key: ValueKey('settings_category_detail_$id'),
+                      appBar: AppBar(
+                        title: Text(meta.title.toUpperCase()),
+                        leading: IconButton(
+                          icon: const Icon(Icons.arrow_back_rounded),
+                          onPressed: () => Navigator.of(routeContext).pop(),
                         ),
-                        restrictToIds: <String>{id},
-                        showSearchField: false,
+                      ),
+                      bottomNavigationBar: _buildStickySaveBar(routeTheme),
+                      body: SafeArea(
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 800),
+                            child: _buildSectionList(
+                              routeContext,
+                              routeTheme,
+                              controller: ctrl,
+                              padding: EdgeInsets.fromLTRB(
+                                16,
+                                12,
+                                16,
+                                inset + 24,
+                              ),
+                              restrictToIds: <String>{id},
+                              showSearchField: false,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                ),
               );
             },
           ),
@@ -2414,8 +2456,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   static const Map<String, ({String title, IconData icon})> _categoryMeta = {
     'ai': (title: 'AI Configuration', icon: Icons.smart_toy_outlined),
     'triage': (title: 'AI Log Triage', icon: Icons.tune),
-    'health':
-        (title: 'Health Monitoring', icon: Icons.health_and_safety_outlined),
+    'health': (
+      title: 'Health Monitoring',
+      icon: Icons.health_and_safety_outlined,
+    ),
     'security': (title: 'Security', icon: Icons.lock_outline),
     'backup': (title: 'Backup & Restore', icon: Icons.cloud_sync_outlined),
     'support': (title: 'Support', icon: Icons.support_agent_outlined),
@@ -2444,19 +2488,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Widget card, {
     Set<String>? restrictToIds,
   }) {
-    final visible = restrictToIds != null
-        ? restrictToIds.contains(id)
-        : _categoryMatchesQuery(id);
+    final visible =
+        restrictToIds != null
+            ? restrictToIds.contains(id)
+            : _categoryMatchesQuery(id);
     return KeyedSubtree(
       key: _categoryKeys[id],
       child: Visibility(
         visible: visible,
         maintainState: true,
         maintainAnimation: true,
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 20),
-          child: card,
-        ),
+        child: Padding(padding: const EdgeInsets.only(bottom: 20), child: card),
       ),
     );
   }
@@ -2472,16 +2514,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         prefixIcon: const Icon(Icons.search, size: 18),
         hintText: 'Search settings…',
         isDense: true,
-        suffixIcon: _settingsSearchQuery.isEmpty
-            ? null
-            : IconButton(
-                key: const ValueKey('settings_search_clear'),
-                icon: const Icon(Icons.close, size: 18),
-                onPressed: () {
-                  _settingsSearchController.clear();
-                  setState(() => _settingsSearchQuery = '');
-                },
-              ),
+        suffixIcon:
+            _settingsSearchQuery.isEmpty
+                ? null
+                : IconButton(
+                  key: const ValueKey('settings_search_clear'),
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () {
+                    _settingsSearchController.clear();
+                    setState(() => _settingsSearchQuery = '');
+                  },
+                ),
       ),
     );
   }
@@ -2493,51 +2536,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
       color: AppColors.panel,
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
       child: ListView(
-        children: _categoryMeta.entries.map((entry) {
-          final id = entry.key;
-          final meta = entry.value;
-          final selected = _activeCategoryId == id;
-          final dim = !_categoryMatchesQuery(id);
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Material(
-              color: selected ? AppColors.overlayHover : Colors.transparent,
-              child: InkWell(
-                key: ValueKey('settings_category_$id'),
-                onTap: dim ? null : () => _scrollToCategory(id),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        meta.icon,
-                        size: 16,
-                        color: dim ? AppColors.textMuted : null,
+        children:
+            _categoryMeta.entries.map((entry) {
+              final id = entry.key;
+              final meta = entry.value;
+              final selected = _activeCategoryId == id;
+              final dim = !_categoryMatchesQuery(id);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Material(
+                  color: selected ? AppColors.overlayHover : Colors.transparent,
+                  child: InkWell(
+                    key: ValueKey('settings_category_$id'),
+                    onTap: dim ? null : () => _scrollToCategory(id),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          meta.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(
+                      child: Row(
+                        children: [
+                          Icon(
+                            meta.icon,
+                            size: 16,
                             color: dim ? AppColors.textMuted : null,
-                            fontWeight: selected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
                           ),
-                        ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              meta.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: dim ? AppColors.textMuted : null,
+                                fontWeight:
+                                    selected
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
-        }).toList(),
+              );
+            }).toList(),
       ),
     );
   }

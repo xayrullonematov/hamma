@@ -96,7 +96,7 @@ class BundledModelCatalog {
 
   static const List<BundledModel> _entries = [
     BundledModel(
-      id: 'hamma-gemma-devops',
+      id: 'hamma-devops',
       displayName: 'Hamma Gemma 4 (DevOps)',
       summary:
           "Custom Gemma model fine-tuned specifically for Hamma's DevOps, "

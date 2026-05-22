@@ -18,8 +18,8 @@ class OllamaClient {
     required this.endpoint,
     HttpClient Function()? httpClientFactory,
     Duration? connectionTimeout,
-  })  : _httpClientFactory = httpClientFactory ?? HttpClient.new,
-        _connectionTimeout = connectionTimeout ?? const Duration(seconds: 5) {
+  }) : _httpClientFactory = httpClientFactory ?? HttpClient.new,
+       _connectionTimeout = connectionTimeout ?? const Duration(seconds: 5) {
     if (!isLoopbackEndpoint(endpoint)) {
       throw ArgumentError.value(
         endpoint,
@@ -125,9 +125,7 @@ class OllamaClient {
       final resp = await req.close().timeout(const Duration(seconds: 10));
       final body = await resp.transform(utf8.decoder).join();
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        throw OllamaApiException(
-          'listModels failed: HTTP ${resp.statusCode}',
-        );
+        throw OllamaApiException('listModels failed: HTTP ${resp.statusCode}');
       }
       return _parseModelList(body);
     } on SocketException catch (e) {
@@ -143,8 +141,9 @@ class OllamaClient {
   Future<List<OllamaLoadedModel>> listLoadedModels() async {
     final client = _newClient();
     try {
-      final req =
-          await client.getUrl(_uri('/api/ps')).timeout(_connectionTimeout);
+      final req = await client
+          .getUrl(_uri('/api/ps'))
+          .timeout(_connectionTimeout);
       final resp = await req.close().timeout(const Duration(seconds: 5));
       final body = await resp.transform(utf8.decoder).join();
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
@@ -219,6 +218,66 @@ class OllamaClient {
         );
       }
       yield* _decodePullStream(resp);
+    } on SocketException catch (e) {
+      throw OllamaUnavailableException(e.message);
+    } on TimeoutException {
+      throw const OllamaUnavailableException('connection timed out');
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// `POST /api/create` — register a model from a local Modelfile.
+  Future<void> createModel({
+    required String model,
+    required String modelfile,
+    bool stream = false,
+  }) async {
+    final trimmedModel = model.trim();
+    final trimmedModelfile = modelfile.trim();
+    if (trimmedModel.isEmpty) {
+      throw ArgumentError.value(model, 'model', 'must not be empty');
+    }
+    if (trimmedModelfile.isEmpty) {
+      throw ArgumentError.value(modelfile, 'modelfile', 'must not be empty');
+    }
+
+    final client = _newClient();
+    try {
+      final req = await client
+          .postUrl(_uri('/api/create'))
+          .timeout(_connectionTimeout);
+      req.headers.contentType = ContentType.json;
+      req.write(
+        jsonEncode({
+          'model': trimmedModel,
+          'modelfile': trimmedModelfile,
+          'stream': stream,
+        }),
+      );
+      final resp = await req.close().timeout(const Duration(minutes: 2));
+      final body = await resp.transform(utf8.decoder).join();
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        throw OllamaApiException(
+          'createModel($trimmedModel) failed: HTTP ${resp.statusCode} $body',
+        );
+      }
+      if (body.trim().isEmpty) {
+        return;
+      }
+      try {
+        final decoded = jsonDecode(body);
+        if (decoded is Map<String, dynamic>) {
+          final error = (decoded['error'] as String?)?.trim();
+          if (error != null && error.isNotEmpty) {
+            throw OllamaApiException(
+              'createModel($trimmedModel) failed: $error',
+            );
+          }
+        }
+      } on FormatException {
+        // Some Ollama builds return plain text; HTTP 200 is enough.
+      }
     } on SocketException catch (e) {
       throw OllamaUnavailableException(e.message);
     } on TimeoutException {
@@ -309,7 +368,9 @@ class OllamaClient {
 
   /// Decodes Ollama's pull response, which is one JSON object per line
   /// (newline-delimited JSON). Skips blank lines and malformed entries.
-  static Stream<OllamaPullProgress> decodePullBody(Stream<String> lines) async* {
+  static Stream<OllamaPullProgress> decodePullBody(
+    Stream<String> lines,
+  ) async* {
     await for (final line in lines) {
       final trimmed = line.trim();
       if (trimmed.isEmpty) continue;

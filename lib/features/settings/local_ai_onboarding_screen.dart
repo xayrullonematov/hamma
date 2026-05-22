@@ -130,13 +130,15 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
       final ollama =
           engines.where((e) => e.kind == LocalEngineKind.ollama).toList();
       setState(() {
-        _detected = engines.isEmpty
-            ? null
-            : (ollama.isNotEmpty ? ollama.first : engines.first);
+        _detected =
+            engines.isEmpty
+                ? null
+                : (ollama.isNotEmpty ? ollama.first : engines.first);
         _isDetecting = false;
-        _detectError = engines.isEmpty
-            ? 'No local engines responded on the usual ports.'
-            : null;
+        _detectError =
+            engines.isEmpty
+                ? 'No local engines responded on the usual ports.'
+                : null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -163,8 +165,7 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
     String modelPath;
     try {
       final dir = await _modelDirectory();
-      modelPath =
-          BundledModelDownloader.resolvePath(_selectedModel, dir);
+      modelPath = BundledModelDownloader.resolvePath(_selectedModel, dir);
       if (!BundledModelDownloader.isCached(_selectedModel, dir)) {
         await _downloadSub?.cancel();
         final downloader = BundledModelDownloader();
@@ -172,22 +173,22 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
         _downloadSub = downloader
             .download(model: _selectedModel, destinationDir: dir)
             .listen(
-          (event) {
-            if (!mounted) return;
-            setState(() {
-              _downloadedBytes = event.completedBytes;
-              _downloadTotalBytes = event.totalBytes;
-              _downloadFraction = event.fraction;
-            });
-          },
-          onError: (Object e, StackTrace st) {
-            if (!completer.isCompleted) completer.completeError(e, st);
-          },
-          onDone: () {
-            if (!completer.isCompleted) completer.complete();
-          },
-          cancelOnError: true,
-        );
+              (event) {
+                if (!mounted) return;
+                setState(() {
+                  _downloadedBytes = event.completedBytes;
+                  _downloadTotalBytes = event.totalBytes;
+                  _downloadFraction = event.fraction;
+                });
+              },
+              onError: (Object e, StackTrace st) {
+                if (!completer.isCompleted) completer.completeError(e, st);
+              },
+              onDone: () {
+                if (!completer.isCompleted) completer.complete();
+              },
+              cancelOnError: true,
+            );
         await completer.future;
       }
     } catch (e) {
@@ -285,7 +286,7 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
     if (_path == _OnboardingPath.builtIn) {
       labels = const ['CHOOSE', 'DOWNLOAD', 'DONE'];
     } else if (_path == _OnboardingPath.external) {
-      labels = const ['INSTALL', 'PULL', 'DONE'];
+      labels = const ['INSTALL', 'MODEL', 'DONE'];
     } else {
       labels = const ['CHOOSE PATH'];
     }
@@ -293,17 +294,16 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: const BoxDecoration(
         color: AppColors.surface,
-        border: Border(
-          bottom: BorderSide(color: AppColors.border),
-        ),
+        border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: Row(
         children: List<Widget>.generate(labels.length, (i) {
           final isActive = i == _step;
           final isDone = i < _step;
-          final color = isActive
-              ? _zeroTrustGreen
-              : (isDone ? AppColors.textPrimary : AppColors.textMuted);
+          final color =
+              isActive
+                  ? _zeroTrustGreen
+                  : (isDone ? AppColors.textPrimary : AppColors.textMuted);
           return Expanded(
             child: Row(
               children: [
@@ -370,22 +370,24 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
         const SizedBox(height: 12),
         _PathOptionTile(
           label: 'BUILT-IN ENGINE',
-          subtitle: _builtInSupportedOnThisOs
-              ? 'Recommended. Hamma downloads a small model and runs '
-                  'inference inside the app — no external daemon, no '
-                  'extra installs.'
-              : 'Not available — the bundled engine requires the '
-                  'native libllama component to be present in this build. '
-                  'Use the external option instead.',
+          subtitle:
+              _builtInSupportedOnThisOs
+                  ? 'Recommended. Hamma downloads a small model and runs '
+                      'inference inside the app — no external daemon, no '
+                      'extra installs.'
+                  : 'Not available — the bundled engine requires the '
+                      'native libllama component to be present in this build. '
+                      'Use the external option instead.',
 
           recommended: _builtInSupportedOnThisOs,
           enabled: _builtInSupportedOnThisOs,
-          onTap: _builtInSupportedOnThisOs
-              ? () => setState(() {
+          onTap:
+              _builtInSupportedOnThisOs
+                  ? () => setState(() {
                     _path = _OnboardingPath.builtIn;
                     _step = 0;
                   })
-              : null,
+                  : null,
         ),
         const SizedBox(height: 12),
         _PathOptionTile(
@@ -394,10 +396,11 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
               'Already running Ollama, LM Studio, llama.cpp or Jan? '
               'Point Hamma at it. Best for power users with a curated '
               'model library.',
-          onTap: () => setState(() {
-            _path = _OnboardingPath.external;
-            _step = 0;
-          }),
+          onTap:
+              () => setState(() {
+                _path = _OnboardingPath.external;
+                _step = 0;
+              }),
         ),
       ],
     );
@@ -441,9 +444,10 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
   }
 
   Widget _buildBuiltInProgress() {
-    final pct = _downloadFraction == null
-        ? '—'
-        : '${(_downloadFraction! * 100).toStringAsFixed(1)}%';
+    final pct =
+        _downloadFraction == null
+            ? '—'
+            : '${(_downloadFraction! * 100).toStringAsFixed(1)}%';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -525,9 +529,7 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
           padding: const EdgeInsets.all(12),
           decoration: const BoxDecoration(
             color: AppColors.surface,
-            border: Border(
-              left: BorderSide(color: _zeroTrustGreen, width: 3),
-            ),
+            border: Border(left: BorderSide(color: _zeroTrustGreen, width: 3)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -620,7 +622,7 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
         _buildBadgeRow(),
         const SizedBox(height: 12),
         const Text(
-          'Pull a model',
+          'Install a model',
           style: TextStyle(
             color: AppColors.textPrimary,
             fontSize: 18,
@@ -629,16 +631,21 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Download a small starter model. Hamma Gemma DevOps is a good '
-          'default — about 5.3 GB on disk.',
+          'Use Hamma\'s in-app model manager to download the raw GGUF file '
+          'and register it with Ollama locally. Hamma DevOps is the '
+          'recommended default — about 5.3 GB on disk.',
           style: TextStyle(color: AppColors.textMuted, height: 1.4),
         ),
         const SizedBox(height: 16),
-        const _CodeBlock(snippet: 'ollama run hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M'),
+        const _CodeBlock(
+          snippet:
+              'Settings -> Manage Models\n\nInstall: hamma-devops\nSource: curated Hugging Face GGUF URL',
+        ),
         const SizedBox(height: 12),
         const Text(
-          'You can also use the in-app model manager later (Settings → '
-          'Manage Models) to browse the curated catalog.',
+          'The app bypasses Ollama\'s `hf.co/...` pull path and instead '
+          'downloads the GGUF directly before calling `/api/create` on the '
+          'local daemon.',
           style: TextStyle(color: AppColors.textMuted, fontSize: 12),
         ),
       ],
@@ -680,16 +687,17 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
           ),
           onPressed: _isDetecting ? null : _detect,
-          icon: _isDetecting
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: _zeroTrustGreen,
-                  ),
-                )
-              : const Icon(Icons.radar_rounded, size: 16),
+          icon:
+              _isDetecting
+                  ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: _zeroTrustGreen,
+                    ),
+                  )
+                  : const Icon(Icons.radar_rounded, size: 16),
           label: Text(
             _isDetecting ? 'SCANNING…' : 'DETECT ENGINES',
             style: TextStyle(
@@ -749,8 +757,7 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
     if (_path == _OnboardingPath.unset) {
       return const SizedBox(height: 0);
     }
-    final isExternalLast =
-        _path == _OnboardingPath.external && _step == 2;
+    final isExternalLast = _path == _OnboardingPath.external && _step == 2;
     final isBuiltInLast = _path == _OnboardingPath.builtIn && _step == 2;
     final isLast = isExternalLast || isBuiltInLast;
 
@@ -759,16 +766,16 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
       if (_step == 0) {
         nextLabel = 'DOWNLOAD & START';
       } else if (_step == 1) {
-        nextLabel = _isDownloading
-            ? 'DOWNLOADING…'
-            : (_isStartingEngine ? 'STARTING…' : 'RETRY');
+        nextLabel =
+            _isDownloading
+                ? 'DOWNLOADING…'
+                : (_isStartingEngine ? 'STARTING…' : 'RETRY');
       } else {
         nextLabel = 'USE BUILT-IN ENGINE';
       }
     } else {
-      nextLabel = isLast
-          ? (_detected != null ? 'USE THIS ENGINE' : 'FINISH')
-          : 'NEXT';
+      nextLabel =
+          isLast ? (_detected != null ? 'USE THIS ENGINE' : 'FINISH') : 'NEXT';
     }
 
     final canTapNext = !(_isDownloading || _isStartingEngine);
@@ -786,24 +793,22 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
               shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.zero,
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
-            onPressed: canTapNext
-                ? () {
-                    if (_step == 0) {
-                      // Back from first step → return to path picker.
-                      setState(() {
-                        _path = _OnboardingPath.unset;
-                        _step = 0;
-                      });
-                    } else {
-                      setState(() => _step -= 1);
+            onPressed:
+                canTapNext
+                    ? () {
+                      if (_step == 0) {
+                        // Back from first step → return to path picker.
+                        setState(() {
+                          _path = _OnboardingPath.unset;
+                          _step = 0;
+                        });
+                      } else {
+                        setState(() => _step -= 1);
+                      }
                     }
-                  }
-                : null,
+                    : null,
             child: const Text('BACK'),
           ),
           const Spacer(),
@@ -814,33 +819,33 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
               shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.zero,
               ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 14,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             ),
-            onPressed: canTapNext
-                ? () async {
-                    if (_path == _OnboardingPath.builtIn) {
-                      if (_step == 0) {
-                        setState(() => _step = 1);
-                        await _runBuiltInFlow();
-                      } else if (_step == 1) {
-                        // Retry
-                        await _runBuiltInFlow();
+            onPressed:
+                canTapNext
+                    ? () async {
+                      if (_path == _OnboardingPath.builtIn) {
+                        if (_step == 0) {
+                          setState(() => _step = 1);
+                          await _runBuiltInFlow();
+                        } else if (_step == 1) {
+                          // Retry
+                          await _runBuiltInFlow();
+                        } else {
+                          if (!mounted) return;
+                          Navigator.of(context).pop<String?>(_builtInEndpoint);
+                        }
                       } else {
-                        if (!mounted) return;
-                        Navigator.of(context).pop<String?>(_builtInEndpoint);
-                      }
-                    } else {
-                      if (isLast) {
-                        Navigator.of(context).pop<String?>(_detected?.endpoint);
-                      } else {
-                        setState(() => _step += 1);
+                        if (isLast) {
+                          Navigator.of(
+                            context,
+                          ).pop<String?>(_detected?.endpoint);
+                        } else {
+                          setState(() => _step += 1);
+                        }
                       }
                     }
-                  }
-                : null,
+                    : null,
             child: Text(
               nextLabel,
               style: TextStyle(
@@ -886,21 +891,17 @@ class _PathOptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = enabled
-        ? (recommended
-            ? const Color(0xFF00FF88)
-            : AppColors.textPrimary)
-        : AppColors.textMuted;
+    final color =
+        enabled
+            ? (recommended ? const Color(0xFF00FF88) : AppColors.textPrimary)
+            : AppColors.textMuted;
     return InkWell(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.surface,
-          border: Border.all(
-            color: color,
-            width: recommended ? 2 : 1,
-          ),
+          border: Border.all(color: color, width: recommended ? 2 : 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -919,10 +920,7 @@ class _PathOptionTile extends StatelessWidget {
                 ),
                 if (recommended) ...[
                   const SizedBox(width: 8),
-                  _Badge(
-                    text: 'RECOMMENDED',
-                    color: color,
-                  ),
+                  _Badge(text: 'RECOMMENDED', color: color),
                 ],
               ],
             ),
@@ -962,9 +960,7 @@ class _ModelRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.surface,
           border: Border.all(
-            color: isSelected
-                ? const Color(0xFF00FF88)
-                : AppColors.border,
+            color: isSelected ? const Color(0xFF00FF88) : AppColors.border,
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -975,9 +971,7 @@ class _ModelRow extends StatelessWidget {
               isSelected
                   ? Icons.radio_button_checked
                   : Icons.radio_button_unchecked,
-              color: isSelected
-                  ? const Color(0xFF00FF88)
-                  : AppColors.textMuted,
+              color: isSelected ? const Color(0xFF00FF88) : AppColors.textMuted,
               size: 18,
             ),
             const SizedBox(width: 12),
@@ -1000,11 +994,15 @@ class _ModelRow extends StatelessWidget {
                       if (model.recommended) ...[
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black,
                             border: Border.all(
-                                color: const Color(0xFF00FF88), width: 1),
+                              color: const Color(0xFF00FF88),
+                              width: 1,
+                            ),
                           ),
                           child: const Text(
                             'RECOMMENDED',
@@ -1057,9 +1055,7 @@ class _ErrorBox extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: const BoxDecoration(
         color: AppColors.surface,
-        border: Border(
-          left: BorderSide(color: AppColors.danger, width: 3),
-        ),
+        border: Border(left: BorderSide(color: AppColors.danger, width: 3)),
       ),
       child: Text(
         message,

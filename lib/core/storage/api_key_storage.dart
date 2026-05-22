@@ -1,26 +1,14 @@
 // lib/core/storage/api_key_storage.dart
 //
-// Note: Changed _defaultLocalModel from 'gemma3' (Ollama shortname)
-// to 'hamma-gemma-devops' (BundledModel.id of the recommended catalog entry).
-// This ensures that when no localModel has been explicitly saved, the model
-// string in every OpenAI-compatible request matches the id the BundledEngine
-// loaded — so LocalEngineHealthMonitor's /v1/models check finds a match and
-// reports "online" rather than silently treating the engine as offline.
-//
-// The Ollama shortname 'gemma3' is still valid for users running an external
-// Ollama daemon (who should have saved their model name via settings), but
-// it was never the right fallback for the bundled engine.
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../ai/bundled_model_catalog.dart';
 import '../ai/ai_provider.dart';
 
 const _defaultLocalEndpoint = 'http://localhost:11434';
-
-// CHANGED: was 'hamma-gemma-devops' — must match BundledModelCatalog.defaultPick.id.
-// If you change the recommended model in bundled_model_catalog.dart, update
-// this constant to match.
-const _defaultLocalModel = 'hamma-gemma-devops';
+const _legacyHammaModel = 'hamma-gemma-devops';
+const _legacyHfModel = 'hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M';
+const _defaultLocalModel = 'hamma-devops';
 
 class AiSettings {
   const AiSettings({
@@ -41,8 +29,11 @@ class AiSettings {
         legacyApiKey: json['apiKey'],
       ),
       openRouterModel: _normalizeOptionalString(json['openRouterModel']),
-      localEndpoint: _normalizeWithDefault(json['localEndpoint'], _defaultLocalEndpoint),
-      localModel: _normalizeWithDefault(json['localModel'], _defaultLocalModel),
+      localEndpoint: _normalizeWithDefault(
+        json['localEndpoint'],
+        _defaultLocalEndpoint,
+      ),
+      localModel: _normalizeLocalModel(json['localModel']),
     );
   }
 
@@ -80,6 +71,17 @@ class AiSettings {
   static String _normalizeWithDefault(Object? value, String defaultValue) {
     final normalized = value?.toString().trim() ?? '';
     return normalized.isEmpty ? defaultValue : normalized;
+  }
+
+  static String _normalizeLocalModel(Object? value) {
+    final normalized = value?.toString().trim() ?? '';
+    if (normalized.isEmpty) return BundledModelCatalog.defaultPick.id;
+    final lower = normalized.toLowerCase();
+    if (lower == _legacyHfModel.toLowerCase() ||
+        lower == _legacyHammaModel.toLowerCase()) {
+      return BundledModelCatalog.defaultPick.id;
+    }
+    return normalized;
   }
 
   static Map<AiProvider, String> _parseApiKeys(
@@ -239,14 +241,17 @@ class ApiKeyStorage {
 
     await _secureStorage.write(
       key: _localEndpointStorageKey,
-      value: trimmedLocalEndpoint.isEmpty ? _defaultLocalEndpoint : trimmedLocalEndpoint,
+      value:
+          trimmedLocalEndpoint.isEmpty
+              ? _defaultLocalEndpoint
+              : trimmedLocalEndpoint,
     );
 
     await _secureStorage.write(
       key: _localModelStorageKey,
-      // CHANGED: falls back to the new _defaultLocalModel constant
-      // ('hamma-gemma-devops') instead of the old 'gemma3' Ollama shortname.
-      value: trimmedLocalModel.isEmpty ? _defaultLocalModel : trimmedLocalModel,
+      value: AiSettings._normalizeLocalModel(
+        trimmedLocalModel.isEmpty ? _defaultLocalModel : trimmedLocalModel,
+      ),
     );
   }
 

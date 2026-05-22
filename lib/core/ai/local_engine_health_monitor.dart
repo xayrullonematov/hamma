@@ -58,7 +58,7 @@ class LocalEngineHealth {
 /// The probe is two-tier:
 ///   1. **Ollama native API** (`/api/version` + `/api/ps`) — gives us
 ///      the engine version *and* the list of warm models, so the UI can
-///      show "Online · hamma-gemma-devops" or "Loading model…" when the engine is
+///      show "Online · hamma-devops" or "Loading model…" when the engine is
 ///      up but no model is in RAM yet.
 ///   2. **OpenAI-compatible fallback** (`/v1/models`) — used for engines
 ///      that don't speak Ollama (LM Studio, llama.cpp server, Jan,
@@ -76,10 +76,10 @@ class LocalEngineHealthMonitor {
     Duration probeTimeout = const Duration(seconds: 3),
     OllamaClient? client,
     HttpClient Function()? httpClientFactory,
-  })  : _interval = interval,
-        _probeTimeout = probeTimeout,
-        _client = client ?? OllamaClient(endpoint: endpoint),
-        _httpClientFactory = httpClientFactory ?? HttpClient.new;
+  }) : _interval = interval,
+       _probeTimeout = probeTimeout,
+       _client = client ?? OllamaClient(endpoint: endpoint),
+       _httpClientFactory = httpClientFactory ?? HttpClient.new;
 
   /// Base URL of the engine, with no trailing slash. Used both to issue
   /// the OpenAI-compat fallback probe and to label error messages.
@@ -160,9 +160,10 @@ class LocalEngineHealthMonitor {
       // If the engine is up but no model is currently loaded, surface
       // that as an explicit "warming up" state so the pill can render
       // amber "Loading model…" instead of green "Online".
-      final status = loaded.isEmpty
-          ? LocalEngineHealthStatus.loadingModel
-          : LocalEngineHealthStatus.online;
+      final status =
+          loaded.isEmpty
+              ? LocalEngineHealthStatus.loadingModel
+              : LocalEngineHealthStatus.online;
       result = LocalEngineHealth(
         status: status,
         version: version,

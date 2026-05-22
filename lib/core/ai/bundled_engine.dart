@@ -33,7 +33,7 @@ abstract class InferenceBackend {
   bool get isAvailable;
 
   /// Identifier the OpenAI-compatible shim returns for `model` in
-  /// `/v1/models`. Typically the active model id (e.g. `hamma-gemma-devops`).
+  /// `/v1/models`. Typically the active model id (e.g. `hamma-devops`).
   String get currentModelId;
 
   /// Load a GGUF model from [modelPath]. Calling [loadModel] a second
@@ -70,7 +70,7 @@ class LlamaCppBackend implements InferenceBackend {
   bool get isAvailable {
     if (kIsWeb) return false;
     if (Platform.isAndroid || Platform.isIOS) return true;
-    
+
     // Desktop: check the native lib exists next to the executable
     try {
       InferenceEngine.ensureNativeLibraryLoaded();
@@ -91,7 +91,7 @@ class LlamaCppBackend implements InferenceBackend {
     if (!File(modelPath).existsSync()) {
       throw StateError('Model file not found: $modelPath');
     }
-    
+
     // Set library path before FFI calls on desktop
     InferenceEngine.ensureNativeLibraryLoaded();
 
@@ -104,9 +104,10 @@ class LlamaCppBackend implements InferenceBackend {
 
     _modelPath = modelPath;
     _modelLoaded = true;
-    _modelId = modelId?.trim().isNotEmpty == true
-        ? modelId!.trim()
-        : _deriveModelId(modelPath);
+    _modelId =
+        modelId?.trim().isNotEmpty == true
+            ? modelId!.trim()
+            : _deriveModelId(modelPath);
   }
 
   static String _deriveModelId(String path) {
@@ -126,7 +127,8 @@ class LlamaCppBackend implements InferenceBackend {
 
     // Convert chat messages to a single prompt.
     // In a real implementation, we would use a proper chat template for the model.
-    final prompt = '${messages.map((m) => '${m['role']}: ${m['content']}').join('\n')}\nassistant:';
+    final prompt =
+        '${messages.map((m) => '${m['role']}: ${m['content']}').join('\n')}\nassistant:';
 
     return _engine.streamResponse(prompt, _modelPath);
   }
@@ -180,9 +182,10 @@ class EchoBackend implements InferenceBackend {
     final text = (lastUser['content'] ?? '').toString();
     if (text.isEmpty) return;
     final reply = 'echo: $text';
-    final cap = maxTokens != null && maxTokens > 0 && maxTokens < reply.length
-        ? maxTokens
-        : reply.length;
+    final cap =
+        maxTokens != null && maxTokens > 0 && maxTokens < reply.length
+            ? maxTokens
+            : reply.length;
     var i = 0;
     while (i < cap) {
       final end = (i + chunkSize).clamp(0, cap);
@@ -239,7 +242,7 @@ class BundledEngineSnapshot {
 /// directly in tests.
 class BundledEngine {
   BundledEngine({InferenceBackend? backend})
-      : _backend = backend ?? LlamaServerBackend();
+    : _backend = backend ?? LlamaServerBackend();
 
   final InferenceBackend _backend;
   HttpServer? _server;
@@ -257,9 +260,8 @@ class BundledEngine {
   bool get isAvailable => _backend.isAvailable;
 
   /// Loopback URL once [start] completes. `null` while stopped.
-  String? get endpoint => _server == null
-      ? null
-      : 'http://127.0.0.1:${_server!.port}';
+  String? get endpoint =>
+      _server == null ? null : 'http://127.0.0.1:${_server!.port}';
 
   /// Latest snapshot (synchronously available; mirrors [snapshots]).
   BundledEngineSnapshot get snapshot => _last;
@@ -277,30 +279,31 @@ class BundledEngine {
   }
 
   /// Start the loopback server and load [modelPath]. Throws on failure.
-  Future<void> start({
-    required String modelPath,
-    String? modelId,
-  }) async {
+  Future<void> start({required String modelPath, String? modelId}) async {
     await stop();
     try {
       await _backend.loadModel(modelPath, modelId: modelId);
       _server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       _serverSub = _server!.listen(_handleRequest);
-      _emit(BundledEngineSnapshot(
-        isRunning: true,
-        isReady: _backend.isReady,
-        modelId: _backend.currentModelId,
-        endpoint: endpoint,
-      ));
+      _emit(
+        BundledEngineSnapshot(
+          isRunning: true,
+          isReady: _backend.isReady,
+          modelId: _backend.currentModelId,
+          endpoint: endpoint,
+        ),
+      );
     } catch (e) {
       await _teardown();
-      _emit(BundledEngineSnapshot(
-        isRunning: false,
-        isReady: false,
-        modelId: '',
-        endpoint: null,
-        error: e.toString(),
-      ));
+      _emit(
+        BundledEngineSnapshot(
+          isRunning: false,
+          isReady: false,
+          modelId: '',
+          endpoint: null,
+          error: e.toString(),
+        ),
+      );
       rethrow;
     }
   }
@@ -309,12 +312,14 @@ class BundledEngine {
   Future<void> stop() async {
     if (_server == null && !_backend.isReady) return;
     await _teardown();
-    _emit(const BundledEngineSnapshot(
-      isRunning: false,
-      isReady: false,
-      modelId: '',
-      endpoint: null,
-    ));
+    _emit(
+      const BundledEngineSnapshot(
+        isRunning: false,
+        isReady: false,
+        modelId: '',
+        endpoint: null,
+      ),
+    );
   }
 
   Future<void> _teardown() async {
@@ -325,11 +330,15 @@ class BundledEngine {
     if (s != null) {
       try {
         await s.close(force: true);
-      } catch (_) {/* best-effort */}
+      } catch (_) {
+        /* best-effort */
+      }
     }
     try {
       await _backend.dispose();
-    } catch (_) {/* best-effort */}
+    } catch (_) {
+      /* best-effort */
+    }
   }
 
   /// Frees all resources.
@@ -354,9 +363,7 @@ class BundledEngine {
   }
 
   void _handleVersion(HttpRequest req) {
-    final payload = {
-      'version': 'bundled-0.0.0',
-    };
+    final payload = {'version': 'bundled-0.0.0'};
     req.response.headers.contentType = ContentType.json;
     req.response.write(jsonEncode(payload));
     req.response.close();
@@ -371,7 +378,7 @@ class BundledEngine {
           'object': 'model',
           'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
           'owned_by': 'hamma-bundled',
-        }
+        },
       ],
     };
     req.response.headers.contentType = ContentType.json;
@@ -414,26 +421,31 @@ class BundledEngine {
       }
 
       req.response.headers.contentType = ContentType.json;
-      req.response.write(jsonEncode({
-        'id': 'bundled-${DateTime.now().millisecondsSinceEpoch}',
-        'object': 'chat.completion',
-        'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        'model': _backend.currentModelId,
-        'choices': [
-          {
-            'index': 0,
-            'message': {'role': 'assistant', 'content': buf.toString()},
-            'finish_reason': 'stop',
-          }
-        ],
-      }));
+      req.response.write(
+        jsonEncode({
+          'id': 'bundled-${DateTime.now().millisecondsSinceEpoch}',
+          'object': 'chat.completion',
+          'created': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          'model': _backend.currentModelId,
+          'choices': [
+            {
+              'index': 0,
+              'message': {'role': 'assistant', 'content': buf.toString()},
+              'finish_reason': 'stop',
+            },
+          ],
+        }),
+      );
       await req.response.close();
       return;
     }
 
     // Streaming SSE.
-    req.response.headers.contentType =
-        ContentType('text', 'event-stream', charset: 'utf-8');
+    req.response.headers.contentType = ContentType(
+      'text',
+      'event-stream',
+      charset: 'utf-8',
+    );
     req.response.headers.set('Cache-Control', 'no-cache');
     req.response.headers.set('Connection', 'keep-alive');
 
@@ -456,7 +468,7 @@ class BundledEngine {
               'index': 0,
               'delta': {'content': chunk},
               'finish_reason': null,
-            }
+            },
           ],
         });
         req.response.write('data: $event\n\n');
@@ -468,11 +480,7 @@ class BundledEngine {
         'created': created,
         'model': _backend.currentModelId,
         'choices': [
-          {
-            'index': 0,
-            'delta': <String, Object?>{},
-            'finish_reason': 'stop',
-          }
+          {'index': 0, 'delta': <String, Object?>{}, 'finish_reason': 'stop'},
         ],
       });
       req.response.write('data: $done\n\n');
@@ -487,7 +495,9 @@ class BundledEngine {
         });
         req.response.write('data: $err\n\n');
         await req.response.close();
-      } catch (_) {/* connection already gone */}
+      } catch (_) {
+        /* connection already gone */
+      }
     }
   }
 

@@ -19,7 +19,7 @@ Hamma uses `dartssh2` to establish secure connections. To connect:
 3. Provide your **Username**.
 4. Use either a **Password** or a **Private Key** (Ed25519 or RSA).
 5. Tap **Test Connection** to verify settings before saving.
-'''
+''',
       },
       {
         'title': 'Managing Docker',
@@ -30,7 +30,7 @@ Hamma provides a simplified Docker dashboard:
 2. Select **Docker Manager**.
 3. View running containers, stats, and images.
 4. Perform actions like **Restart**, **Stop**, or **View Logs** directly from buttons.
-'''
+''',
       },
       {
         'title': 'Using AI Assistant',
@@ -41,7 +41,7 @@ The AI Copilot helps you manage servers without writing complex commands:
 2. Ask questions like "How do I check Nginx logs?" or "Restart my Postgres container".
 3. The AI suggests commands which you can **edit** and **run** after explicit confirmation.
 4. If a command fails, use **Smart Error Analysis** to get a technical breakdown of the failure.
-'''
+''',
       },
       {
         'title': 'Local AI (Zero Trust)',
@@ -54,7 +54,7 @@ no cloud, no traffic leaves localhost.**
 1. Install a local engine — Ollama is the easiest:
    - macOS / Linux: `curl -fsSL https://ollama.com/install.sh | sh`
    - Windows: `winget install Ollama.Ollama`
-2. Pull a model: `ollama run hf.co/xayrullonematov/hamma-gemma-4-devops-GGUF:Q4_K_M` (≈5 GB).
+2. Open **Settings → Manage Models** and install `hamma-devops` from the curated catalog. Hamma downloads the GGUF directly and registers it with Ollama locally.
 3. In **Settings → AI Configuration**, choose **Local AI**.
 4. Tap **DETECT ENGINES** — Hamma scans the usual ports (Ollama 11434,
    LM Studio 1234, llama.cpp 8080, Jan 1337) and pre-fills the endpoint.
@@ -79,7 +79,7 @@ pill while it's offline retries the connection.
   streaming). Recommended.
 - **LM Studio**, **llama.cpp server**, **Jan** — chat works (via the
   OpenAI-compatible endpoint), but the model manager is Ollama-only.
-'''
+''',
       },
       {
         'title': 'Fleet Monitoring',
@@ -89,7 +89,7 @@ Monitor your entire infrastructure at once:
 1. Open the **Fleet Command Center** from the main server list.
 2. View CPU, RAM, and Disk metrics across all saved servers.
 3. Enable **Background Health Monitoring** in Settings to receive alerts if a server goes offline or exceeds resource thresholds.
-'''
+''',
       },
     ];
 
@@ -111,26 +111,39 @@ Monitor your entire infrastructure at once:
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => Scaffold(
-                          appBar: AppBar(title: Text(topic['title']!)),
-                          body: Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 900),
-                              child: SingleChildScrollView(
-                                padding: const EdgeInsets.all(16),
-                                child: MarkdownBody(
-                                  data: topic['markdown']!,
-                                  selectable: true,
-                                  styleSheet: MarkdownStyleSheet(
-                                    h1: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
-                                    p: const TextStyle(color: AppColors.textPrimary, height: 1.6, fontSize: 15),
-                                    listBullet: const TextStyle(color: AppColors.textPrimary),
+                        builder:
+                            (_) => Scaffold(
+                              appBar: AppBar(title: Text(topic['title']!)),
+                              body: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 900,
+                                  ),
+                                  child: SingleChildScrollView(
+                                    padding: const EdgeInsets.all(16),
+                                    child: MarkdownBody(
+                                      data: topic['markdown']!,
+                                      selectable: true,
+                                      styleSheet: MarkdownStyleSheet(
+                                        h1: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 22,
+                                        ),
+                                        p: const TextStyle(
+                                          color: AppColors.textPrimary,
+                                          height: 1.6,
+                                          fontSize: 15,
+                                        ),
+                                        listBullet: const TextStyle(
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
                       ),
                     );
                   },

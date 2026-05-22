@@ -86,7 +86,7 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
         };
 
         // Online label includes the first loaded-in-RAM model, mirroring
-        // the spec ("Online · hamma-gemma-devops"). Falls back to plain ONLINE when
+        // the spec ("Online · hamma-devops"). Falls back to plain ONLINE when
         // the engine is up but the engine doesn't expose a model list.
         String label;
         switch (status) {
@@ -215,12 +215,13 @@ class _LocalEngineStatusPillState extends State<LocalEngineStatusPill> {
       context: context,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-      builder: (sheetContext) => _LocalEngineDetailsSheet(
-        endpoint: widget.monitor.endpoint,
-        initial: health,
-        monitor: widget.monitor,
-        onRetry: widget.onRetry,
-      ),
+      builder:
+          (sheetContext) => _LocalEngineDetailsSheet(
+            endpoint: widget.monitor.endpoint,
+            initial: health,
+            monitor: widget.monitor,
+            onRetry: widget.onRetry,
+          ),
     );
   }
 }
@@ -319,9 +320,10 @@ class _LocalEngineDetailsSheetState extends State<_LocalEngineDetailsSheet> {
                 ),
                 _DetailRow(
                   label: 'LOADED',
-                  value: (h?.loadedModels.isEmpty ?? true)
-                      ? '— (no model warm)'
-                      : h!.loadedModels.join(', '),
+                  value:
+                      (h?.loadedModels.isEmpty ?? true)
+                          ? '— (no model warm)'
+                          : h!.loadedModels.join(', '),
                 ),
                 _DetailRow(
                   label: 'CHECKED',
@@ -347,16 +349,17 @@ class _LocalEngineDetailsSheetState extends State<_LocalEngineDetailsSheet> {
                           side: const BorderSide(color: Color(0xFF00FF88)),
                           foregroundColor: const Color(0xFF00FF88),
                         ),
-                        icon: _retrying
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Color(0xFF00FF88),
-                                ),
-                              )
-                            : const Icon(Icons.refresh_rounded, size: 16),
+                        icon:
+                            _retrying
+                                ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF00FF88),
+                                  ),
+                                )
+                                : const Icon(Icons.refresh_rounded, size: 16),
                         label: Text(
                           _retrying ? 'PROBING…' : 'RETRY NOW',
                           style: TextStyle(
@@ -403,11 +406,7 @@ class _LocalEngineDetailsSheetState extends State<_LocalEngineDetailsSheet> {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
+  const _DetailRow({required this.label, required this.value, this.valueColor});
 
   final String label;
   final String value;

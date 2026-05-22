@@ -49,14 +49,16 @@ class AiApiConfig {
           provider: provider,
           baseUrl: 'https://openrouter.ai/api/v1',
           apiKey: apiKey,
-          model: (openRouterModel?.trim().isNotEmpty ?? false)
-              ? openRouterModel!.trim()
-              : 'meta-llama/llama-3.1-8b-instruct:free',
+          model:
+              (openRouterModel?.trim().isNotEmpty ?? false)
+                  ? openRouterModel!.trim()
+                  : 'meta-llama/llama-3.1-8b-instruct:free',
         );
       case AiProvider.local:
-        final endpoint = (localEndpoint?.trim().isNotEmpty ?? false)
-            ? localEndpoint!.trim()
-            : 'http://localhost:11434';
+        final endpoint =
+            (localEndpoint?.trim().isNotEmpty ?? false)
+                ? localEndpoint!.trim()
+                : 'http://localhost:11434';
 
         final isMobile = Platform.isAndroid || Platform.isIOS;
         if (!isMobile && !OllamaClient.isLoopbackEndpoint(endpoint)) {
@@ -72,9 +74,7 @@ class AiApiConfig {
           provider: provider,
           baseUrl: '$endpoint/v1',
           apiKey: 'local',
-          model: (localModel?.trim().isNotEmpty ?? false)
-              ? localModel!.trim()
-              : BundledModelCatalog.defaultPick.id,
+          model: _normalizeLocalModelName(localModel),
         );
     }
   }
@@ -83,6 +83,17 @@ class AiApiConfig {
   final String baseUrl;
   final String apiKey;
   final String model;
+
+  static String _normalizeLocalModelName(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) return BundledModelCatalog.defaultPick.id;
+    final lower = trimmed.toLowerCase();
+    if (lower == 'hf.co/xayrullonematov/hamma-gemma-4-devops-gguf:q4_k_m' ||
+        lower == 'hamma-gemma-devops') {
+      return BundledModelCatalog.defaultPick.id;
+    }
+    return trimmed;
+  }
 
   bool get isConfigured {
     if (provider == AiProvider.local) {
@@ -178,8 +189,9 @@ class AiCommandService {
     } catch (_) {}
 
     // 2. Code fence: ```json ... ``` or ``` ... ```
-    final codeFence =
-        RegExp(r'```(?:json)?\s*([\s\S]*?)\s*```').firstMatch(trimmed);
+    final codeFence = RegExp(
+      r'```(?:json)?\s*([\s\S]*?)\s*```',
+    ).firstMatch(trimmed);
     if (codeFence != null) {
       try {
         final decoded = jsonDecode(codeFence.group(1)!.trim());
@@ -229,12 +241,19 @@ class AiCommandService {
     return null;
   }
 
-  Future<CommandIntent> parseIntent(String prompt, List<String> availableServers) async {
+  Future<CommandIntent> parseIntent(
+    String prompt,
+    List<String> availableServers,
+  ) async {
     final trimmedPrompt = prompt.trim();
-    if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
+    if (trimmedPrompt.isEmpty) {
+      throw const AiCommandServiceException('Prompt cannot be empty.');
+    }
 
     if (!config.isConfigured) {
-      throw AiCommandServiceException('${config.provider.label} API key is not set.');
+      throw AiCommandServiceException(
+        '${config.provider.label} API key is not set.',
+      );
     }
 
     final systemInstruction =
@@ -252,10 +271,20 @@ class AiCommandService {
         case AiProvider.openAi:
         case AiProvider.openRouter:
         case AiProvider.local:
-          response = await _chatWithOpenAi(client, trimmedPrompt, [], systemInstruction: systemInstruction);
+          response = await _chatWithOpenAi(
+            client,
+            trimmedPrompt,
+            [],
+            systemInstruction: systemInstruction,
+          );
           break;
         case AiProvider.gemini:
-          response = await _chatWithGemini(client, trimmedPrompt, [], systemInstruction: systemInstruction);
+          response = await _chatWithGemini(
+            client,
+            trimmedPrompt,
+            [],
+            systemInstruction: systemInstruction,
+          );
           break;
       }
 
@@ -272,7 +301,9 @@ class AiCommandService {
       if (config.provider == AiProvider.local) {
         throw AiCommandServiceException(_localUnavailableMessage());
       }
-      throw AiCommandServiceException('Network error contacting ${config.provider.label}.');
+      throw AiCommandServiceException(
+        'Network error contacting ${config.provider.label}.',
+      );
     } on FormatException catch (e) {
       throw AiCommandServiceException('AI response was not valid JSON: $e');
     } catch (e) {
@@ -283,12 +314,19 @@ class AiCommandService {
     }
   }
 
-  Future<String> generateChatResponse(String prompt, {List<Map<String, String>> history = const []}) async {
+  Future<String> generateChatResponse(
+    String prompt, {
+    List<Map<String, String>> history = const [],
+  }) async {
     final trimmedPrompt = prompt.trim();
-    if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
+    if (trimmedPrompt.isEmpty) {
+      throw const AiCommandServiceException('Prompt cannot be empty.');
+    }
 
     if (!config.isConfigured) {
-      throw AiCommandServiceException('${config.provider.label} API key is not set.');
+      throw AiCommandServiceException(
+        '${config.provider.label} API key is not set.',
+      );
     }
 
     final client = HttpClient();
@@ -305,14 +343,18 @@ class AiCommandService {
       }
     } on TimeoutException {
       if (config.provider == AiProvider.local) {
-        throw AiCommandServiceException('Local AI engine timed out. The model may still be loading — try again.');
+        throw AiCommandServiceException(
+          'Local AI engine timed out. The model may still be loading — try again.',
+        );
       }
       throw AiCommandServiceException('${config.provider.label} timed out.');
     } on SocketException {
       if (config.provider == AiProvider.local) {
         throw AiCommandServiceException(_localUnavailableMessage());
       }
-      throw AiCommandServiceException('Network error contacting ${config.provider.label}.');
+      throw AiCommandServiceException(
+        'Network error contacting ${config.provider.label}.',
+      );
     } finally {
       client.close(force: true);
     }
@@ -337,19 +379,24 @@ class AiCommandService {
       );
     }
 
-    if (config.provider == AiProvider.local && config.baseUrl.contains("127.0.0.1")) {
+    if (config.provider == AiProvider.local &&
+        config.baseUrl.contains("127.0.0.1")) {
       try {
         final base = await getApplicationSupportDirectory();
         final dir = p.join(base.path, "bundled_models");
-        final model = BundledModelCatalog.byId(config.model) ?? BundledModelCatalog.defaultPick;
+        final model =
+            BundledModelCatalog.byId(config.model) ??
+            BundledModelCatalog.defaultPick;
         final path = BundledModelDownloader.resolvePath(model, dir);
 
         if (BundledModelDownloader.isCached(model, dir)) {
           final redactor = GlobalVaultRedactor.current;
-          final historyContext = history.isEmpty
-            ? ''
-            : '${history.map((m) => '${m['role']}: ${redactor.redact(m['content'] ?? '')}').join('\n')}\n';
-          final fullPrompt = "System: $_chatInstruction\n$historyContext\nUser: ${redactor.redact(trimmedPrompt)}\nAssistant: ";
+          final historyContext =
+              history.isEmpty
+                  ? ''
+                  : '${history.map((m) => '${m['role']}: ${redactor.redact(m['content'] ?? '')}').join('\n')}\n';
+          final fullPrompt =
+              "System: $_chatInstruction\n$historyContext\nUser: ${redactor.redact(trimmedPrompt)}\nAssistant: ";
           yield* inferenceEngine.streamResponse(fullPrompt, path);
           return;
         }
@@ -360,30 +407,41 @@ class AiCommandService {
     final client = HttpClient();
     client.connectionTimeout = _connectionTimeout;
     try {
-      if (config.provider == AiProvider.openAi || config.provider == AiProvider.local || 
+      if (config.provider == AiProvider.openAi ||
+          config.provider == AiProvider.local ||
           config.provider == AiProvider.openRouter) {
         yield* _streamWithOpenAi(client, trimmedPrompt, history);
       } else {
-        final full = await generateChatResponse(trimmedPrompt, history: history);
+        final full = await generateChatResponse(
+          trimmedPrompt,
+          history: history,
+        );
         if (full.isNotEmpty) yield full;
       }
     } on TimeoutException {
-      throw const AiCommandServiceException(
-        'AI engine timed out. Try again.',
-      );
+      throw const AiCommandServiceException('AI engine timed out. Try again.');
     } on SocketException {
-      throw AiCommandServiceException('Network error: cannot reach ${config.provider.label}');
+      throw AiCommandServiceException(
+        'Network error: cannot reach ${config.provider.label}',
+      );
     } finally {
       client.close(force: true);
     }
   }
 
-  Future<CommandAnalysis> generateCommand(String prompt, {String? contextOutput}) async {
+  Future<CommandAnalysis> generateCommand(
+    String prompt, {
+    String? contextOutput,
+  }) async {
     final trimmedPrompt = prompt.trim();
-    if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
+    if (trimmedPrompt.isEmpty) {
+      throw const AiCommandServiceException('Prompt cannot be empty.');
+    }
 
     if (!config.isConfigured) {
-      throw AiCommandServiceException('${config.provider.label} API key is not set.');
+      throw AiCommandServiceException(
+        '${config.provider.label} API key is not set.',
+      );
     }
 
     const systemInstruction =
@@ -405,10 +463,20 @@ class AiCommandService {
         case AiProvider.openAi:
         case AiProvider.openRouter:
         case AiProvider.local:
-          response = await _chatWithOpenAi(client, fullPrompt, [], systemInstruction: systemInstruction);
+          response = await _chatWithOpenAi(
+            client,
+            fullPrompt,
+            [],
+            systemInstruction: systemInstruction,
+          );
           break;
         case AiProvider.gemini:
-          response = await _chatWithGemini(client, fullPrompt, [], systemInstruction: systemInstruction);
+          response = await _chatWithGemini(
+            client,
+            fullPrompt,
+            [],
+            systemInstruction: systemInstruction,
+          );
           break;
       }
 
@@ -436,7 +504,9 @@ class AiCommandService {
       if (config.provider == AiProvider.local) {
         throw AiCommandServiceException(_localUnavailableMessage());
       }
-      throw AiCommandServiceException('Network error contacting ${config.provider.label}.');
+      throw AiCommandServiceException(
+        'Network error contacting ${config.provider.label}.',
+      );
     } catch (e) {
       if (e is AiCommandServiceException) rethrow;
       throw AiCommandServiceException('Command generation failed: $e');
@@ -451,33 +521,46 @@ class AiCommandService {
     List<Map<String, String>> history, {
     String? systemInstruction,
   }) async {
-    final request = await client.postUrl(Uri.parse('${config.baseUrl}/chat/completions')).timeout(_connectionTimeout);
+    final request = await client
+        .postUrl(Uri.parse('${config.baseUrl}/chat/completions'))
+        .timeout(_connectionTimeout);
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
     if (config.provider != AiProvider.local) {
-      request.headers.set(HttpHeaders.authorizationHeader, 'Bearer ${config.apiKey}');
+      request.headers.set(
+        HttpHeaders.authorizationHeader,
+        'Bearer ${config.apiKey}',
+      );
     }
 
     final redactor = GlobalVaultRedactor.current;
     final messages = [
       {'role': 'system', 'content': systemInstruction ?? _chatInstruction},
-      ...history.map((m) => {
-            ...m,
-            if (m['content'] != null) 'content': redactor.redact(m['content']),
-          }),
+      ...history.map(
+        (m) => {
+          ...m,
+          if (m['content'] != null) 'content': redactor.redact(m['content']),
+        },
+      ),
       {'role': 'user', 'content': redactor.redact(prompt)},
     ];
 
-    request.add(utf8.encode(jsonEncode({
-      'model': config.model,
-      'temperature': 0.4,
-      'messages': messages,
-    })));
+    request.add(
+      utf8.encode(
+        jsonEncode({
+          'model': config.model,
+          'temperature': 0.4,
+          'messages': messages,
+        }),
+      ),
+    );
 
     final response = await request.close().timeout(_responseTimeout);
     final responseBody = await response.transform(utf8.decoder).join();
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AiCommandServiceException(_extractErrorMessage(responseBody) ?? 'Status ${response.statusCode}');
+      throw AiCommandServiceException(
+        _extractErrorMessage(responseBody) ?? 'Status ${response.statusCode}',
+      );
     }
 
     return _extractOpenAiContent(responseBody) ?? '';
@@ -504,19 +587,25 @@ class AiCommandService {
     final redactor = GlobalVaultRedactor.current;
     final messages = [
       {'role': 'system', 'content': systemInstruction ?? _chatInstruction},
-      ...history.map((m) => {
-            ...m,
-            if (m['content'] != null) 'content': redactor.redact(m['content']),
-          }),
+      ...history.map(
+        (m) => {
+          ...m,
+          if (m['content'] != null) 'content': redactor.redact(m['content']),
+        },
+      ),
       {'role': 'user', 'content': redactor.redact(prompt)},
     ];
 
-    request.add(utf8.encode(jsonEncode({
-      'model': config.model,
-      'temperature': 0.4,
-      'stream': true,
-      'messages': messages,
-    })));
+    request.add(
+      utf8.encode(
+        jsonEncode({
+          'model': config.model,
+          'temperature': 0.4,
+          'stream': true,
+          'messages': messages,
+        }),
+      ),
+    );
 
     final response = await request.close().timeout(_responseTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -526,8 +615,9 @@ class AiCommandService {
       );
     }
 
-    final lines =
-        response.transform(utf8.decoder).transform(const LineSplitter());
+    final lines = response
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
     yield* decodeOpenAiSseBody(lines);
   }
 
@@ -576,25 +666,33 @@ class AiCommandService {
     List<Map<String, String>> history, {
     String? systemInstruction,
   }) async {
-    final request = await client.postUrl(Uri.parse('${config.baseUrl}/models/${config.model}:generateContent')).timeout(_connectionTimeout);
+    final request = await client
+        .postUrl(
+          Uri.parse('${config.baseUrl}/models/${config.model}:generateContent'),
+        )
+        .timeout(_connectionTimeout);
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
     request.headers.set('x-goog-api-key', config.apiKey);
 
     final redactor = GlobalVaultRedactor.current;
-    final contents = history.map((m) {
-      return {
-        'role': m['role'] == 'assistant' ? 'model' : 'user',
-        'parts': [
-          {'text': redactor.redact(m['content'])}
-        ]
-      };
-    }).toList();
+    final contents =
+        history.map((m) {
+          return {
+            'role': m['role'] == 'assistant' ? 'model' : 'user',
+            'parts': [
+              {'text': redactor.redact(m['content'])},
+            ],
+          };
+        }).toList();
 
     contents.add({
       'role': 'user',
       'parts': [
-        {'text': 'System Instruction: ${systemInstruction ?? _chatInstruction}\n\nUser: ${redactor.redact(prompt)}'}
-      ]
+        {
+          'text':
+              'System Instruction: ${systemInstruction ?? _chatInstruction}\n\nUser: ${redactor.redact(prompt)}',
+        },
+      ],
     });
 
     request.add(utf8.encode(jsonEncode({'contents': contents})));
@@ -603,7 +701,9 @@ class AiCommandService {
     final responseBody = await response.transform(utf8.decoder).join();
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw AiCommandServiceException(_extractErrorMessage(responseBody) ?? 'Status ${response.statusCode}');
+      throw AiCommandServiceException(
+        _extractErrorMessage(responseBody) ?? 'Status ${response.statusCode}',
+      );
     }
 
     return _extractGeminiContent(responseBody) ?? '';
@@ -631,7 +731,9 @@ class AiCommandService {
 
   Future<List<AiCommandStep>> generateCommandPlan(String prompt) async {
     final trimmedPrompt = prompt.trim();
-    if (trimmedPrompt.isEmpty) throw const AiCommandServiceException('Prompt cannot be empty.');
+    if (trimmedPrompt.isEmpty) {
+      throw const AiCommandServiceException('Prompt cannot be empty.');
+    }
 
     final response = await generateChatResponse(
       'Based on the following request, provide a list of shell commands to execute. '
@@ -646,11 +748,13 @@ class AiCommandService {
     for (final match in matches) {
       final command = match.group(1)?.trim();
       if (command != null && command.isNotEmpty) {
-        steps.add(AiCommandStep(
-          title: 'Execute Command',
-          command: command,
-          description: 'AI suggested command based on your request.',
-        ));
+        steps.add(
+          AiCommandStep(
+            title: 'Execute Command',
+            command: command,
+            description: 'AI suggested command based on your request.',
+          ),
+        );
       }
     }
 
@@ -670,7 +774,11 @@ class AiCommandServiceException implements Exception {
 }
 
 class AiCommandStep {
-  const AiCommandStep({required this.title, required this.command, this.description});
+  const AiCommandStep({
+    required this.title,
+    required this.command,
+    this.description,
+  });
   final String title;
   final String command;
   final String? description;

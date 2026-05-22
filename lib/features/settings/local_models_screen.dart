@@ -2,15 +2,16 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/ai/bundled_model_catalog.dart';
 import '../../core/ai/ollama_client.dart';
+import '../../core/ai/ollama_model_installer.dart';
 import '../../core/theme/app_colors.dart';
 
 /// Brutalist in-app model manager for the local AI engine.
 ///
 /// Lists models installed on the local Ollama daemon, lets the user
-/// delete them, and lets them pull a new one (either from a curated
-/// catalog or by typing a tag). Pulling shows live byte-by-byte progress
-/// streamed straight from the daemon.
+/// delete them, and lets them install GGUF models by downloading the
+/// raw file into app-managed storage and registering it via `/api/create`.
 ///
 /// Returns the chosen "default model" tag (or `null` if unchanged) when
 /// popped, so the caller (Settings) can persist it.
@@ -32,74 +33,8 @@ class LocalModelsScreen extends StatefulWidget {
   State<LocalModelsScreen> createState() => _LocalModelsScreenState();
 }
 
-class _CatalogEntry {
-  const _CatalogEntry({
-    required this.tag,
-    required this.label,
-    required this.summary,
-    required this.approxSize,
-  });
-  final String tag;
-  final String label;
-  final String summary;
-  final String approxSize;
-}
-
 class _LocalModelsScreenState extends State<LocalModelsScreen> {
   static const Color _zeroTrustGreen = Color(0xFF00FF88);
-
-  // Hand-picked OpenAI-style starter set; everything here works with
-  // `ollama pull <tag>` on a stock daemon.
-  static const List<_CatalogEntry> _catalog = [
-    _CatalogEntry(
-      tag: 'hamma-gemma-devops',
-      label: 'Hamma DevOps',
-      summary: 'Specialized for server management and diagnostics. RECOMMENDED.',
-      approxSize: '~5.3 GB',
-    ),
-    _CatalogEntry(
-      tag: 'llama3.2',
-      label: 'Llama 3.2',
-      summary: 'Meta small/fast. Runs on modest hardware.',
-      approxSize: '~2 GB',
-    ),
-    _CatalogEntry(
-      tag: 'llama3',
-      label: 'Llama 3',
-      summary: 'Meta general-purpose chat. Strong reasoning.',
-      approxSize: '~4.7 GB',
-    ),
-    _CatalogEntry(
-      tag: 'mistral',
-      label: 'Mistral 7B',
-      summary: 'Compact, fast, OSS. Solid all-rounder.',
-      approxSize: '~4.1 GB',
-    ),
-    _CatalogEntry(
-      tag: 'phi3',
-      label: 'Phi-3',
-      summary: 'Microsoft small model. Decent on CPU only.',
-      approxSize: '~2.3 GB',
-    ),
-    _CatalogEntry(
-      tag: 'qwen2.5-coder',
-      label: 'Qwen 2.5 Coder',
-      summary: 'Alibaba code-specialised model.',
-      approxSize: '~4.7 GB',
-    ),
-    _CatalogEntry(
-      tag: 'deepseek-coder',
-      label: 'DeepSeek Coder',
-      summary: 'Strong code completion / explanation.',
-      approxSize: '~3.8 GB',
-    ),
-    _CatalogEntry(
-      tag: 'tinyllama',
-      label: 'TinyLlama',
-      summary: 'Ultra-small. For quick tests on weak hardware.',
-      approxSize: '~640 MB',
-    ),
-  ];
 
   late OllamaClient _client;
   String? _selectedDefault;
@@ -157,8 +92,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _loadError =
-            'Cannot reach engine at ${widget.endpoint}. ${e.message}';
+        _loadError = 'Cannot reach engine at ${widget.endpoint}. ${e.message}';
       });
     } catch (e) {
       if (!mounted) return;
@@ -172,24 +106,27 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
   Future<void> _delete(OllamaModel model) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete model?'),
-        content: Text(
-          'Remove "${model.name}" (${model.humanSize}) from disk? '
-          'This cannot be undone — you can re-pull it later.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Delete model?'),
+            content: Text(
+              'Remove "${model.name}" (${model.humanSize}) from disk? '
+              'This cannot be undone — you can reinstall it later.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.danger,
+                ),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
     );
     if (confirmed != true) return;
 
@@ -197,9 +134,9 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
       await _client.deleteModel(model.name);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Delete failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
       return;
     }
     if (_selectedDefault == model.name) {
@@ -208,14 +145,19 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
     await _refresh();
   }
 
-  Future<void> _openPullSheet({String? prefilledTag}) async {
-    final tagController = TextEditingController(text: prefilledTag ?? '');
+  Future<void> _openPullSheet({BundledModel? prefilledModel}) async {
+    final modelNameController = TextEditingController(
+      text: prefilledModel?.id ?? '',
+    );
+    final downloadUrlController = TextEditingController(
+      text: prefilledModel?.downloadUrl ?? '',
+    );
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       // Barrier-tap dismissal (`isDismissible`) routes through
       // `Navigator.maybePop`, which honours the sheet's `PopScope` and
-      // therefore prompts when a pull is in progress and closes
+      // therefore prompts when an install is in progress and closes
       // immediately otherwise.
       //
       // The built-in drag-to-dismiss, however, calls `Navigator.pop`
@@ -227,15 +169,17 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
       isDismissible: true,
       enableDrag: false,
       backgroundColor: AppColors.scaffoldBackground,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
-        ),
-        child: _PullSheet(
-          client: _client,
-          tagController: tagController,
-        ),
-      ),
+      builder:
+          (ctx) => Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            ),
+            child: _PullSheet(
+              client: _client,
+              modelNameController: modelNameController,
+              downloadUrlController: downloadUrlController,
+            ),
+          ),
     );
     if (result == true) {
       await _refresh();
@@ -261,7 +205,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
             onPressed: _isLoading ? null : _refresh,
           ),
           IconButton(
-            tooltip: 'Pull a model',
+            tooltip: 'Install a model',
             icon: const Icon(Icons.cloud_download_rounded),
             onPressed: _isLoading ? null : () => _openPullSheet(),
           ),
@@ -279,36 +223,39 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _selectedDefault == widget.currentDefault
-          ? null
-          : SafeArea(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                color: AppColors.surface,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: _zeroTrustGreen,
-                    foregroundColor: Colors.black,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
+      bottomNavigationBar:
+          _selectedDefault == widget.currentDefault
+              ? null
+              : SafeArea(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  color: AppColors.surface,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _zeroTrustGreen,
+                      foregroundColor: Colors.black,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () =>
-                      Navigator.of(context).pop<String?>(_selectedDefault),
-                  child: Text(
-                    _selectedDefault == null
-                        ? 'CLEAR DEFAULT MODEL'
-                        : 'USE "${_selectedDefault!}" AS DEFAULT',
-                    style: TextStyle(
-                      fontFamily: AppColors.monoFamily,
-                      letterSpacing: 1.5,
-                      fontWeight: FontWeight.bold,
+                    onPressed:
+                        () => Navigator.of(
+                          context,
+                        ).pop<String?>(_selectedDefault),
+                    child: Text(
+                      _selectedDefault == null
+                          ? 'CLEAR DEFAULT MODEL'
+                          : 'USE "${_selectedDefault!}" AS DEFAULT',
+                      style: TextStyle(
+                        fontFamily: AppColors.monoFamily,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
     );
   }
 
@@ -340,10 +287,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                 ? 'Querying engine…'
                 : _loadError ??
                     '${_models.length} installed · ${_loaded.length} loaded in RAM',
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ],
       ),
@@ -382,15 +326,13 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
         else if (_models.isEmpty)
           const _EmptyState(
             message:
-                'No models installed yet. Pull one from the catalog below.',
+                'No models installed yet. Download and register one from the catalog below.',
           )
         else
           RadioGroup<String>(
             groupValue: _selectedDefault,
             onChanged: (v) => setState(() => _selectedDefault = v),
-            child: Column(
-              children: _models.map(_buildModelTile).toList(),
-            ),
+            child: Column(children: _models.map(_buildModelTile).toList()),
           ),
       ],
     );
@@ -410,10 +352,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
       ),
       child: Row(
         children: [
-          Radio<String>(
-            value: m.name,
-            activeColor: _zeroTrustGreen,
-          ),
+          Radio<String>(value: m.name, activeColor: _zeroTrustGreen),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,8 +387,10 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
           ),
           IconButton(
             tooltip: 'Delete',
-            icon: const Icon(Icons.delete_outline_rounded,
-                color: AppColors.danger),
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: AppColors.danger,
+            ),
             onPressed: () => _delete(m),
           ),
         ],
@@ -458,15 +399,17 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
   }
 
   Widget _buildCatalogSection() {
+    final catalog = BundledModelCatalog.all();
     final installedTags = _models.map((m) => m.name).toSet();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SectionLabel('CURATED CATALOG'),
         const SizedBox(height: 8),
-        ..._catalog.map((entry) {
-          final installed = installedTags
-              .any((t) => t == entry.tag || t.startsWith('${entry.tag}:'));
+        ...catalog.map((entry) {
+          final installed = installedTags.any(
+            (t) => t == entry.id || t.startsWith('${entry.id}:'),
+          );
           return Container(
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(12),
@@ -483,7 +426,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                       Row(
                         children: [
                           Text(
-                            entry.label,
+                            entry.displayName,
                             style: const TextStyle(
                               color: AppColors.textPrimary,
                               fontWeight: FontWeight.bold,
@@ -492,7 +435,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            entry.tag,
+                            entry.id,
                             style: TextStyle(
                               fontFamily: AppColors.monoFamily,
                               fontSize: 11,
@@ -501,7 +444,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                           ),
                           const SizedBox(width: 8),
                           Text(
-                            entry.approxSize,
+                            formatBytes(entry.sizeBytes),
                             style: TextStyle(
                               fontFamily: AppColors.monoFamily,
                               fontSize: 11,
@@ -534,7 +477,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                   )
                 else
                   OutlinedButton(
-                    onPressed: () => _openPullSheet(prefilledTag: entry.tag),
+                    onPressed: () => _openPullSheet(prefilledModel: entry),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: _zeroTrustGreen),
                       foregroundColor: _zeroTrustGreen,
@@ -543,7 +486,7 @@ class _LocalModelsScreenState extends State<LocalModelsScreen> {
                       ),
                     ),
                     child: Text(
-                      'PULL',
+                      'INSTALL',
                       style: TextStyle(
                         fontFamily: AppColors.monoFamily,
                         letterSpacing: 1.5,
@@ -598,23 +541,35 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _PullSheet extends StatefulWidget {
-  const _PullSheet({required this.client, required this.tagController});
+  const _PullSheet({
+    required this.client,
+    required this.modelNameController,
+    required this.downloadUrlController,
+  });
   final OllamaClient client;
-  final TextEditingController tagController;
+  final TextEditingController modelNameController;
+  final TextEditingController downloadUrlController;
 
   @override
   State<_PullSheet> createState() => _PullSheetState();
 }
 
 class _PullSheetState extends State<_PullSheet> {
-  StreamSubscription<OllamaPullProgress>? _sub;
+  StreamSubscription<OllamaModelInstallProgress>? _sub;
+  late final OllamaModelInstaller _installer;
   String _status = '';
   double? _fraction;
   int _completed = 0;
   int _total = 0;
-  bool _isPulling = false;
+  bool _isInstalling = false;
   String? _error;
   bool _done = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _installer = OllamaModelInstaller(client: widget.client);
+  }
 
   @override
   void dispose() {
@@ -623,15 +578,20 @@ class _PullSheetState extends State<_PullSheet> {
   }
 
   Future<void> _start() async {
-    final tag = widget.tagController.text.trim();
-    if (tag.isEmpty) {
-      setState(() => _error = 'Enter a model tag, e.g. "hamma-gemma-devops".');
+    final modelName = widget.modelNameController.text.trim();
+    final downloadUrl = widget.downloadUrlController.text.trim();
+    if (modelName.isEmpty) {
+      setState(() => _error = 'Enter a local model name, e.g. "hamma-devops".');
+      return;
+    }
+    if (downloadUrl.isEmpty) {
+      setState(() => _error = 'Enter a direct HTTPS URL to a .gguf file.');
       return;
     }
     setState(() {
-      _isPulling = true;
+      _isInstalling = true;
       _error = null;
-      _status = 'connecting';
+      _status = 'Preparing download';
       _fraction = null;
       _completed = 0;
       _total = 0;
@@ -639,35 +599,37 @@ class _PullSheetState extends State<_PullSheet> {
     });
 
     _sub?.cancel();
-    _sub = widget.client.pullModel(tag).listen(
-      (event) {
-        if (!mounted) return;
-        setState(() {
-          _status = event.status;
-          _completed = event.completedBytes;
-          _total = event.totalBytes;
-          _fraction = event.fraction;
-          if (event.isTerminal) {
-            _done = true;
-            _isPulling = false;
-          }
-        });
-      },
-      onError: (Object e) {
-        if (!mounted) return;
-        setState(() {
-          _error = e.toString();
-          _isPulling = false;
-        });
-      },
-      onDone: () {
-        if (!mounted) return;
-        setState(() {
-          _isPulling = false;
-          _done = true;
-        });
-      },
-    );
+    _sub = _installer
+        .installModel(modelName: modelName, downloadUrl: downloadUrl)
+        .listen(
+          (event) {
+            if (!mounted) return;
+            setState(() {
+              _status = event.message;
+              _completed = event.completedBytes;
+              _total = event.totalBytes;
+              _fraction = event.fraction;
+              if (event.isDone) {
+                _done = true;
+                _isInstalling = false;
+              }
+            });
+          },
+          onError: (Object e) {
+            if (!mounted) return;
+            setState(() {
+              _error = e.toString();
+              _isInstalling = false;
+            });
+          },
+          onDone: () {
+            if (!mounted) return;
+            setState(() {
+              _isInstalling = false;
+              _done = true;
+            });
+          },
+        );
   }
 
   Future<void> _cancel() async {
@@ -675,40 +637,43 @@ class _PullSheetState extends State<_PullSheet> {
     _sub = null;
     if (!mounted) return;
     setState(() {
-      _isPulling = false;
-      _status = 'cancelled';
+      _isInstalling = false;
+      _status = 'Install cancelled';
     });
   }
 
-  /// Asks the user whether to abort an in-progress download.
+  /// Asks the user whether to abort an in-progress install.
   /// Returns true if the user confirms cancellation.
   Future<bool> _confirmCancelDownload() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel download?'),
-        content: const Text(
-          'The model is still downloading. Progress will be lost if you '
-          'cancel now.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Keep downloading'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Cancel install?'),
+            content: const Text(
+              'The model install is still running. Any partial download will '
+              'be discarded if you cancel now.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Keep installing'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.danger,
+                ),
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Cancel install'),
+              ),
+            ],
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Cancel download'),
-          ),
-        ],
-      ),
     );
     return confirmed == true;
   }
 
   Future<void> _handleClosePressed() async {
-    if (_isPulling) {
+    if (_isInstalling) {
       final shouldCancel = await _confirmCancelDownload();
       if (!shouldCancel) return;
       await _cancel();
@@ -720,7 +685,7 @@ class _PullSheetState extends State<_PullSheet> {
   @override
   Widget build(BuildContext context) {
     return PopScope<Object?>(
-      canPop: !_isPulling,
+      canPop: !_isInstalling,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         final shouldCancel = await _confirmCancelDownload();
@@ -732,161 +697,185 @@ class _PullSheetState extends State<_PullSheet> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Custom drag handle. Built-in modal drag-to-dismiss is
-          // disabled (it would bypass PopScope). A downward fling
-          // here routes through `_handleClosePressed`, so dragging
-          // shows the confirmation while pulling and dismisses the
-          // sheet immediately when no pull is active.
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onVerticalDragEnd: (details) {
-              if ((details.primaryVelocity ?? 0) > 200) {
-                _handleClosePressed();
-              }
-            },
-            child: Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                color: AppColors.border,
-              ),
-            ),
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'PULL MODEL',
-                  style: TextStyle(
-                    fontFamily: AppColors.monoFamily,
-                    fontSize: 14,
-                    letterSpacing: 2,
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Custom drag handle. Built-in modal drag-to-dismiss is
+            // disabled (it would bypass PopScope). A downward fling
+            // here routes through `_handleClosePressed`, so dragging
+            // shows the confirmation while installing and dismisses the
+            // sheet immediately when no install is active.
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onVerticalDragEnd: (details) {
+                if ((details.primaryVelocity ?? 0) > 200) {
+                  _handleClosePressed();
+                }
+              },
+              child: Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  color: AppColors.border,
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded),
-                onPressed: _handleClosePressed,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: widget.tagController,
-            enabled: !_isPulling,
-            decoration: const InputDecoration(
-              labelText: 'Model tag',
-              hintText: 'hamma-gemma-devops',
             ),
-            style: TextStyle(fontFamily: AppColors.monoFamily, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          if (_isPulling || _status.isNotEmpty || _error != null) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _error ?? _status,
-                    style: TextStyle(
-                      fontFamily: AppColors.monoFamily,
-                      fontSize: 12,
-                      color: _error != null
-                          ? AppColors.danger
-                          : AppColors.textPrimary,
-                    ),
-                  ),
-                  if (_total > 0) ...[
-                    const SizedBox(height: 8),
-                    LinearProgressIndicator(
-                      value: _fraction,
-                      backgroundColor: AppColors.border,
-                      color: const Color(0xFF00FF88),
-                      minHeight: 4,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${formatBytes(_completed)} / ${formatBytes(_total)}'
-                      '${_fraction != null ? ' · ${(100 * _fraction!).toStringAsFixed(0)}%' : ''}',
-                      style: const TextStyle(
-                        fontFamily: AppColors.monoFamily,
-                        fontSize: 11,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF00FF88),
-                    foregroundColor: Colors.black,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: _isPulling
-                      ? null
-                      : (_done
-                          ? () => Navigator.of(context).pop(true)
-                          : _start),
+            Row(
+              children: [
+                Expanded(
                   child: Text(
-                    _done
-                        ? 'DONE'
-                        : (_isPulling ? 'PULLING…' : 'START PULL'),
+                    'INSTALL MODEL',
                     style: TextStyle(
                       fontFamily: AppColors.monoFamily,
-                      letterSpacing: 1.5,
+                      fontSize: 14,
+                      letterSpacing: 2,
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
-              ),
-              if (_isPulling) ...[
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
-                    ),
-                    side: const BorderSide(color: AppColors.danger),
-                    foregroundColor: AppColors.danger,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 18, vertical: 14),
-                  ),
-                  onPressed: _cancel,
-                  child: Text(
-                    'CANCEL',
-                    style: TextStyle(
-                      fontFamily: AppColors.monoFamily,
-                      letterSpacing: 1.5,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: _handleClosePressed,
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: widget.modelNameController,
+              enabled: !_isInstalling,
+              decoration: const InputDecoration(
+                labelText: 'Local model name',
+                hintText: 'hamma-devops',
+              ),
+              style: TextStyle(fontFamily: AppColors.monoFamily, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: widget.downloadUrlController,
+              enabled: !_isInstalling,
+              decoration: const InputDecoration(
+                labelText: 'GGUF download URL',
+                hintText:
+                    'https://huggingface.co/.../resolve/main/model.Q4_K_M.gguf',
+              ),
+              style: TextStyle(fontFamily: AppColors.monoFamily, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            if (_isInstalling || _status.isNotEmpty || _error != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _error ?? _status,
+                      style: TextStyle(
+                        fontFamily: AppColors.monoFamily,
+                        fontSize: 12,
+                        color:
+                            _error != null
+                                ? AppColors.danger
+                                : AppColors.textPrimary,
+                      ),
+                    ),
+                    if (_total > 0) ...[
+                      const SizedBox(height: 8),
+                      LinearProgressIndicator(
+                        value: _fraction,
+                        backgroundColor: AppColors.border,
+                        color: const Color(0xFF00FF88),
+                        minHeight: 4,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${formatBytes(_completed)} / ${formatBytes(_total)}'
+                        '${_fraction != null ? ' · ${(100 * _fraction!).toStringAsFixed(0)}%' : ''}',
+                        style: const TextStyle(
+                          fontFamily: AppColors.monoFamily,
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ] else if (_isInstalling && _error == null) ...[
+                      const SizedBox(height: 8),
+                      const LinearProgressIndicator(
+                        backgroundColor: AppColors.border,
+                        color: Color(0xFF00FF88),
+                        minHeight: 4,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
             ],
-          ),
-        ],
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF00FF88),
+                      foregroundColor: Colors.black,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    onPressed:
+                        _isInstalling
+                            ? null
+                            : (_done
+                                ? () => Navigator.of(context).pop(true)
+                                : _start),
+                    child: Text(
+                      _done
+                          ? 'DONE'
+                          : (_isInstalling
+                              ? 'INSTALLING…'
+                              : 'DOWNLOAD & REGISTER'),
+                      style: TextStyle(
+                        fontFamily: AppColors.monoFamily,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                if (_isInstalling) ...[
+                  const SizedBox(width: 8),
+                  OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      side: const BorderSide(color: AppColors.danger),
+                      foregroundColor: AppColors.danger,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 14,
+                      ),
+                    ),
+                    onPressed: _cancel,
+                    child: Text(
+                      'CANCEL',
+                      style: TextStyle(
+                        fontFamily: AppColors.monoFamily,
+                        letterSpacing: 1.5,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
     );
