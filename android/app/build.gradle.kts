@@ -20,7 +20,7 @@ fun signingValue(envKey: String, propKey: String): String? =
 android {
     namespace = "com.hamma.app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "28.2.13676358"
+    ndkVersion = null
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true
