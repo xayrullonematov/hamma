@@ -660,12 +660,16 @@ class _ServerDashboardCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            _getStatusLabel(),
-                            style: TextStyle(
-                              color: statusColor,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
+                          Expanded(
+                            child: Text(
+                              _getStatusLabel(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],

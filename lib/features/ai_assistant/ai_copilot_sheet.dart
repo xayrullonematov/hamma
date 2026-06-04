@@ -360,6 +360,79 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     );
   }
 
+  Future<bool> _confirmHighRiskCommand(String command, CommandRiskLevel level) async {
+    final isCritical = level == CommandRiskLevel.critical;
+    final title = isCritical ? 'CRITICAL RISK COMMAND' : 'HIGH RISK COMMAND';
+    final confirmWord = isCritical ? 'CONFIRM' : null;
+    
+    final controller = TextEditingController();
+    
+    return await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final isValid = confirmWord == null || controller.text == confirmWord;
+            return AlertDialog(
+              backgroundColor: AppColors.panel,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: isCritical ? Colors.purple : Colors.red, width: 2),
+                borderRadius: BorderRadius.zero,
+              ),
+              title: Text(title, style: TextStyle(color: isCritical ? Colors.purple : Colors.red, fontWeight: FontWeight.bold, fontFamily: AppColors.monoFamily)),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('You are about to execute a dangerous command. Please review it carefully:', style: TextStyle(color: Colors.white, fontSize: 13)),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    color: AppColors.surface,
+                    width: double.infinity,
+                    child: SelectableText(command, style: const TextStyle(color: Colors.white, fontFamily: AppColors.monoFamily, fontSize: 12)),
+                  ),
+                  if (confirmWord != null) ...[
+                    const SizedBox(height: 16),
+                    Text('Type "$confirmWord" to proceed:', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      onChanged: (_) => setDialogState(() {}),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: const InputDecoration(
+                        filled: true,
+                        fillColor: AppColors.surface,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.zero, borderSide: BorderSide.none),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  child: const Text('CANCEL', style: TextStyle(color: AppColors.textMuted)),
+                ),
+                FilledButton(
+                  onPressed: isValid ? () => Navigator.of(context).pop(true) : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: isCritical ? Colors.purple : Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('EXECUTE'),
+                ),
+              ],
+            );
+          }
+        );
+      }
+    ) ?? false;
+  }
+
   Future<void> _runCommand(int index) async {
     if (!widget.canRunCommands()) {
       _showError(widget.executionUnavailableMessage);
@@ -367,6 +440,14 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     }
 
     final step = _planSteps[index];
+    final command = step.controller.text;
+    final assessment = _riskAssessor.assess(command);
+
+    if (assessment.riskLevel == CommandRiskLevel.critical || assessment.riskLevel == CommandRiskLevel.high) {
+      final confirmed = await _confirmHighRiskCommand(command, assessment.riskLevel);
+      if (!confirmed) return;
+    }
+
     setState(() {
       _runningCommandIndex = index;
       step.state = CopilotPlanStepState.sentToShell;

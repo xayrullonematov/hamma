@@ -84,6 +84,16 @@ void main() {
         returnsNormally,
       );
     });
+
+    test('isLoopbackEndpointAsync behaves correctly', () async {
+      expect(await OllamaClient.isLoopbackEndpointAsync('http://localhost'), isTrue);
+      expect(await OllamaClient.isLoopbackEndpointAsync('http://localhost:11434'), isTrue);
+      expect(await OllamaClient.isLoopbackEndpointAsync('http://127.0.0.1:11434'), isTrue);
+      expect(await OllamaClient.isLoopbackEndpointAsync('http://[::1]:1234'), isTrue);
+      expect(await OllamaClient.isLoopbackEndpointAsync('http://192.168.1.10:11434'), isFalse);
+      expect(await OllamaClient.isLoopbackEndpointAsync('https://api.openai.com'), isFalse);
+      expect(await OllamaClient.isLoopbackEndpointAsync(''), isFalse);
+    });
   });
 
   // The OllamaClient guard is the model-manager seatbelt; the same rule must

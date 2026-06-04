@@ -180,24 +180,51 @@ class SftpService {
 
   Future<void> downloadFile(String remotePath, String localPath) async {
     final file = await client.open(remotePath, mode: SftpFileOpenMode.read);
+    IOSink? sink;
     try {
-      final bytes = await file.readBytes();
-      await File(localPath).writeAsBytes(bytes);
+      sink = File(localPath).openWrite();
+      await file.read().cast<List<int>>().pipe(sink);
+      sink = null;
+    } catch (_) {
+      try {
+        await sink?.close();
+      } catch (_) {}
+      try {
+        final localFile = File(localPath);
+        if (await localFile.exists()) await localFile.delete();
+      } catch (_) {}
+      rethrow;
     } finally {
-      await file.close();
+      try {
+        await sink?.close();
+      } catch (_) {}
+      try {
+        await file.close();
+      } catch (_) {}
     }
   }
 
   Future<void> uploadFile(String localPath, String remotePath) async {
-    final bytes = await File(localPath).readAsBytes();
     final file = await client.open(
       remotePath,
       mode: SftpFileOpenMode.create | SftpFileOpenMode.write,
     );
     try {
-      await file.writeBytes(bytes);
+      // dart:io openRead() yields Uint8List chunks
+      final stream = File(localPath).openRead().cast<Uint8List>();
+      await file.write(stream);
+    } catch (_) {
+      try {
+        await file.close();
+      } catch (_) {}
+      try {
+        await client.remove(remotePath);
+      } catch (_) {}
+      rethrow;
     } finally {
-      await file.close();
+      try {
+        await file.close();
+      } catch (_) {}
     }
   }
 

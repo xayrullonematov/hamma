@@ -29,6 +29,7 @@ class ProxmoxPlugin extends HammaPlugin {
   static const _portKey = 'proxmox_port';
   static const _tokenIdKey = 'proxmox_token_id';
   static const _tokenSecretKey = 'proxmox_token_secret';
+  static const _allowInsecureKey = 'proxmox_allow_insecure';
 
   @override
   PluginManifest get manifest => const PluginManifest(
@@ -81,12 +82,14 @@ class _ProxmoxConfig {
     required this.port,
     required this.tokenId,
     required this.tokenSecret,
+    required this.allowInsecure,
   });
 
   final String host;
   final int port;
   final String tokenId;
   final String tokenSecret;
+  final bool allowInsecure;
 
   bool get isComplete =>
       host.isNotEmpty && tokenId.isNotEmpty && tokenSecret.isNotEmpty;
@@ -124,11 +127,13 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
     final port = await widget.api.readConfig(ProxmoxPlugin._portKey);
     final tokenId = await widget.api.readConfig(ProxmoxPlugin._tokenIdKey);
     final tokenSecret = await widget.api.readConfig(ProxmoxPlugin._tokenSecretKey);
+    final allowInsecureStr = await widget.api.readConfig(ProxmoxPlugin._allowInsecureKey);
     final config = _ProxmoxConfig(
       host: host ?? '',
       port: int.tryParse(port ?? '8006') ?? 8006,
       tokenId: tokenId ?? '',
       tokenSecret: tokenSecret ?? '',
+      allowInsecure: allowInsecureStr == 'true',
     );
     if (!mounted) return;
     setState(() => _config = config);
@@ -154,6 +159,7 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
       final nodesResp = await widget.api.httpGet(
         config.buildUri('/nodes').toString(),
         headers: {'Authorization': config.authHeader},
+        allowInsecure: config.allowInsecure,
       );
       if (!nodesResp.isSuccess) {
         throw HammaApiException(
@@ -163,6 +169,7 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
       final resourcesResp = await widget.api.httpGet(
         config.buildUri('/cluster/resources').toString(),
         headers: {'Authorization': config.authHeader},
+        allowInsecure: config.allowInsecure,
       );
       if (!resourcesResp.isSuccess) {
         throw HammaApiException(
@@ -196,6 +203,7 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
     await widget.api.writeConfig(ProxmoxPlugin._portKey, updated.port.toString());
     await widget.api.writeConfig(ProxmoxPlugin._tokenIdKey, updated.tokenId);
     await widget.api.writeConfig(ProxmoxPlugin._tokenSecretKey, updated.tokenSecret);
+    await widget.api.writeConfig(ProxmoxPlugin._allowInsecureKey, updated.allowInsecure.toString());
     // The configured host feeds the dynamic allow-list; refresh it
     // in place so the very next request sees the new whitelist.
     await widget.api.refreshAllowedHosts();
@@ -378,6 +386,7 @@ class _ProxmoxConfigDialogState extends State<_ProxmoxConfigDialog> {
   late final TextEditingController _port;
   late final TextEditingController _tokenId;
   late final TextEditingController _tokenSecret;
+  bool _allowInsecure = false;
 
   @override
   void initState() {
@@ -386,6 +395,7 @@ class _ProxmoxConfigDialogState extends State<_ProxmoxConfigDialog> {
     _port = TextEditingController(text: (widget.initial?.port ?? 8006).toString());
     _tokenId = TextEditingController(text: widget.initial?.tokenId ?? '');
     _tokenSecret = TextEditingController(text: widget.initial?.tokenSecret ?? '');
+    _allowInsecure = widget.initial?.allowInsecure ?? false;
   }
 
   @override
@@ -430,6 +440,18 @@ class _ProxmoxConfigDialogState extends State<_ProxmoxConfigDialog> {
                 labelText: 'API token secret',
               ),
             ),
+            const SizedBox(height: 8),
+            CheckboxListTile(
+              title: const Text('Allow self-signed certificates'),
+              value: _allowInsecure,
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() => _allowInsecure = val);
+                }
+              },
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
           ],
         ),
       ),
@@ -446,6 +468,7 @@ class _ProxmoxConfigDialogState extends State<_ProxmoxConfigDialog> {
                 port: int.tryParse(_port.text.trim()) ?? 8006,
                 tokenId: _tokenId.text.trim(),
                 tokenSecret: _tokenSecret.text.trim(),
+                allowInsecure: _allowInsecure,
               ),
             );
           },

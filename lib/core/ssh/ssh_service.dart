@@ -167,6 +167,18 @@ class SshService implements ShellService {
   @visibleForTesting
   bool get debugHasHeartbeat => _heartbeatTimer?.isActive ?? false;
 
+  /// Test-only: cached password.
+  @visibleForTesting
+  String? get debugLastPassword => _lastPassword;
+
+  /// Test-only: cached private key.
+  @visibleForTesting
+  String? get debugLastPrivateKey => _lastPrivateKey;
+
+  /// Test-only: cached private key password.
+  @visibleForTesting
+  String? get debugLastPrivateKeyPassword => _lastPrivateKeyPassword;
+
   void _updateStatus(ConnectionStatus status) {
     _currentStatus = status;
     _statusController.add(status);
@@ -437,6 +449,7 @@ class SshService implements ShellService {
     cancelAutoReconnect();
 
     if (_reconnectAttempts >= _maxReconnectAttempts) {
+      _clearCachedCredentials();
       _updateStatus(ConnectionStatus.failed(
         const SshUnknownException(
           userMessage: 'Automatic reconnection failed.',
@@ -491,6 +504,12 @@ class SshService implements ShellService {
   void cancelAutoReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = null;
+  }
+
+  void _clearCachedCredentials() {
+    _lastPassword = null;
+    _lastPrivateKey = null;
+    _lastPrivateKeyPassword = null;
   }
 
   @override
@@ -553,11 +572,33 @@ class SshService implements ShellService {
 
     while (true) {
       try {
-        final output = await transport.run(
+        final session = await transport.execute(
           commandToRun,
           environment: envForChannel,
         );
-        return utf8.decode(output);
+        // Wait for stdout and stderr concurrently to prevent deadlocks
+        final stdoutFuture = session.stdout.expand((e) => e).toList();
+        final stderrFuture = session.stderr.expand((e) => e).toList();
+        
+        final results = await Future.wait([stdoutFuture, stderrFuture]);
+        final stdoutBytes = results[0];
+        final stderrBytes = results[1];
+        
+        await session.done;
+        
+        final stdoutResult = utf8.decode(stdoutBytes, allowMalformed: true);
+        final stderrResult = utf8.decode(stderrBytes, allowMalformed: true);
+        
+        if (session.exitCode != null && session.exitCode != 0) {
+          final errMessage = stderrResult.trim().isNotEmpty ? stderrResult.trim() : stdoutResult.trim();
+          final lowerErr = errMessage.toLowerCase();
+          if (lowerErr.contains('permission denied') || lowerErr.contains('password is required')) {
+            throw SshPermissionException(userMessage: 'Permission Denied: $errMessage (Sudo might be required)');
+          }
+          throw SshUnknownException(userMessage: 'Command failed with exit code ${session.exitCode}: $errMessage');
+        }
+        
+        return stdoutResult;
       } catch (error, stackTrace) {
         if (_isTransientChannelError(error) && retries < maxRetries) {
           retries++;
@@ -680,7 +721,10 @@ class SshService implements ShellService {
   @override
   Future<void> disconnect({bool updateStatus = true, bool cancelAuto = true}) async {
     _heartbeatTimer?.cancel();
-    if (cancelAuto) cancelAutoReconnect();
+    if (cancelAuto) {
+      cancelAutoReconnect();
+      _clearCachedCredentials();
+    }
 
     final forwardedSockets = _activeForwards.values.toList();
     _activeForwards.clear();

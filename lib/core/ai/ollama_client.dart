@@ -62,6 +62,52 @@ class OllamaClient {
     return false;
   }
 
+  static Future<bool> isLoopbackEndpointAsync(String url) async {
+    if (Platform.isAndroid || Platform.isIOS) return true;
+
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return false;
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || !uri.hasScheme) return false;
+    if (uri.scheme != 'http' && uri.scheme != 'https') return false;
+    final host = uri.host.toLowerCase();
+    if (host.isEmpty) return false;
+    if (host == 'localhost') return true;
+    if (host == '::1' || host == '[::1]') return true;
+
+    final addr = InternetAddress.tryParse(host);
+    if (addr != null) {
+      if (addr.type == InternetAddressType.IPv4) {
+        return addr.rawAddress.isNotEmpty && addr.rawAddress[0] == 127;
+      }
+      if (addr.type == InternetAddressType.IPv6) {
+        return addr.isLoopback;
+      }
+      return false;
+    }
+
+    try {
+      final addresses = await InternetAddress.lookup(host);
+      if (addresses.isEmpty) return false;
+      for (final address in addresses) {
+        if (address.type == InternetAddressType.IPv4) {
+          if (address.rawAddress.isEmpty || address.rawAddress[0] != 127) {
+            return false;
+          }
+        } else if (address.type == InternetAddressType.IPv6) {
+          if (!address.isLoopback) {
+            return false;
+          }
+        } else {
+          return false;
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Base URL of the Ollama daemon, e.g. `http://localhost:11434`.
   /// No trailing slash.
   final String endpoint;
@@ -78,6 +124,18 @@ class OllamaClient {
 
   Uri _uri(String path) => Uri.parse('$_normalizedEndpoint$path');
 
+  Future<void> _checkEndpoint() async {
+    final ok = await isLoopbackEndpointAsync(endpoint);
+    if (!ok) {
+      throw ArgumentError.value(
+        endpoint,
+        'endpoint',
+        'Local AI endpoints must point at loopback (127.0.0.0/8, ::1, or '
+            'localhost). Refusing to send prompts to a non-loopback host.',
+      );
+    }
+  }
+
   HttpClient _newClient() {
     final c = _httpClientFactory();
     c.connectionTimeout = _connectionTimeout;
@@ -88,6 +146,7 @@ class OllamaClient {
   ///
   /// Throws [OllamaUnavailableException] on connection failure.
   Future<String> version() async {
+    await _checkEndpoint();
     final client = _newClient();
     try {
       final req = await client
@@ -117,6 +176,7 @@ class OllamaClient {
 
   /// `GET /api/tags` — list locally installed models.
   Future<List<OllamaModel>> listModels() async {
+    await _checkEndpoint();
     final client = _newClient();
     try {
       final req = await client
@@ -139,6 +199,7 @@ class OllamaClient {
 
   /// `GET /api/ps` — list models currently loaded into memory.
   Future<List<OllamaLoadedModel>> listLoadedModels() async {
+    await _checkEndpoint();
     final client = _newClient();
     try {
       final req = await client
@@ -163,6 +224,7 @@ class OllamaClient {
 
   /// `DELETE /api/delete` — remove a model from disk.
   Future<void> deleteModel(String name) async {
+    await _checkEndpoint();
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
       throw ArgumentError.value(name, 'name', 'must not be empty');
@@ -198,6 +260,7 @@ class OllamaClient {
   /// closes the underlying HTTP connection (best-effort cancel — Ollama
   /// continues the pull on the server side, but the client stops reading).
   Stream<OllamaPullProgress> pullModel(String name) async* {
+    await _checkEndpoint();
     final trimmed = name.trim();
     if (trimmed.isEmpty) {
       throw ArgumentError.value(name, 'name', 'must not be empty');
@@ -233,6 +296,7 @@ class OllamaClient {
     required String modelfile,
     bool stream = false,
   }) async {
+    await _checkEndpoint();
     final trimmedModel = model.trim();
     final trimmedModelfile = modelfile.trim();
     if (trimmedModel.isEmpty) {
@@ -296,6 +360,7 @@ class OllamaClient {
     required List<Map<String, String>> messages,
     double? temperature,
   }) async* {
+    await _checkEndpoint();
     final trimmedModel = model.trim();
     if (trimmedModel.isEmpty) {
       throw ArgumentError.value(model, 'model', 'must not be empty');

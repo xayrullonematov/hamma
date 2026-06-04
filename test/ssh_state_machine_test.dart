@@ -228,7 +228,7 @@ class FakeSshTransport implements SshTransport {
   }
 
   @override
-  Future<SSHSession> execute(String command) =>
+  Future<SSHSession> execute(String command, {Map<String, String>? environment}) =>
       throw UnimplementedError('FakeSshTransport.execute');
 
   @override
@@ -441,6 +441,9 @@ void main() {
       expect(transport.closeCount, greaterThanOrEqualTo(1));
       expect(service.debugHasHeartbeat, isFalse);
       expect(service.debugHasPendingReconnect, isFalse);
+      expect(service.debugLastPassword, isNull);
+      expect(service.debugLastPrivateKey, isNull);
+      expect(service.debugLastPrivateKeyPassword, isNull);
       await connector.dispose();
     });
 
@@ -652,6 +655,9 @@ void main() {
           contains('Automatic reconnection failed'),
         );
         expect(service.debugHasPendingReconnect, isFalse);
+        expect(service.debugLastPassword, isNull);
+        expect(service.debugLastPrivateKey, isNull);
+        expect(service.debugLastPrivateKeyPassword, isNull);
 
         // Drain any close()/disconnect() futures the test created.
         connector.dispose();
@@ -692,15 +698,18 @@ void main() {
 
     test('enableAutoReconnect re-arms after disconnect with prior host',
         () async {
+      final t1 = FakeSshTransport();
+      final t2 = FakeSshTransport();
       final connector = FakeSshConnector()
-        ..enqueueSuccess(FakeSshTransport())
-        ..enqueueSuccess(FakeSshTransport());
+        ..enqueueSuccess(t1)
+        ..enqueueSuccess(t2);
       final service = makeService(connector: connector);
 
       await connectDefault(service);
       service.disableAutoReconnect();
-      await service.disconnect();
+      t1.simulateClosure();
 
+      await waitForState(service, SshConnectionState.disconnected);
       expect(service.currentStatus.state, SshConnectionState.disconnected);
 
       service.enableAutoReconnect();

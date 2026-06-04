@@ -41,7 +41,7 @@ abstract class SshTransport {
   Future<Uint8List> run(String command, {Map<String, String>? environment});
 
   /// Start a streaming session for [command].
-  Future<SSHSession> execute(String command);
+  Future<SSHSession> execute(String command, {Map<String, String>? environment});
 
   /// Open an interactive PTY shell.
   Future<SSHSession> shell({SSHPtyConfig? pty});
@@ -107,6 +107,7 @@ Future<SshTransport> defaultSshConnector({
     socket,
     username: username,
     identities: identities,
+    keepAliveInterval: const Duration(seconds: 15),
     onPasswordRequest: () => password.isNotEmpty ? password : null,
     onVerifyHostKey: onVerifyHostKey,
   );
@@ -138,7 +139,8 @@ class DartSsh2Transport implements SshTransport {
       _client.run(command, environment: environment);
 
   @override
-  Future<SSHSession> execute(String command) => _client.execute(command);
+  Future<SSHSession> execute(String command, {Map<String, String>? environment}) =>
+      _client.execute(command, environment: environment);
 
   @override
   Future<SSHSession> shell({SSHPtyConfig? pty}) => _client.shell(pty: pty);

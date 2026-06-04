@@ -174,8 +174,9 @@ class HammaApi {
   Future<HammaHttpResponse> httpGet(
     String url, {
     Map<String, String> headers = const {},
+    bool allowInsecure = false,
   }) {
-    return _request('GET', url, headers: headers);
+    return _request('GET', url, headers: headers, allowInsecure: allowInsecure);
   }
 
   /// POST [body] as JSON to [url]. The destination host must be in
@@ -184,12 +185,13 @@ class HammaApi {
     String url,
     Object? body, {
     Map<String, String> headers = const {},
+    bool allowInsecure = false,
   }) {
     final merged = <String, String>{
       'Content-Type': 'application/json',
       ...headers,
     };
-    return _request('POST', url, headers: merged, body: jsonEncode(body));
+    return _request('POST', url, headers: merged, body: jsonEncode(body), allowInsecure: allowInsecure);
   }
 
   Future<HammaHttpResponse> _request(
@@ -197,6 +199,7 @@ class HammaApi {
     String url, {
     required Map<String, String> headers,
     String? body,
+    bool allowInsecure = false,
   }) async {
     if (!capabilities.needsNetworkPort) {
       throw HammaApiException(
@@ -219,6 +222,9 @@ class HammaApi {
 
     final client = _httpClientFactory();
     client.connectionTimeout = const Duration(seconds: 15);
+    if (allowInsecure) {
+      client.badCertificateCallback = (cert, host, port) => true;
+    }
     try {
       final request = method == 'GET'
           ? await client.getUrl(uri)

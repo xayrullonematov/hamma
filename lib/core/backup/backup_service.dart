@@ -55,43 +55,45 @@ class BackupService {
     try {
       final backupFile = await _createEncryptedBackup(password);
 
-      switch (config.destination) {
-        case BackupDestination.local:
-          await Share.shareXFiles(
-            [XFile(backupFile.path)],
-            subject: 'Hamma Backup',
-          );
+      try {
+        switch (config.destination) {
+          case BackupDestination.local:
+            await Share.shareXFiles(
+              [XFile(backupFile.path)],
+              subject: 'Hamma Backup',
+            );
+            break;
+
+          case BackupDestination.sftp:
+            await _uploadToSftp(config, backupFile);
+            break;
+
+          case BackupDestination.webdav:
+            await _uploadToWebDav(config, backupFile);
+            break;
+
+          case BackupDestination.syncthing:
+            await _copyToSyncthing(config, backupFile);
+            break;
+
+          case BackupDestination.s3Compat:
+          case BackupDestination.iCloud:
+          case BackupDestination.dropbox:
+            await _uploadToCloud(config, backupFile, password);
+            break;
+        }
+      } finally {
+        if (await backupFile.exists()) {
           try {
             await backupFile.delete();
           } catch (e, stack) {
-            // Best-effort cleanup of the temp file after the share sheet
-            // closes. Failure here is non-fatal (OS will reap the temp
-            // file eventually) but we still want telemetry.
             unawaited(ErrorReporter.report(
               e,
               stack,
-              hint: 'BackupService: temp file cleanup after share',
+              hint: 'BackupService: temp file cleanup',
             ));
           }
-          break;
-
-        case BackupDestination.sftp:
-          await _uploadToSftp(config, backupFile);
-          break;
-
-        case BackupDestination.webdav:
-          await _uploadToWebDav(config, backupFile);
-          break;
-
-        case BackupDestination.syncthing:
-          await _copyToSyncthing(config, backupFile);
-          break;
-
-        case BackupDestination.s3Compat:
-        case BackupDestination.iCloud:
-        case BackupDestination.dropbox:
-          await _uploadToCloud(config, backupFile, password);
-          break;
+        }
       }
 
       await _backupStorage.saveConfig(
@@ -134,6 +136,7 @@ class BackupService {
     }
 
     File? fileToRestore;
+    bool isTempFile = false;
 
     try {
       if (localFilePath != null) {
@@ -147,9 +150,11 @@ class BackupService {
             break;
           case BackupDestination.sftp:
             fileToRestore = await _downloadFromSftp(config);
+            isTempFile = true;
             break;
           case BackupDestination.webdav:
             fileToRestore = await _downloadFromWebDav(config);
+            isTempFile = true;
             break;
           case BackupDestination.syncthing:
             fileToRestore = await _getFromSyncthing(config);
@@ -158,6 +163,7 @@ class BackupService {
           case BackupDestination.iCloud:
           case BackupDestination.dropbox:
             fileToRestore = await _downloadFromCloud(config, password);
+            isTempFile = true;
             break;
         }
       }
@@ -171,6 +177,14 @@ class BackupService {
       rethrow;
     } catch (e) {
       throw BackupException('Restore failed: $e');
+    } finally {
+      if (fileToRestore != null && isTempFile) {
+        if (await fileToRestore.exists()) {
+          try {
+            await fileToRestore.delete();
+          } catch (_) {}
+        }
+      }
     }
   }
 
