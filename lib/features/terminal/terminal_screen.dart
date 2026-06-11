@@ -69,8 +69,8 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
   late final Terminal _terminal;
   final FocusNode _terminalFocusNode = FocusNode();
   dynamic _session;
-  StreamSubscription<Uint8List>? _stdoutSubscription;
-  StreamSubscription<Uint8List>? _stderrSubscription;
+  StreamSubscription<String>? _stdoutSubscription;
+  StreamSubscription<String>? _stderrSubscription;
   String _recentTerminalOutput = '';
   bool _isFullScreen = false;
 
@@ -263,23 +263,23 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       );
 
       _stdoutSubscription?.cancel();
-      _stdoutSubscription = (session.stdout as Stream<Uint8List>).listen((data) {
+      _stdoutSubscription = (session.stdout as Stream<Uint8List>)
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .listen((data) {
         // Stream through a carry-buffered redactor so a secret split
         // across SSH chunks is still caught before either half is
         // emitted to xterm or the AI-context buffer.
-        final text = _stdoutRedactor.feed(
-          utf8.decode(data, allowMalformed: true),
-        );
+        final text = _stdoutRedactor.feed(data);
         if (text.isEmpty) return;
         _terminal.write(text);
         _trackOutput(text);
       });
 
       _stderrSubscription?.cancel();
-      _stderrSubscription = (session.stderr as Stream<Uint8List>).listen((data) {
-        final text = _stderrRedactor.feed(
-          utf8.decode(data, allowMalformed: true),
-        );
+      _stderrSubscription = (session.stderr as Stream<Uint8List>)
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .listen((data) {
+        final text = _stderrRedactor.feed(data);
         if (text.isEmpty) return;
         _terminal.write(text);
         _trackOutput(text);
@@ -308,6 +308,10 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       setState(() {
         _session = session;
       });
+
+      if (_terminal.viewWidth > 0 && _terminal.viewHeight > 0) {
+        _session?.resizeTerminal(_terminal.viewWidth, _terminal.viewHeight);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {

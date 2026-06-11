@@ -23,6 +23,7 @@ import '../sftp/file_explorer_screen.dart';
 import '../services/service_management_screen.dart';
 import '../settings/settings_screen.dart';
 import '../terminal/terminal_screen.dart';
+import '../ai_cli/ai_cli_screen.dart';
 
 class ServerDashboardScreen extends StatefulWidget {
   const ServerDashboardScreen({
@@ -821,6 +822,10 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           serverName: _server.name,
           aiSettings: _currentAiSettings,
         ),
+        AiCliScreen(
+          sshService: _sshService,
+          serverName: _server.name,
+        ),
         ..._enabledPlugins.map((plugin) => _PluginPanelHost(
               key: ValueKey('plugin_${plugin.manifest.id}'),
               plugin: plugin,
@@ -1169,6 +1174,7 @@ class _NavItems {
     _NavItem(icon: Icons.monitor_heart_outlined, label: 'Health'),
     _NavItem(icon: Icons.article_outlined, label: 'Logs'),
     _NavItem(icon: Icons.menu_book_outlined, label: 'Runbooks'),
+    _NavItem(icon: Icons.auto_awesome_outlined, label: 'AI CLI'),
   ];
 }
 

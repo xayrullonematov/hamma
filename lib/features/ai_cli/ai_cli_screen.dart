@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/ssh/ssh_service.dart';
 import '../../core/theme/app_colors.dart';
 
 class _AiCli {
@@ -25,7 +29,14 @@ class _AiCli {
 }
 
 class AiCliScreen extends StatefulWidget {
-  const AiCliScreen({super.key});
+  const AiCliScreen({
+    super.key,
+    this.sshService,
+    this.serverName,
+  });
+
+  final SshService? sshService;
+  final String? serverName;
 
   @override
   State<AiCliScreen> createState() => _AiCliScreenState();
@@ -63,6 +74,7 @@ class _AiCliScreenState extends State<AiCliScreen> {
   ];
 
   final Map<String, bool> _installed = {};
+  final Map<String, bool> _installing = {};
   bool _isChecking = true;
   String? _activeCliId;
   final TextEditingController _dirController = TextEditingController();
@@ -71,9 +83,13 @@ class _AiCliScreenState extends State<AiCliScreen> {
   @override
   void initState() {
     super.initState();
-    _workingDir = Platform.environment['HOME'] ?? 
-                 Platform.environment['USERPROFILE'] ?? 
-                 'C:\\Users\\User';
+    if (widget.sshService != null) {
+      _workingDir = '/';
+    } else {
+      _workingDir = Platform.environment['HOME'] ?? 
+                   Platform.environment['USERPROFILE'] ?? 
+                   'C:\\Users\\User';
+    }
     _dirController.text = _workingDir;
     _checkAllInstalled();
   }
@@ -87,12 +103,17 @@ class _AiCliScreenState extends State<AiCliScreen> {
   Future<void> _checkAllInstalled() async {
     for (final cli in _clis) {
       try {
-        final result = await Process.run(
-          cli.checkCommand.split(' ').first,
-          [cli.checkCommand.split(' ').last],
-          runInShell: true,
-        );
-        _installed[cli.id] = result.exitCode == 0;
+        if (widget.sshService != null) {
+          final out = await widget.sshService!.execute('command -v ${cli.checkCommand.split(' ').first} >/dev/null 2>&1 && echo 1 || echo 0');
+          _installed[cli.id] = out.trim() == '1';
+        } else {
+          final result = await Process.run(
+            cli.checkCommand.split(' ').first,
+            [cli.checkCommand.split(' ').last],
+            runInShell: true,
+          );
+          _installed[cli.id] = result.exitCode == 0;
+        }
       } catch (_) {
         _installed[cli.id] = false;
       }
@@ -106,32 +127,61 @@ class _AiCliScreenState extends State<AiCliScreen> {
 
   Future<void> _launch(_AiCli cli) async {
     final dir = _dirController.text.trim();
-    if (!Directory(dir).existsSync()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('DIRECTORY DOES NOT EXIST')),
-      );
-      return;
+    
+    if (widget.sshService != null) {
+      try {
+        final out = await widget.sshService!.execute('[ -d "$dir" ] && echo 1 || echo 0');
+        if (out.trim() != '1') {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('REMOTE DIRECTORY DOES NOT EXIST')),
+            );
+          }
+          return;
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('ERROR CHECKING DIR: $e')),
+          );
+        }
+        return;
+      }
+    } else {
+      if (!Directory(dir).existsSync()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('DIRECTORY DOES NOT EXIST')),
+        );
+        return;
+      }
     }
 
     if (_installed[cli.id] != true) {
-      setState(() => _activeCliId = cli.id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('INSTALLING ${cli.name.toUpperCase()}...')),
-      );
+      setState(() {
+        _activeCliId = cli.id;
+        _installing[cli.id] = true;
+      });
 
       try {
-        final installResult = await (Platform.isWindows
-            ? Process.run('cmd', ['/c', cli.installCommand], runInShell: false, workingDirectory: dir)
-            : Process.run('/bin/sh', ['-c', cli.installCommand], runInShell: false, workingDirectory: dir));
+        if (widget.sshService != null) {
+          await widget.sshService!.execute(cli.installCommand);
+        } else {
+          final installResult = await (Platform.isWindows
+              ? Process.run('cmd', ['/c', cli.installCommand], runInShell: false, workingDirectory: dir)
+              : Process.run('/bin/sh', ['-c', cli.installCommand], runInShell: false, workingDirectory: dir));
 
-        if (installResult.exitCode != 0) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('INSTALLATION FAILED: ${installResult.stderr}')),
-            );
-            setState(() => _activeCliId = null);
+          if (installResult.exitCode != 0) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('INSTALLATION FAILED: ${installResult.stderr}')),
+              );
+              setState(() {
+                _activeCliId = null;
+                _installing[cli.id] = false;
+              });
+            }
+            return;
           }
-          return;
         }
         _installed[cli.id] = true;
       } catch (e) {
@@ -139,9 +189,15 @@ class _AiCliScreenState extends State<AiCliScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('ERROR: $e')),
           );
-          setState(() => _activeCliId = null);
+          setState(() {
+            _activeCliId = null;
+            _installing[cli.id] = false;
+          });
         }
         return;
+      }
+      if (mounted) {
+        setState(() => _installing[cli.id] = false);
       }
     }
 
@@ -153,6 +209,7 @@ class _AiCliScreenState extends State<AiCliScreen> {
         builder: (_) => _AiCliTerminalScreen(
           cli: cli,
           workingDirectory: dir,
+          sshService: widget.sshService,
         ),
       ),
     );
@@ -194,6 +251,31 @@ class _AiCliScreenState extends State<AiCliScreen> {
     );
   }
 
+  Widget _buildPathChip(String path) {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _dirController.text = path;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          path,
+          style: const TextStyle(
+            fontFamily: AppColors.monoFamily,
+            fontSize: 11,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -202,9 +284,9 @@ class _AiCliScreenState extends State<AiCliScreen> {
         backgroundColor: AppColors.scaffoldBackground,
         elevation: 0,
         centerTitle: true,
-        title: const Text(
-          'AI CLI LAUNCHER',
-          style: TextStyle(
+        title: Text(
+          widget.serverName != null ? 'AI CLI (${widget.serverName})' : 'AI CLI LAUNCHER',
+          style: const TextStyle(
             fontFamily: AppColors.monoFamily,
             letterSpacing: 2,
             fontWeight: FontWeight.w800,
@@ -263,6 +345,23 @@ class _AiCliScreenState extends State<AiCliScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildPathChip('~/'),
+                      const SizedBox(width: 8),
+                      _buildPathChip('/'),
+                      const SizedBox(width: 8),
+                      _buildPathChip('/var/www'),
+                      const SizedBox(width: 8),
+                      _buildPathChip('/etc'),
+                      const SizedBox(width: 8),
+                      _buildPathChip('/tmp'),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -287,7 +386,8 @@ class _AiCliScreenState extends State<AiCliScreen> {
   }
 
   Widget _buildCliCard(_AiCli cli) {
-    final isActive = _activeCliId == cli.id;
+    final isInstalling = _installing[cli.id] == true;
+    final isActive = _activeCliId == cli.id || isInstalling;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -310,7 +410,12 @@ class _AiCliScreenState extends State<AiCliScreen> {
                   color: cli.accentColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.zero,
                 ),
-                child: Icon(Icons.terminal_rounded, color: cli.accentColor, size: 24),
+                child: isInstalling
+                    ? const Padding(
+                        padding: EdgeInsets.all(12.0),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(Icons.terminal_rounded, color: cli.accentColor, size: 24),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -343,9 +448,11 @@ class _AiCliScreenState extends State<AiCliScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _installed[cli.id] == true
-                          ? 'TAP TO LAUNCH IN SELECTED DIRECTORY'
-                          : 'TAP TO INSTALL & LAUNCH',
+                      isInstalling 
+                          ? 'INSTALLING DEPENDENCIES...'
+                          : (_installed[cli.id] == true
+                              ? 'TAP TO LAUNCH IN SELECTED DIRECTORY'
+                              : 'TAP TO INSTALL & LAUNCH'),
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textMuted,
@@ -388,10 +495,12 @@ class _AiCliTerminalScreen extends StatefulWidget {
   const _AiCliTerminalScreen({
     required this.cli,
     required this.workingDirectory,
+    this.sshService,
   });
 
   final _AiCli cli;
   final String workingDirectory;
+  final SshService? sshService;
 
   @override
   State<_AiCliTerminalScreen> createState() => _AiCliTerminalScreenState();
@@ -401,15 +510,25 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
   late final Terminal _terminal;
   final FocusNode _focusNode = FocusNode();
   Process? _process;
-  StreamSubscription<List<int>>? _stdoutSub;
-  StreamSubscription<List<int>>? _stderrSub;
+  SshSession? _sshSession;
+  StreamSubscription? _stdoutSub;
+  StreamSubscription? _stderrSub;
+  
+  final RegExp _urlRegex = RegExp(r'https?://[a-zA-Z0-9-._~:/?#\[\]@!$&()*+,;=%]+');
+  
+  String? _authUrl;
+  String? _authCode;
 
   @override
   void initState() {
     super.initState();
     _terminal = Terminal(maxLines: 10000);
     _terminal.onOutput = (data) {
-      _process?.stdin.write(utf8.encode(data));
+      if (widget.sshService != null) {
+        _sshSession?.write(Uint8List.fromList(utf8.encode(data)));
+      } else {
+        _process?.stdin.write(utf8.encode(data));
+      }
     };
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -417,30 +536,82 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
     });
   }
 
+  void _handleData(String data) {
+    _terminal.write(data);
+    _checkForAuthUrl(data);
+  }
+  
+  void _checkForAuthUrl(String data) {
+    if (data.toLowerCase().contains('device') || data.toLowerCase().contains('login') || data.toLowerCase().contains('auth')) {
+      final match = _urlRegex.firstMatch(data);
+      if (match != null) {
+        final url = match.group(0)!;
+        final codeMatch = RegExp(r'\b[A-Z0-9]{4}-[A-Z0-9]{4}\b').firstMatch(data);
+        final code = codeMatch?.group(0);
+        
+        if (mounted) {
+           setState(() {
+             _authUrl = url;
+             _authCode = code;
+           });
+        }
+      }
+    }
+  }
+
   Future<void> _startProcess() async {
     try {
-      _process = await Process.start(
-        widget.cli.command,
-        [],
-        workingDirectory: widget.workingDirectory,
-        runInShell: true,
-        environment: Platform.environment,
-      );
+      if (widget.sshService != null) {
+        _sshSession = await widget.sshService!.startShell(
+          width: _terminal.viewWidth > 0 ? _terminal.viewWidth : 80,
+          height: _terminal.viewHeight > 0 ? _terminal.viewHeight : 24,
+        );
+        
+        _stdoutSub = (_sshSession!.stdout as Stream<Uint8List>)
+            .transform(const Utf8Decoder(allowMalformed: true))
+            .listen((data) {
+              _handleData(data);
+            });
+            
+        _stderrSub = (_sshSession!.stderr as Stream<Uint8List>)
+            .transform(const Utf8Decoder(allowMalformed: true))
+            .listen((data) {
+              _handleData(data);
+            });
+            
+        _sshSession!.write(Uint8List.fromList(utf8.encode('cd "${widget.workingDirectory}" && ${widget.cli.command}\n')));
+        
+        _sshSession!.done.then((_) {
+          if (mounted) {
+            setState(() {
+              _terminal.write('\r\n[SSH SESSION EXITED]\r\n');
+            });
+          }
+        });
+      } else {
+        _process = await Process.start(
+          widget.cli.command,
+          [],
+          workingDirectory: widget.workingDirectory,
+          runInShell: true,
+          environment: Platform.environment,
+        );
 
-      _stdoutSub = _process!.stdout.listen((data) {
-        _terminal.write(utf8.decode(data, allowMalformed: true));
-      });
-      _stderrSub = _process!.stderr.listen((data) {
-        _terminal.write(utf8.decode(data, allowMalformed: true));
-      });
+        _stdoutSub = _process!.stdout.transform(const Utf8Decoder(allowMalformed: true)).listen((data) {
+          _handleData(data);
+        });
+        _stderrSub = _process!.stderr.transform(const Utf8Decoder(allowMalformed: true)).listen((data) {
+          _handleData(data);
+        });
 
-      _process!.exitCode.then((code) {
-        if (mounted) {
-          setState(() {
-            _terminal.write('\r\n[PROCESS EXITED WITH CODE $code]\r\n');
-          });
-        }
-      });
+        _process!.exitCode.then((code) {
+          if (mounted) {
+            setState(() {
+              _terminal.write('\r\n[PROCESS EXITED WITH CODE $code]\r\n');
+            });
+          }
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -455,6 +626,7 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
     _stdoutSub?.cancel();
     _stderrSub?.cancel();
     _process?.kill();
+    _sshSession?.close();
     _focusNode.dispose();
     super.dispose();
   }
@@ -470,11 +642,66 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
           style: const TextStyle(fontFamily: AppColors.monoFamily, fontSize: 13),
         ),
       ),
-      body: TerminalView(
-        _terminal,
-        focusNode: _focusNode,
-        autofocus: true,
-        hardwareKeyboardOnly: false,
+      body: Column(
+        children: [
+          if (_authUrl != null)
+            Container(
+              color: AppColors.accent.withValues(alpha: 0.15),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.lock_open, color: AppColors.accent, size: 24),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('AUTHENTICATION REQUIRED', style: TextStyle(color: AppColors.accent, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)),
+                        const SizedBox(height: 4),
+                        if (_authCode != null)
+                          Text('Code: $_authCode', style: const TextStyle(color: Colors.white, fontFamily: AppColors.monoFamily, fontSize: 13))
+                        else
+                          const Text('Please complete the login in your browser.', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: Colors.black,
+                      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+                    ),
+                    onPressed: () async {
+                      if (_authCode != null) {
+                        await Clipboard.setData(ClipboardData(text: _authCode!));
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code automatically copied to clipboard! Paste it in the browser.')));
+                        }
+                      }
+                      await launchUrl(Uri.parse(_authUrl!));
+                      if (mounted) {
+                        setState(() {
+                          _authUrl = null;
+                          _authCode = null;
+                        });
+                      }
+                    },
+                    icon: const Icon(Icons.open_in_browser, size: 18),
+                    label: Text(_authCode != null ? 'COPY & OPEN BROWSER' : 'OPEN BROWSER', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: TerminalView(
+              _terminal,
+              focusNode: _focusNode,
+              autofocus: true,
+              hardwareKeyboardOnly: false,
+            ),
+          ),
+        ],
       ),
     );
   }
