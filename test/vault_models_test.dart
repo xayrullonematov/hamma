@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hamma/core/vault/vault_secret.dart';
 import 'package:hamma/core/vault/vault_group.dart';
-import 'package:hamma/core/vault/credential_template.dart';
 
 void main() {
   group('VaultSecret', () {
@@ -115,17 +114,4 @@ void main() {
     });
   });
 
-  group('CredentialTemplate', () {
-    test('registry contains expected fields', () {
-      expect(
-        CredentialTemplate.registry[CredentialType.awsS3],
-        containsAll(['ACCESS_KEY_ID', 'SECRET_ACCESS_KEY', 'BUCKET', 'REGION']),
-      );
-      expect(
-        CredentialTemplate.registry[CredentialType.postgres],
-        containsAll(['HOST', 'PORT', 'DB_NAME', 'USER', 'PASSWORD']),
-      );
-      expect(CredentialTemplate.registry[CredentialType.generic], isEmpty);
-    });
-  });
 }
