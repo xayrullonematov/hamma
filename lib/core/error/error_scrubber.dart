@@ -40,6 +40,9 @@ class ErrorScrubber {
   // Matches the actual key format Hamma uses.
   static final RegExp _openaiKey = RegExp(r'sk-[A-Za-z0-9_\-]{20,}');
 
+  // Gemini API keys: `AIza` followed by 35+ base64-ish characters.
+  static final RegExp _geminiKey = RegExp(r'AIza[A-Za-z0-9_\-]{35,}');
+
   // Standalone JWTs (header.payload.signature). The leading `eyJ` is
   // the base64url encoding of `{"` — the start of every well-formed
   // JWT header and payload. Requiring it on both segments dramatically
@@ -82,6 +85,7 @@ class ErrorScrubber {
     // longer string can't be partially shadowed by other patterns.
     s = s.replaceAll(_jwt, '[SCRUBBED JWT]');
     s = s.replaceAll(_openaiKey, 'sk-$_redacted');
+    s = s.replaceAll(_geminiKey, 'AIza$_redacted');
     s = s.replaceAllMapped(_fieldPair, (m) {
       final match = m as RegExpMatch;
       final key = match.namedGroup('key');
