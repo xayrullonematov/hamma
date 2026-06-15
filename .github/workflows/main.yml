@@ -40,7 +40,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.41.8'
+          flutter-version: '3.44.2'
           cache: true
 
       - name: Install dependencies
@@ -94,7 +94,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.41.8'
+          flutter-version: '3.44.2'
           cache: true
 
       - name: Stamp version into pubspec.yaml
@@ -205,7 +205,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.41.8'
+          flutter-version: '3.44.2'
           cache: true
 
       - name: Stamp version into pubspec.yaml
@@ -322,7 +322,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.41.8'
+          flutter-version: '3.44.2'
           cache: true
 
       - name: Stamp version into pubspec.yaml
