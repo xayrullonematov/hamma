@@ -118,6 +118,29 @@ void main() {
     });
   });
 
+  group('ErrorScrubber.scrub — Gemini API keys', () {
+    test('scrubs a Gemini API key', () {
+      final result = ErrorScrubber.scrub(
+        'Gemini returned 401 for key AIzaSyB-abcdefghijklmnopqrstuvwxyz0123456',
+      );
+      expect(
+        result,
+        'Gemini returned 401 for key AIza[SCRUBBED]',
+      );
+    });
+
+    test('does not scrub bare "AIza" prefix without the key body', () {
+      expect(ErrorScrubber.scrub('AIzaShort'), 'AIzaShort');
+    });
+
+    test('scrubs AIza keys with dashes and underscores', () {
+      final result =
+          ErrorScrubber.scrub('Got AIzaSyB_1234-efgh_5678-ijkl_9012abcdefg from API');
+      expect(result, contains('AIza[SCRUBBED]'));
+      expect(result, isNot(contains('abcd_1234')));
+    });
+  });
+
   group('ErrorScrubber.scrub — OpenAI-style sk- keys', () {
     test('scrubs an OpenAI-style API key', () {
       final result = ErrorScrubber.scrub(
