@@ -121,7 +121,7 @@ void main() {
   group('ErrorScrubber.scrub — Gemini API keys', () {
     test('scrubs a Gemini API key', () {
       final result = ErrorScrubber.scrub(
-        'Gemini returned 401 for key AIzaSyB-abcdefghijklmnopqrstuvwxyz0123456',
+        'Gemini returned 401 for key AIzaXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
       );
       expect(
         result,
@@ -135,9 +135,9 @@ void main() {
 
     test('scrubs AIza keys with dashes and underscores', () {
       final result =
-          ErrorScrubber.scrub('Got AIzaSyB_1234-efgh_5678-ijkl_9012abcdefg from API');
+          ErrorScrubber.scrub('Got AIzaXXXX_1234-XXXX_5678-XXXX_9012XXXXXXX from API');
       expect(result, contains('AIza[SCRUBBED]'));
-      expect(result, isNot(contains('abcd_1234')));
+      expect(result, isNot(contains('1234-XXXX')));
     });
   });
 
