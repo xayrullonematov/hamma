@@ -263,7 +263,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       );
 
       _stdoutSubscription?.cancel();
-      _stdoutSubscription = (session.stdout as Stream<Uint8List>)
+      _stdoutSubscription = (session.stdout as Stream<List<int>>)
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((data) {
         // Stream through a carry-buffered redactor so a secret split
@@ -276,7 +276,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       });
 
       _stderrSubscription?.cancel();
-      _stderrSubscription = (session.stderr as Stream<Uint8List>)
+      _stderrSubscription = (session.stderr as Stream<List<int>>)
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((data) {
         final text = _stderrRedactor.feed(data);

@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:xterm/xterm.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:dartssh2/dartssh2.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -510,9 +510,9 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
   late final Terminal _terminal;
   final FocusNode _focusNode = FocusNode();
   Process? _process;
-  SshSession? _sshSession;
-  StreamSubscription? _stdoutSub;
-  StreamSubscription? _stderrSub;
+  SSHSession? _sshSession;
+  StreamSubscription<String>? _stdoutSub;
+  StreamSubscription<String>? _stderrSub;
   
   final RegExp _urlRegex = RegExp(r'https?://[a-zA-Z0-9-._~:/?#\[\]@!$&()*+,;=%]+');
   
@@ -567,13 +567,13 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
           height: _terminal.viewHeight > 0 ? _terminal.viewHeight : 24,
         );
         
-        _stdoutSub = (_sshSession!.stdout as Stream<Uint8List>)
+        _stdoutSub = (_sshSession!.stdout as Stream<List<int>>)
             .transform(const Utf8Decoder(allowMalformed: true))
             .listen((data) {
               _handleData(data);
             });
             
-        _stderrSub = (_sshSession!.stderr as Stream<Uint8List>)
+        _stderrSub = (_sshSession!.stderr as Stream<List<int>>)
             .transform(const Utf8Decoder(allowMalformed: true))
             .listen((data) {
               _handleData(data);
@@ -675,7 +675,7 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
                     onPressed: () async {
                       if (_authCode != null) {
                         await Clipboard.setData(ClipboardData(text: _authCode!));
-                        if (mounted) {
+                        if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Code automatically copied to clipboard! Paste it in the browser.')));
                         }
                       }
