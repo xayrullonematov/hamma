@@ -121,7 +121,7 @@ void main() {
   group('ErrorScrubber.scrub — Gemini API keys', () {
     test('scrubs a Gemini API key', () {
       final result = ErrorScrubber.scrub(
-        'Gemini returned 401 for key AIzaXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
+        'Gemini returned 401 for key AIza_FAKE_KEY_FOR_TESTING_1234567890123456',
       );
       expect(
         result,
@@ -135,16 +135,16 @@ void main() {
 
     test('scrubs AIza keys with dashes and underscores', () {
       final result =
-          ErrorScrubber.scrub('Got AIzaXXXX_1234-XXXX_5678-XXXX_9012XXXXXXX from API');
+          ErrorScrubber.scrub('Got AIza_FAKE_KEY_1234-TEST_5678-MOCK_9012XXXXXXX from API');
       expect(result, contains('AIza[SCRUBBED]'));
-      expect(result, isNot(contains('1234-XXXX')));
+      expect(result, isNot(contains('1234-TEST')));
     });
   });
 
   group('ErrorScrubber.scrub — OpenAI-style sk- keys', () {
     test('scrubs an OpenAI-style API key', () {
       final result = ErrorScrubber.scrub(
-        'OpenAI returned 401 for key sk-abc123def456ghi789jkl012mno345',
+        'OpenAI returned 401 for key sk-XXXX123XXXX456XXXX789XXXX012XXXX345',
       );
       expect(
         result,
@@ -158,9 +158,9 @@ void main() {
 
     test('scrubs sk- keys with dashes and underscores', () {
       final result =
-          ErrorScrubber.scrub('Got sk-abcd_1234-efgh_5678-ijkl_9012 from API');
+          ErrorScrubber.scrub('Got sk-XXXX_1234-XXXX_5678-XXXX_9012 from API');
       expect(result, contains('sk-[SCRUBBED]'));
-      expect(result, isNot(contains('abcd_1234')));
+      expect(result, isNot(contains('1234-XXXX')));
     });
   });
 
