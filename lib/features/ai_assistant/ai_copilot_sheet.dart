@@ -21,6 +21,8 @@ import 'copilot/widgets/step_timeline_card.dart';
 import 'widgets/local_engine_status_pill.dart';
 import 'widgets/voice_input_button.dart';
 import 'widgets/voice_mode_toggle.dart';
+import '../../core/audit/execution_audit_entry.dart';
+import '../../core/audit/execution_audit_service.dart';
 import '../../core/theme/app_colors.dart';
 
 class AiCopilotSheet extends StatefulWidget {
@@ -453,8 +455,13 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
       step.state = CopilotPlanStepState.sentToShell;
     });
 
+    final startTime = DateTime.now();
+    final stopwatch = Stopwatch()..start();
+
     try {
       final output = await widget.onRunCommand(step.controller.text);
+      stopwatch.stop();
+
       if (mounted) {
         setState(() {
           step.state = output == null ? CopilotPlanStepState.failed : CopilotPlanStepState.executed;
@@ -462,7 +469,25 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
           _runningCommandIndex = null;
         });
       }
+
+      // Log execution to audit service
+      final auditEntry = ExecutionAuditEntry(
+        id: '${startTime.millisecondsSinceEpoch}_$index',
+        naturalLanguageIntent: step.title,
+        proposedCommand: command,
+        riskLevel: assessment.riskLevel,
+        approvedAt: startTime,
+        serverId: widget.serverId,
+        serverName: widget.serverId,
+        stdout: output,
+        stderr: null,
+        executionDurationMs: stopwatch.elapsedMilliseconds,
+        status: output == null ? ExecutionStatus.failed : ExecutionStatus.executed,
+      );
+      unawaited(ExecutionAuditService().logExecution(auditEntry));
     } catch (e) {
+      stopwatch.stop();
+
       if (mounted) {
         setState(() {
           step.state = CopilotPlanStepState.failed;
@@ -470,6 +495,22 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
           _runningCommandIndex = null;
         });
       }
+
+      // Log failed execution to audit service
+      final auditEntry = ExecutionAuditEntry(
+        id: '${startTime.millisecondsSinceEpoch}_$index',
+        naturalLanguageIntent: step.title,
+        proposedCommand: command,
+        riskLevel: assessment.riskLevel,
+        approvedAt: startTime,
+        serverId: widget.serverId,
+        serverName: widget.serverId,
+        stdout: null,
+        stderr: e.toString(),
+        executionDurationMs: stopwatch.elapsedMilliseconds,
+        status: ExecutionStatus.failed,
+      );
+      unawaited(ExecutionAuditService().logExecution(auditEntry));
     }
   }
 
