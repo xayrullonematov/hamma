@@ -1,0 +1,27 @@
+{
+  "project_type": "Flutter cross-platform SSH/SFTP client with local AI assistant",
+  "language": "Dart",
+  "build_system": "Flutter (flutter pub get, flutter build). No Flutter SDK available in sandbox.",
+  "test_framework": "flutter_test with FlutterSecureStorage.setMockInitialValues({}) for mocking secure storage. Tests in flat test/ directory.",
+  "build_command": "flutter analyze",
+  "test_command": "flutter test",
+  "verification_instructions": "Since Flutter/Dart is not available in the sandbox, use Dart static analysis patterns (check imports, syntax correctness via grep). Validate code follows existing patterns found in vault_access_log.dart and chat_history_storage.dart.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "flutter pub get (not available in sandbox)",
+  "environment_constraints": "No Flutter SDK or Dart SDK available. No network for package installs (INTEGRATIONS_ONLY). Use AST-level validation: ensure files have correct imports, follow project conventions, and are syntactically valid Dart.",
+  "contribution_requirements": "From AGENTS.md: Safety before execution - never blindly execute AI commands. Always show what will run, why, confirmation before execution. Every execution is logged per ROADMAP.md Phase 3 design principles.",
+  "key_patterns": "1. Storage uses FlutterSecureStorage with JSON serialization (see chat_history_storage.dart, vault_access_log.dart). 2. Models are immutable with toJson/fromJson factories. 3. Features live in lib/features/{name}/ with widgets/ subdirectory. 4. Core services in lib/core/{domain}/. 5. Theme: Geometric Brutalism with AppColors (black/white/red, zero-radius). 6. Tests use FlutterSecureStorage.setMockInitialValues({}) in setUp. 7. VaultAccessLog pattern: stores events in secure storage with max cap, JSON serialization, insert-at-front ordering.",
+  "relevant_files": [
+    "lib/core/vault/vault_access_log.dart",
+    "lib/core/storage/chat_history_storage.dart",
+    "lib/core/ai/command_risk_assessor.dart",
+    "lib/core/ai/ai_command_service.dart",
+    "lib/features/ai_assistant/ai_copilot_sheet.dart",
+    "lib/features/ai_assistant/widgets/interactive_command_block.dart",
+    "lib/core/theme/app_colors.dart",
+    "lib/core/models/server_profile.dart",
+    "test/vault_access_log_test.dart",
+    "test/chat_history_storage_test.dart"
+  ],
+  "directory_structure": "lib/core/ (services, models, vault, ai, storage, theme), lib/features/ (ai_assistant, terminal, servers, sftp, etc.), test/ (flat test files with _test.dart suffix)"
+}
