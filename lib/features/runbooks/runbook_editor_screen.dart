@@ -234,6 +234,7 @@ class _RunbookEditorScreenState extends State<RunbookEditorScreen> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _steps.length,
+            // ignore: deprecated_member_use
             onReorder: (int oldIndex, int newIndex) {
               setState(() {
                 if (oldIndex < newIndex) {
