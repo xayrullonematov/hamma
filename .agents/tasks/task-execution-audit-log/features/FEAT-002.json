@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Create the Audit Log UI screen and integrate the audit logging hook into the AI copilot execution flow. This feature adds: (1) a browsable/searchable audit log screen following Geometric Brutalism design, (2) integration into AiCopilotSheet's _runCommand method to log every AI-proposed command execution with timing data.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create lib/features/audit_log/audit_log_screen.dart - A StatefulWidget screen that displays execution audit entries in a scrollable list. Include: search bar at top (TextField with monospace styling), filter chips for risk level (low/moderate/high/critical) and status (approved/executed/failed), list of AuditLogEntryCard widgets. Use AppColors for theming (scaffoldBackground, surface, panel, textPrimary, textMuted, danger, border). Zero border-radius throughout. The screen should accept no constructor params (it loads entries from ExecutionAuditService internally).",
     "Create lib/features/audit_log/widgets/audit_log_entry_card.dart - A StatelessWidget that displays a single ExecutionAuditEntry. Shows: server name (bold, uppercase), the natural language intent, the command in monospace, risk level badge (colored per level using AppColors.danger for high/critical, AppColors.textMuted for low, AppColors.warning for moderate), execution status, timestamp formatted as relative time (e.g. '2m ago', '1h ago', '3d ago'), execution duration in ms if available. Tapping expands to show stdout/stderr output.",
@@ -22,5 +22,5 @@
     "Verify the UI files use AppColors constants consistently with zero border-radius"
   ],
   "blocked_reason": null,
-  "findings": "No Flutter/Dart SDK available so build/test commands were not run. Code was validated by checking import paths, pattern matching against interactive_command_block.dart and vault_access_log.dart references, and verifying all class references resolve correctly. Used widget.serverId for both serverId and serverName since the widget has no serverName property. The unawaited() call for audit logging ensures it does not block the UI."
+  "findings": "Post-review fixes applied: (1) Added .catchError((_) {}) to both unawaited audit write calls to prevent unhandled async exceptions. (2) Wired AuditLogScreen into server dashboard sidebar as 'Audit' tab with Icons.receipt_long_outlined icon and added it to the IndexedStack. (3) Added static _truncateOutput helper that caps strings at 4096 chars with '... [truncated]' suffix; applied to stdout and stderr before persisting. (4) Added _auditService field to _AiCopilotSheetState to reuse a single ExecutionAuditService instance. (5) Changed ID generation to use microsecondsSinceEpoch + index + Random.secure().nextInt(1 << 32) suffix matching the vault_storage.dart pattern, ensuring uniqueness. Also fixed deprecated withOpacity in audit_log_entry_card.dart. No Flutter SDK available so verified via code review and pattern matching only."
 }
