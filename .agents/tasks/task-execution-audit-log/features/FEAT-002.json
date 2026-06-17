@@ -1,0 +1,26 @@
+{
+  "id": "FEAT-002",
+  "type": "feat",
+  "description": "Create the Audit Log UI screen and integrate the audit logging hook into the AI copilot execution flow. This feature adds: (1) a browsable/searchable audit log screen following Geometric Brutalism design, (2) integration into AiCopilotSheet's _runCommand method to log every AI-proposed command execution with timing data.",
+  "status": "completed",
+  "steps": [
+    "Create lib/features/audit_log/audit_log_screen.dart - A StatefulWidget screen that displays execution audit entries in a scrollable list. Include: search bar at top (TextField with monospace styling), filter chips for risk level (low/moderate/high/critical) and status (approved/executed/failed), list of AuditLogEntryCard widgets. Use AppColors for theming (scaffoldBackground, surface, panel, textPrimary, textMuted, danger, border). Zero border-radius throughout. The screen should accept no constructor params (it loads entries from ExecutionAuditService internally).",
+    "Create lib/features/audit_log/widgets/audit_log_entry_card.dart - A StatelessWidget that displays a single ExecutionAuditEntry. Shows: server name (bold, uppercase), the natural language intent, the command in monospace, risk level badge (colored per level using AppColors.danger for high/critical, AppColors.textMuted for low, AppColors.warning for moderate), execution status, timestamp formatted as relative time (e.g. '2m ago', '1h ago', '3d ago'), execution duration in ms if available. Tapping expands to show stdout/stderr output.",
+    "Modify lib/features/ai_assistant/ai_copilot_sheet.dart - In the _runCommand method (around line 457), wrap the onRunCommand call with timing measurement and audit logging. Before calling widget.onRunCommand: record start time, capture the command text from step.controller.text. After onRunCommand returns: calculate duration, create an ExecutionAuditEntry with all fields populated (serverId from widget.serverId, command, risk level from _riskAssessor.assess(), status based on output being null or not, duration). Call ExecutionAuditService().logExecution(entry). Add import for execution_audit_entry.dart and execution_audit_service.dart at the top of the file.",
+    "Create test/execution_audit_integration_test.dart - Test that verifies the audit logging integration works: mock the FlutterSecureStorage, simulate a command execution flow, verify that an ExecutionAuditEntry is persisted with correct fields (command, serverId, risk level, status)."
+  ],
+  "acceptance_criteria": [
+    "AuditLogScreen displays a list of audit entries with search and filter capabilities",
+    "AuditLogEntryCard shows all key information (server, command, risk, time, status) in Brutalist style",
+    "Every command executed via AiCopilotSheet._runCommand is logged to ExecutionAuditService with timing data",
+    "The audit entry includes: natural language intent (from _planSteps context), proposed command, risk level, server ID, execution result, and duration",
+    "Test verifies the integration hook correctly persists audit data"
+  ],
+  "verification": [
+    "Verify audit_log_screen.dart imports ExecutionAuditService and ExecutionAuditEntry correctly",
+    "Verify ai_copilot_sheet.dart has new import for audit service and logging call in _runCommand",
+    "Verify the UI files use AppColors constants consistently with zero border-radius"
+  ],
+  "blocked_reason": null,
+  "findings": "Post-review fixes applied: (1) Added .catchError((_) {}) to both unawaited audit write calls to prevent unhandled async exceptions. (2) Wired AuditLogScreen into server dashboard sidebar as 'Audit' tab with Icons.receipt_long_outlined icon and added it to the IndexedStack. (3) Added static _truncateOutput helper that caps strings at 4096 chars with '... [truncated]' suffix; applied to stdout and stderr before persisting. (4) Added _auditService field to _AiCopilotSheetState to reuse a single ExecutionAuditService instance. (5) Changed ID generation to use microsecondsSinceEpoch + index + Random.secure().nextInt(1 << 32) suffix matching the vault_storage.dart pattern, ensuring uniqueness. Also fixed deprecated withOpacity in audit_log_entry_card.dart. No Flutter SDK available so verified via code review and pattern matching only."
+}

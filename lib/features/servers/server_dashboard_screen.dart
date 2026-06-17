@@ -24,6 +24,7 @@ import '../services/service_management_screen.dart';
 import '../settings/settings_screen.dart';
 import '../terminal/terminal_screen.dart';
 import '../ai_cli/ai_cli_screen.dart';
+import '../audit_log/audit_log_screen.dart';
 
 class ServerDashboardScreen extends StatefulWidget {
   const ServerDashboardScreen({
@@ -826,6 +827,7 @@ class _ServerDashboardScreenState extends State<ServerDashboardScreen> {
           sshService: _sshService,
           serverName: _server.name,
         ),
+        const AuditLogScreen(),
         ..._enabledPlugins.map((plugin) => _PluginPanelHost(
               key: ValueKey('plugin_${plugin.manifest.id}'),
               plugin: plugin,
@@ -1175,6 +1177,7 @@ class _NavItems {
     _NavItem(icon: Icons.article_outlined, label: 'Logs'),
     _NavItem(icon: Icons.menu_book_outlined, label: 'Runbooks'),
     _NavItem(icon: Icons.auto_awesome_outlined, label: 'AI CLI'),
+    _NavItem(icon: Icons.receipt_long_outlined, label: 'Audit'),
   ];
 }
 
