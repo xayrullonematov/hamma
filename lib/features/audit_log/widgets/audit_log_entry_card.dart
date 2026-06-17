@@ -217,7 +217,7 @@ class _AuditLogEntryCardState extends State<AuditLogEntryCard> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: riskColor.withOpacity(0.15),
+                      color: riskColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.zero,
                       border: Border.all(color: riskColor, width: 1),
                     ),

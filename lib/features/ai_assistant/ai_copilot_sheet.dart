@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -83,6 +84,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
   late AiCommandService _aiCommandService;
   final ChatHistoryStorage _chatHistoryStorage = const ChatHistoryStorage();
   final CommandRiskAssessor _riskAssessor = const CommandRiskAssessor();
+  final ExecutionAuditService _auditService = ExecutionAuditService();
   final TextEditingController _promptController = TextEditingController();
 
   late final VoiceSession _voiceSession = VoiceSession();
@@ -435,6 +437,18 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
     ) ?? false;
   }
 
+  /// Truncates [value] to [maxLength] characters, appending a suffix if trimmed.
+  static String? _truncateOutput(String? value, {int maxLength = 4096}) {
+    if (value == null || value.length <= maxLength) return value;
+    return '${value.substring(0, maxLength)}... [truncated]';
+  }
+
+  /// Generates a unique audit entry ID using microsecond timestamp and secure random suffix.
+  static String _generateAuditId(DateTime startTime, int index) {
+    final r = Random.secure().nextInt(1 << 32);
+    return '${startTime.microsecondsSinceEpoch}_${index}_$r';
+  }
+
   Future<void> _runCommand(int index) async {
     if (!widget.canRunCommands()) {
       _showError(widget.executionUnavailableMessage);
@@ -472,19 +486,19 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
       // Log execution to audit service
       final auditEntry = ExecutionAuditEntry(
-        id: '${startTime.millisecondsSinceEpoch}_$index',
+        id: _generateAuditId(startTime, index),
         naturalLanguageIntent: step.title,
         proposedCommand: command,
         riskLevel: assessment.riskLevel,
         approvedAt: startTime,
         serverId: widget.serverId,
         serverName: widget.serverId,
-        stdout: output,
+        stdout: _truncateOutput(output),
         stderr: null,
         executionDurationMs: stopwatch.elapsedMilliseconds,
         status: output == null ? ExecutionStatus.failed : ExecutionStatus.executed,
       );
-      unawaited(ExecutionAuditService().logExecution(auditEntry));
+      unawaited(_auditService.logExecution(auditEntry).catchError((_) {}));
     } catch (e) {
       stopwatch.stop();
 
@@ -498,7 +512,7 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
 
       // Log failed execution to audit service
       final auditEntry = ExecutionAuditEntry(
-        id: '${startTime.millisecondsSinceEpoch}_$index',
+        id: _generateAuditId(startTime, index),
         naturalLanguageIntent: step.title,
         proposedCommand: command,
         riskLevel: assessment.riskLevel,
@@ -506,11 +520,11 @@ class _AiCopilotSheetState extends State<AiCopilotSheet> {
         serverId: widget.serverId,
         serverName: widget.serverId,
         stdout: null,
-        stderr: e.toString(),
+        stderr: _truncateOutput(e.toString()),
         executionDurationMs: stopwatch.elapsedMilliseconds,
         status: ExecutionStatus.failed,
       );
-      unawaited(ExecutionAuditService().logExecution(auditEntry));
+      unawaited(_auditService.logExecution(auditEntry).catchError((_) {}));
     }
   }
 
