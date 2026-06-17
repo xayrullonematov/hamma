@@ -75,7 +75,7 @@ void main() {
       FlutterSecureStorage.setMockInitialValues({});
     });
 
-    ExecutionAuditEntry _createEntry({
+    ExecutionAuditEntry createEntry({
       required String id,
       String serverId = 'server-1',
       String serverName = 'Test Server',
@@ -98,7 +98,7 @@ void main() {
 
     test('logExecution stores entry and loadAll retrieves it', () async {
       final service = ExecutionAuditService();
-      final entry = _createEntry(id: 'entry-1');
+      final entry = createEntry(id: 'entry-1');
 
       await service.logExecution(entry);
       final entries = await service.loadAll();
@@ -111,9 +111,9 @@ void main() {
     test('loadAll returns entries in reverse chronological order', () async {
       final service = ExecutionAuditService();
 
-      await service.logExecution(_createEntry(id: 'first'));
-      await service.logExecution(_createEntry(id: 'second'));
-      await service.logExecution(_createEntry(id: 'third'));
+      await service.logExecution(createEntry(id: 'first'));
+      await service.logExecution(createEntry(id: 'second'));
+      await service.logExecution(createEntry(id: 'third'));
 
       final entries = await service.loadAll();
       expect(entries.length, 3);
@@ -126,13 +126,13 @@ void main() {
       final service = ExecutionAuditService();
 
       await service.logExecution(
-        _createEntry(id: 'a', serverId: 'server-1'),
+        createEntry(id: 'a', serverId: 'server-1'),
       );
       await service.logExecution(
-        _createEntry(id: 'b', serverId: 'server-2'),
+        createEntry(id: 'b', serverId: 'server-2'),
       );
       await service.logExecution(
-        _createEntry(id: 'c', serverId: 'server-1'),
+        createEntry(id: 'c', serverId: 'server-1'),
       );
 
       final results = await service.loadByServer('server-1');
@@ -144,10 +144,10 @@ void main() {
       final service = ExecutionAuditService();
 
       await service.logExecution(
-        _createEntry(id: 'x', command: 'docker ps -a'),
+        createEntry(id: 'x', command: 'docker ps -a'),
       );
       await service.logExecution(
-        _createEntry(id: 'y', command: 'ls -la'),
+        createEntry(id: 'y', command: 'ls -la'),
       );
 
       final results = await service.search('docker');
@@ -159,10 +159,10 @@ void main() {
       final service = ExecutionAuditService();
 
       await service.logExecution(
-        _createEntry(id: 'x', intent: 'restart the nginx service'),
+        createEntry(id: 'x', intent: 'restart the nginx service'),
       );
       await service.logExecution(
-        _createEntry(id: 'y', intent: 'list files'),
+        createEntry(id: 'y', intent: 'list files'),
       );
 
       final results = await service.search('nginx');
@@ -174,7 +174,7 @@ void main() {
       final service = ExecutionAuditService();
 
       await service.logExecution(
-        _createEntry(id: 'x', command: 'Docker Compose Up'),
+        createEntry(id: 'x', command: 'Docker Compose Up'),
       );
 
       final results = await service.search('docker compose');
@@ -185,7 +185,7 @@ void main() {
       final service = ExecutionAuditService();
 
       for (int i = 0; i < 1050; i++) {
-        await service.logExecution(_createEntry(id: 'entry-$i'));
+        await service.logExecution(createEntry(id: 'entry-$i'));
       }
 
       final entries = await service.loadAll();
@@ -197,9 +197,9 @@ void main() {
     test('deleteEntry removes specific entry', () async {
       final service = ExecutionAuditService();
 
-      await service.logExecution(_createEntry(id: 'keep-1'));
-      await service.logExecution(_createEntry(id: 'remove-me'));
-      await service.logExecution(_createEntry(id: 'keep-2'));
+      await service.logExecution(createEntry(id: 'keep-1'));
+      await service.logExecution(createEntry(id: 'remove-me'));
+      await service.logExecution(createEntry(id: 'keep-2'));
 
       await service.deleteEntry('remove-me');
 
@@ -213,8 +213,8 @@ void main() {
     test('clearAll empties the log', () async {
       final service = ExecutionAuditService();
 
-      await service.logExecution(_createEntry(id: 'a'));
-      await service.logExecution(_createEntry(id: 'b'));
+      await service.logExecution(createEntry(id: 'a'));
+      await service.logExecution(createEntry(id: 'b'));
 
       await service.clearAll();
 
@@ -226,7 +226,7 @@ void main() {
       final service = ExecutionAuditService();
 
       for (int i = 0; i < 100; i++) {
-        await service.logExecution(_createEntry(id: 'entry-$i'));
+        await service.logExecution(createEntry(id: 'entry-$i'));
       }
 
       final recent = await service.recentEntries(limit: 10);
