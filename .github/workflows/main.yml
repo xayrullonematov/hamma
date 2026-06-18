@@ -143,11 +143,22 @@ jobs:
           flutter build apk \
             --release \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --verbose 2>&1 | tee build.log
+            2>&1 | tee build.log || true
 
-          # Check if build succeeded
-          if [ ! -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
-            echo "::error::APK build failed - checking build logs..."
+          # Flutter 3.44+ with AGP 8.7+ may not copy the APK to flutter-apk/.
+          # Find it at the standard Gradle output path and place it where the
+          # workflow expects it.
+          APK_FLUTTER="build/app/outputs/flutter-apk/app-release.apk"
+          APK_GRADLE="build/app/outputs/apk/release/app-release.apk"
+
+          if [ -f "$APK_FLUTTER" ]; then
+            echo "APK found at flutter-apk path"
+          elif [ -f "$APK_GRADLE" ]; then
+            echo "APK found at Gradle output path — copying to flutter-apk/"
+            mkdir -p build/app/outputs/flutter-apk
+            cp "$APK_GRADLE" "$APK_FLUTTER"
+          else
+            echo "::error::APK build failed — no APK found in either output path"
             tail -100 build.log
             exit 1
           fi
