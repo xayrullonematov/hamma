@@ -79,3 +79,28 @@ GoogleService-Info.plist
 
 # GitHub Actions
 # No specific ignores needed for GH Actions usually, but ensuring secrets are out is key.
+
+# AI assistants / agent scratch
+GEMINI.md
+AGENTS.md
+CLAUDE.md
+.antigravity.md
+.agents/
+.jules/
+.claude/
+
+# Replit
+.replit
+replit.md
+replit.nix
+
+# Local scratch / logs / Replit uploads
+attached_assets/
+build_android_log.txt
+test_sftp.dart
+logs_*.zip
+
+# Stray npm files (this is a Flutter project)
+node_modules/
+package.json
+package-lock.json
