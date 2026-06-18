@@ -1,34 +1,22 @@
+// ignore_for_file: implementation_imports
+
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import 'package:xterm/xterm.dart';
-import 'package:xterm/src/core/buffer/cell_offset.dart';
-import 'package:xterm/src/core/input/keys.dart';
-import 'package:xterm/src/terminal.dart';
-import 'package:xterm/src/ui/controller.dart';
-import 'package:xterm/src/ui/cursor_type.dart';
 import 'package:xterm/src/ui/custom_text_edit.dart';
 import 'package:xterm/src/ui/gesture/gesture_detector.dart';
 import 'package:xterm/src/ui/input_map.dart';
 import 'package:xterm/src/ui/keyboard_listener.dart';
-import 'package:xterm/src/ui/keyboard_visibility.dart';
 import 'package:xterm/src/ui/render.dart';
 import 'package:xterm/src/ui/scroll_handler.dart';
 import 'package:xterm/src/ui/shortcut/actions.dart';
-import 'package:xterm/src/ui/shortcut/shortcuts.dart';
-import 'package:xterm/src/ui/terminal_text_style.dart';
-import 'package:xterm/src/ui/terminal_theme.dart';
-import 'package:xterm/src/ui/themes.dart';
-
-import 'package:xterm/src/core/mouse/button.dart';
-import 'package:xterm/src/core/mouse/button_state.dart';
 
 class HammaTerminalView extends StatefulWidget {
   const HammaTerminalView(
@@ -282,12 +270,11 @@ class HammaTerminalViewState extends State<HammaTerminalView> {
   void _showContextMenu(BuildContext context, Offset globalPosition) async {
     final selection = _controller.selection;
     final hasSelection = selection != null;
+    final overlay = Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
     final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
     final hasClipboard = clipboardData?.text != null && clipboardData!.text!.isNotEmpty;
 
-    if (!mounted) return;
-
-    final RenderBox overlay = Navigator.of(context).overlay!.context.findRenderObject() as RenderBox;
+    if (!context.mounted) return;
 
     final result = await showMenu<String>(
       context: context,
@@ -429,12 +416,12 @@ class HammaTerminalViewState extends State<HammaTerminalView> {
     } else if (!widget.readOnly) {
       // Only listen for key input from a hardware keyboard.
       child = CustomKeyboardListener(
-        child: child,
         focusNode: _focusNode,
         autofocus: widget.autofocus,
         onInsert: _onInsert,
         onComposing: _onComposing,
         onKeyEvent: _handleKeyEvent,
+        child: child,
       );
     }
 
@@ -468,7 +455,7 @@ class HammaTerminalViewState extends State<HammaTerminalView> {
     );
 
     child = Container(
-      color: widget.theme.background.withOpacity(widget.backgroundOpacity),
+      color: widget.theme.background.withValues(alpha: widget.backgroundOpacity),
       padding: widget.padding,
       child: child,
     );
@@ -763,7 +750,6 @@ class _HammaTerminalGestureHandlerState extends State<HammaTerminalGestureHandle
   @override
   Widget build(BuildContext context) {
     return TerminalGestureDetector(
-      child: widget.child,
       onTapUp: widget.onTapUp,
       onSingleTapUp: onSingleTapUp,
       onTapDown: onTapDown,
@@ -776,6 +762,7 @@ class _HammaTerminalGestureHandlerState extends State<HammaTerminalGestureHandle
       onDragStart: onDragStart,
       onDragUpdate: onDragUpdate,
       onDoubleTapDown: onDoubleTapDown,
+      child: widget.child,
     );
   }
 
