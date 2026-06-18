@@ -134,16 +134,19 @@ jobs:
             echo "::warning::ANDROID_KEYSTORE_BASE64 not set — APKs will be debug-signed (sideload only)"
           fi
 
+      # fllama compiles its native lib via the Dart native-assets hook, which
+      # forces a single universal APK — Gradle does not emit per-ABI splits, so
+      # --split-per-abi makes flutter look for split files that are never
+      # produced and fail *after* a successful 16-min build. Build one APK.
       - name: Build APK
         run: |
           flutter build apk \
             --release \
-            --split-per-abi \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
             --verbose 2>&1 | tee build.log
-          
+
           # Check if build succeeded
-          if [ ! -f "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" ]; then
+          if [ ! -f "build/app/outputs/flutter-apk/app-release.apk" ]; then
             echo "::error::APK build failed - checking build logs..."
             tail -100 build.log
             exit 1
@@ -156,12 +159,10 @@ jobs:
           name: android-build-logs-${{ github.run_number }}
           path: build.log
 
-      - name: Rename APKs with brand prefix
+      - name: Rename APK with brand prefix
         run: |
           cd build/app/outputs/flutter-apk
-          for f in app-*-release.apk; do
-            mv "$f" "Hamma-${f#app-}"
-          done
+          mv app-release.apk Hamma-release.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4.6.2
@@ -443,27 +444,52 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'rc') }}
           body: |
-            ## Hamma ${{ github.ref_name }}
+            # Hamma ${{ github.ref_name }}
 
-            ### Platform Downloads
+            **Manage your server without writing commands.** Hamma connects to
+            your servers directly over SSH from your own device and pairs it
+            with an on-device AI copilot — no backend proxy, no cloud relay, no
+            telemetry. Your credentials and your sessions never leave your machine.
 
-            | Platform | File | Notes |
-            |----------|------|-------|
-            | 🤖 Android ARM64 | `Hamma-arm64-v8a-release.apk` | Most modern Android devices |
-            | 🤖 Android ARM32 | `Hamma-armeabi-v7a-release.apk` | Older Android devices |
-            | 🤖 Android x86_64 | `Hamma-x86_64-release.apk` | Android emulators |
-            | 🐧 Linux | `Hamma-x86_64.AppImage` | Any x86_64 Linux distro |
-            | 🪟 Windows | `Hamma-Setup-Windows-x64.exe` | Windows 10/11 installer |
+            ## Downloads
 
-            ### Linux Quick Start
+            | Platform | Download | Requirements |
+            |----------|----------|--------------|
+            | 🤖 **Android** | `Hamma-release.apk` | Android 7.0 (API 24) or newer · phones, tablets & emulators |
+            | 🐧 **Linux** | `Hamma-x86_64.AppImage` | Any modern 64-bit Linux distribution |
+            | 🪟 **Windows** | `Hamma-Setup-Windows-x64.exe` | Windows 10 or 11 (64-bit) |
+
+            > The Android build is a single universal APK that runs on every
+            > supported architecture (ARM64, ARM32, x86_64) — install the one file
+            > on any device.
+
+            ## Highlights
+
+            - 🔐 **Local-first security** — SSH keys stay encrypted at rest in an
+              Argon2id + AES-256 vault and are decrypted in memory only for the
+              duration of a session.
+            - 🤖 **On-device AI copilot** — runs entirely on loopback; prompts are
+              never sent to a remote host. Cloud providers remain strictly opt-in.
+            - ✅ **No surprises** — every AI-suggested command is shown, editable,
+              risk-assessed, and only ever runs after you confirm it.
+            - 🚫 **Zero telemetry** — no analytics, no crash-report uploads.
+
+            ## Installation
+
+            **Android** — download `Hamma-release.apk`, then enable
+            *Install unknown apps* for your browser or file manager and open it.
+
+            **Linux**
             ```sh
             chmod +x Hamma-x86_64.AppImage
             ./Hamma-x86_64.AppImage
             ```
 
-            ### Windows Quick Start
-            Run `Hamma-Setup-Windows-x64.exe` and follow the installer wizard.
+            **Windows** — run `Hamma-Setup-Windows-x64.exe` and follow the
+            installer wizard. On first launch, SmartScreen may warn for unsigned
+            builds; choose *More info → Run anyway*.
 
             ---
-            _Built automatically by GitHub Actions from tag `${{ github.ref_name }}`._
+
+            _Released from tag `${{ github.ref_name }}`. See the full changelog below._
           files: dist/*

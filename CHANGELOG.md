@@ -6,6 +6,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [1.2.0] — 2026-06-18
+
+### Fixed
+- **Android release build now produces an installable APK.** The CI Android job compiled successfully but failed at the final packaging step: `--split-per-abi` is incompatible with fllama's native-assets build hook, which forces a single universal APK, so Flutter looked for per-ABI files that were never produced. The workflow now builds one universal APK (`Hamma-release.apk`) covering ARM64, ARM32, and x86_64.
+
+### Changed
+- Production-grade GitHub Release notes — per-platform download table with OS requirements, install instructions, and product highlights.
+
+---
+
 ## [1.1.0] — 2026-05-03
 
 ### Added
