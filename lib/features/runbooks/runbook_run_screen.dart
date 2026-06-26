@@ -10,6 +10,7 @@ import '../../core/runbooks/runbook_runner.dart';
 import '../../core/ssh/ssh_service.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/custom_actions_storage.dart';
+import '../../core/storage/frecency_storage.dart';
 import '../../core/theme/app_colors.dart';
 import '../../features/quick_actions/quick_actions.dart';
 
@@ -82,43 +83,44 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('RUN PARAMETERS'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final p in widget.runbook.params)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: TextField(
-                    controller: controllers[p.name],
-                    decoration: InputDecoration(
-                      labelText: p.label,
-                      hintText: p.required ? 'required' : 'optional',
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('RUN PARAMETERS'),
+            content: SizedBox(
+              width: 420,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final p in widget.runbook.params)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: TextField(
+                        controller: controllers[p.name],
+                        decoration: InputDecoration(
+                          labelText: p.label,
+                          hintText: p.required ? 'required' : 'optional',
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('CANCEL'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  for (final p in widget.runbook.params) {
+                    _params[p.name] = controllers[p.name]!.text;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('RUN'),
+              ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('CANCEL'),
-          ),
-          FilledButton(
-            onPressed: () {
-              for (final p in widget.runbook.params) {
-                _params[p.name] = controllers[p.name]!.text;
-              }
-              Navigator.pop(ctx, true);
-            },
-            child: const Text('RUN'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -128,15 +130,19 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
       params: _params,
       executeCommand: _executeWithCancel,
       aiSettings: widget.aiSettings,
+      frecencyStorage: FrecencyStorage(),
       confirmRiskGate: _confirmRiskGate,
       promptUser: _promptUser,
       confirmManualWait: _confirmManualWait,
     );
     _runner = runner;
     setState(() => _running = true);
-    _eventSub = runner.events.listen(_onEvent, onDone: () {
-      if (mounted) setState(() => _running = false);
-    });
+    _eventSub = runner.events.listen(
+      _onEvent,
+      onDone: () {
+        if (mounted) setState(() => _running = false);
+      },
+    );
     runner.run().then((result) {
       if (!mounted) return;
       setState(() => _result = result);
@@ -218,40 +224,43 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     final ok = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text('RISK GATE — ${analysis.riskLevel.name.toUpperCase()}'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(step.label),
-              const SizedBox(height: 8),
-              SelectableText(
-                renderedCommand,
-                style: const TextStyle(
-                  fontFamily: AppColors.monoFamily,
-                  fontFamilyFallback: AppColors.monoFallback,
-                  fontSize: 12,
-                ),
+      builder:
+          (ctx) => AlertDialog(
+            title: Text('RISK GATE — ${analysis.riskLevel.name.toUpperCase()}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(step.label),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    renderedCommand,
+                    style: const TextStyle(
+                      fontFamily: AppColors.monoFamily,
+                      fontFamilyFallback: AppColors.monoFallback,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(analysis.explanation),
+                ],
               ),
-              const SizedBox(height: 12),
-              Text(analysis.explanation),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('ABORT'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppColors.danger,
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('PROCEED'),
+              ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ABORT'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('PROCEED'),
-          ),
-        ],
-      ),
     );
     return ok == true;
   }
@@ -261,24 +270,25 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text(step.label),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: InputDecoration(hintText: step.question),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL'),
+      builder:
+          (ctx) => AlertDialog(
+            title: Text(step.label),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              decoration: InputDecoration(hintText: step.question),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('CANCEL'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, ctrl.text),
+                child: const Text('OK'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -287,20 +297,21 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     final ok = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: Text(step.label),
-        content: const Text('Manual gate — continue?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('ABORT'),
+      builder:
+          (ctx) => AlertDialog(
+            title: Text(step.label),
+            content: const Text('Manual gate — continue?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('ABORT'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('CONTINUE'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('CONTINUE'),
-          ),
-        ],
-      ),
     );
     return ok == true;
   }
@@ -314,9 +325,9 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
       } else if (event is StepStdout) {
         _rows[event.step.id]?.stdout = event.chunk;
       } else if (event is StepNotify) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(event.message)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(event.message)));
       } else if (event is StepFinished) {
         if (_currentStepId == event.result.step.id) _currentStepId = null;
         final r = _rows[event.result.step.id];
@@ -339,8 +350,9 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     if (result == null) return;
     final name = '${result.runbook.name} (run)';
     final commandLines = result.results
-        .where((r) =>
-            r.step.type == RunbookStepType.command && r.stdout.isNotEmpty)
+        .where(
+          (r) => r.step.type == RunbookStepType.command && r.stdout.isNotEmpty,
+        )
         .map((r) => '# ${r.step.label}\n${r.stdout.trim()}')
         .join('\n\n');
     if (commandLines.isEmpty) {
@@ -362,9 +374,9 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
     ];
     await storage.saveActions(next);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Saved as snippet.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Saved as snippet.')));
   }
 
   @override
@@ -390,39 +402,41 @@ class _RunbookRunScreenState extends State<RunbookRunScreen> {
             ),
         ],
       ),
-      body: !_paramsCollected
-          ? Center(
-              child: FilledButton.icon(
-                onPressed: _collectParamsAndStart,
-                icon: const Icon(Icons.play_arrow_rounded),
-                label: const Text('START RUN'),
-              ),
-            )
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                for (final s in widget.runbook.steps)
-                  _StepTile(row: _rows[s.id]!),
-              ],
-            ),
-      bottomNavigationBar: _running
-          ? Container(
-              color: AppColors.panel,
-              padding: const EdgeInsets.all(12),
-              child: SafeArea(
-                top: false,
+      body:
+          !_paramsCollected
+              ? Center(
                 child: FilledButton.icon(
-                  onPressed: _stop,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.danger,
-                    minimumSize: const Size.fromHeight(48),
-                  ),
-                  icon: const Icon(Icons.stop_rounded),
-                  label: const Text('STOP'),
+                  onPressed: _collectParamsAndStart,
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('START RUN'),
                 ),
+              )
+              : ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  for (final s in widget.runbook.steps)
+                    _StepTile(row: _rows[s.id]!),
+                ],
               ),
-            )
-          : null,
+      bottomNavigationBar:
+          _running
+              ? Container(
+                color: AppColors.panel,
+                padding: const EdgeInsets.all(12),
+                child: SafeArea(
+                  top: false,
+                  child: FilledButton.icon(
+                    onPressed: _stop,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.danger,
+                      minimumSize: const Size.fromHeight(48),
+                    ),
+                    icon: const Icon(Icons.stop_rounded),
+                    label: const Text('STOP'),
+                  ),
+                ),
+              )
+              : null,
     );
   }
 }
@@ -460,13 +474,13 @@ class _StepTile extends StatelessWidget {
   }
 
   String _labelForStatus() => switch (row.status) {
-        _RowStatus.pending => 'PENDING',
-        _RowStatus.running => 'RUNNING',
-        _RowStatus.succeeded => 'OK',
-        _RowStatus.skipped => 'SKIPPED',
-        _RowStatus.cancelled => 'CANCELLED',
-        _RowStatus.failed => 'FAILED',
-      };
+    _RowStatus.pending => 'PENDING',
+    _RowStatus.running => 'RUNNING',
+    _RowStatus.succeeded => 'OK',
+    _RowStatus.skipped => 'SKIPPED',
+    _RowStatus.cancelled => 'CANCELLED',
+    _RowStatus.failed => 'FAILED',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -477,11 +491,7 @@ class _StepTile extends StatelessWidget {
       child: ExpansionTile(
         title: Row(
           children: [
-            Container(
-              width: 10,
-              height: 10,
-              color: color,
-            ),
+            Container(width: 10, height: 10, color: color),
             const SizedBox(width: 8),
             Expanded(
               child: Text(

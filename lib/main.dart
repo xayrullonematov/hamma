@@ -648,7 +648,10 @@ class _AiServerAppState extends State<AiServerApp>
   }
 
   Future<List<SftpRecentFile>> _loadPaletteSftpFiles() async {
-    final ids = await _frecencyStorage.topItems('sftp_files', limit: 40);
+    final ids = await _frecencyStorage.topItems(
+      FrecencyStorage.categorySftpFiles,
+      limit: 40,
+    );
     String serverNameFor(String serverId) {
       for (final server in _servers) {
         if (server.id == serverId) return server.name;

@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hamma/core/runbooks/runbook.dart';
 import 'package:hamma/core/runbooks/runbook_runner.dart';
+import 'package:hamma/core/storage/frecency_storage.dart';
 
 class _FakeSsh {
   _FakeSsh(this.responses);
@@ -17,6 +19,10 @@ class _FakeSsh {
 }
 
 void main() {
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+  });
+
   group('renderTemplate', () {
     test('substitutes params and step.<id>.stdout tokens', () {
       final out = renderTemplate(
@@ -97,26 +103,18 @@ void main() {
       expect(ssh.calls, ['uname -a']);
     });
 
-    test('skipIfRegex skips a step when the referenced output matches',
-        () async {
-      final ssh = _FakeSsh({'check': 'ERROR detected'});
+    test('records runbook frecency when configured', () async {
+      final frecency = FrecencyStorage();
+      final ssh = _FakeSsh({'uname -a': 'Linux test 6.6.0'});
       final rb = Runbook(
-        id: 'rb',
-        name: 'Skip',
+        id: 'rb-frequent',
+        name: 'Frecency',
         steps: const [
           RunbookStep(
-            id: 'check',
-            label: 'check',
+            id: 's1',
+            label: 'uname',
             type: RunbookStepType.command,
-            command: 'check',
-          ),
-          RunbookStep(
-            id: 'restart',
-            label: 'restart',
-            type: RunbookStepType.command,
-            command: 'restart',
-            skipIfRegex: r'ERROR',
-            skipIfReferenceStepId: 'check',
+            command: 'uname -a',
           ),
         ],
       );
@@ -124,11 +122,54 @@ void main() {
         runbook: rb,
         params: const {},
         executeCommand: ssh.execute,
+        frecencyStorage: frecency,
       );
-      final result = await runner.run();
-      expect(result.results.last.status, RunbookStepStatus.skipped);
-      expect(ssh.calls, ['check']);
+
+      await runner.run();
+
+      expect(
+        await frecency.countFor(
+          FrecencyStorage.categoryRunbooks,
+          'rb-frequent',
+        ),
+        1,
+      );
     });
+
+    test(
+      'skipIfRegex skips a step when the referenced output matches',
+      () async {
+        final ssh = _FakeSsh({'check': 'ERROR detected'});
+        final rb = Runbook(
+          id: 'rb',
+          name: 'Skip',
+          steps: const [
+            RunbookStep(
+              id: 'check',
+              label: 'check',
+              type: RunbookStepType.command,
+              command: 'check',
+            ),
+            RunbookStep(
+              id: 'restart',
+              label: 'restart',
+              type: RunbookStepType.command,
+              command: 'restart',
+              skipIfRegex: r'ERROR',
+              skipIfReferenceStepId: 'check',
+            ),
+          ],
+        );
+        final runner = RunbookRunner(
+          runbook: rb,
+          params: const {},
+          executeCommand: ssh.execute,
+        );
+        final result = await runner.run();
+        expect(result.results.last.status, RunbookStepStatus.skipped);
+        expect(ssh.calls, ['check']);
+      },
+    );
 
     test('failed step without continueOnError stops the run', () async {
       final ssh = _FakeSsh(const {});
@@ -192,11 +233,7 @@ void main() {
     });
 
     test('rejects an invalid runbook at construction time', () {
-      final rb = Runbook(
-        id: '',
-        name: '',
-        steps: const [],
-      );
+      final rb = Runbook(id: '', name: '', steps: const []);
       expect(
         () => RunbookRunner(
           runbook: rb,
@@ -207,43 +244,45 @@ void main() {
       );
     });
 
-    test('aiSummarize calls the local LLM hook with the prior stdout',
-        () async {
-      final ssh = _FakeSsh({'tail': 'first line\nsecond line'});
-      String? captured;
-      final rb = Runbook(
-        id: 'rb',
-        name: 'AI',
-        steps: const [
-          RunbookStep(
-            id: 'tail',
-            label: 'tail',
-            type: RunbookStepType.command,
-            command: 'tail',
-          ),
-          RunbookStep(
-            id: 'sum',
-            label: 'summary',
-            type: RunbookStepType.aiSummarize,
-            aiPrompt: 'Read this:',
-            aiReferenceStepId: 'tail',
-          ),
-        ],
-      );
-      final runner = RunbookRunner(
-        runbook: rb,
-        params: const {},
-        executeCommand: ssh.execute,
-        callLocalAi: (prompt) async {
-          captured = prompt;
-          return 'ALL CLEAR';
-        },
-      );
-      final result = await runner.run();
-      expect(captured, contains('Read this:'));
-      expect(captured, contains('first line'));
-      expect(result.results.last.summary, 'ALL CLEAR');
-    });
+    test(
+      'aiSummarize calls the local LLM hook with the prior stdout',
+      () async {
+        final ssh = _FakeSsh({'tail': 'first line\nsecond line'});
+        String? captured;
+        final rb = Runbook(
+          id: 'rb',
+          name: 'AI',
+          steps: const [
+            RunbookStep(
+              id: 'tail',
+              label: 'tail',
+              type: RunbookStepType.command,
+              command: 'tail',
+            ),
+            RunbookStep(
+              id: 'sum',
+              label: 'summary',
+              type: RunbookStepType.aiSummarize,
+              aiPrompt: 'Read this:',
+              aiReferenceStepId: 'tail',
+            ),
+          ],
+        );
+        final runner = RunbookRunner(
+          runbook: rb,
+          params: const {},
+          executeCommand: ssh.execute,
+          callLocalAi: (prompt) async {
+            captured = prompt;
+            return 'ALL CLEAR';
+          },
+        );
+        final result = await runner.run();
+        expect(captured, contains('Read this:'));
+        expect(captured, contains('first line'));
+        expect(result.results.last.summary, 'ALL CLEAR');
+      },
+    );
 
     test('branch step jumps to true target on regex match', () async {
       final ssh = _FakeSsh({'check': 'STATUS=ok healthy'});
@@ -288,10 +327,7 @@ void main() {
       // recover must be SKIPPED entirely (never executed because we
       // jumped over it).
       expect(ssh.calls, ['check']);
-      expect(
-        result.results.map((r) => r.step.id),
-        ['check', 'gate', 'finish'],
-      );
+      expect(result.results.map((r) => r.step.id), ['check', 'gate', 'finish']);
       expect(result.results.last.status, RunbookStepStatus.succeeded);
     });
 
@@ -330,19 +366,18 @@ void main() {
         ],
       );
       final json = rb.toJson();
-      final stepTypes = (json['steps'] as List)
-          .map((s) => (s as Map)['type'] as String)
-          .toList();
-      expect(
-        stepTypes,
-        ['prompt-user', 'wait-for', 'ai-summarize', 'branch'],
-      );
+      final stepTypes =
+          (json['steps'] as List)
+              .map((s) => (s as Map)['type'] as String)
+              .toList();
+      expect(stepTypes, ['prompt-user', 'wait-for', 'ai-summarize', 'branch']);
       // Round-trip back through the parser, including a back-compat
       // entry that uses the old camelCase name.
       final mutated = Map<String, dynamic>.from(json);
-      final mutatedSteps = (mutated['steps'] as List)
-          .map((s) => Map<String, dynamic>.from(s as Map))
-          .toList();
+      final mutatedSteps =
+          (mutated['steps'] as List)
+              .map((s) => Map<String, dynamic>.from(s as Map))
+              .toList();
       mutatedSteps[0]['type'] = 'promptUser'; // legacy name
       mutated['steps'] = mutatedSteps;
       final parsed = Runbook.fromJson(mutated);
@@ -354,8 +389,7 @@ void main() {
       ]);
     });
 
-    test('cancellation onCancel listener fires when STOP is pressed',
-        () async {
+    test('cancellation onCancel listener fires when STOP is pressed', () async {
       final cancel = RunbookCancellation();
       var fired = 0;
       cancel.onCancel(() => fired++);
@@ -412,15 +446,23 @@ void main() {
           },
         );
         final result = await runner.run();
-        expect(cancelFired, 1,
-            reason: 'timeout MUST fire the executor onCancel '
-                'listener so the in-flight SSH session is closed');
+        expect(
+          cancelFired,
+          1,
+          reason:
+              'timeout MUST fire the executor onCancel '
+              'listener so the in-flight SSH session is closed',
+        );
         expect(result.results[0].status, RunbookStepStatus.failed);
         expect(result.results[0].error, contains('timeout'));
         expect(result.results[1].status, RunbookStepStatus.cancelled);
-        expect(bRan, isFalse,
-            reason: 'next step must not start while the timed-out '
-                'command could still be running on the remote');
+        expect(
+          bRan,
+          isFalse,
+          reason:
+              'next step must not start while the timed-out '
+              'command could still be running on the remote',
+        );
       },
     );
 
@@ -461,8 +503,7 @@ void main() {
         );
         final result = await runner.run();
         expect(result.results[0].status, RunbookStepStatus.failed);
-        expect(result.results[0].stdout,
-            'fetching origin/main...\n');
+        expect(result.results[0].stdout, 'fetching origin/main...\n');
         expect(result.results[0].error, contains('exit 128'));
         expect(result.results[0].error, contains('not a git repository'));
         // Critical safety property: the second command MUST NOT
@@ -518,38 +559,42 @@ void main() {
       },
     );
 
-    test('cancellation between steps marks subsequent steps cancelled',
-        () async {
-      final ssh = _FakeSsh({'a': 'one', 'b': 'two'});
-      late RunbookRunner runner;
-      final rb = Runbook(
-        id: 'rb',
-        name: 'Cancel',
-        steps: const [
-          RunbookStep(
+    test(
+      'cancellation between steps marks subsequent steps cancelled',
+      () async {
+        final ssh = _FakeSsh({'a': 'one', 'b': 'two'});
+        late RunbookRunner runner;
+        final rb = Runbook(
+          id: 'rb',
+          name: 'Cancel',
+          steps: const [
+            RunbookStep(
               id: 'a',
               label: 'a',
               type: RunbookStepType.command,
-              command: 'a'),
-          RunbookStep(
+              command: 'a',
+            ),
+            RunbookStep(
               id: 'b',
               label: 'b',
               type: RunbookStepType.command,
-              command: 'b'),
-        ],
-      );
-      runner = RunbookRunner(
-        runbook: rb,
-        params: const {},
-        executeCommand: (cmd, cancel) async {
-          if (cmd == 'a') runner.cancellation.cancel();
-          return ssh.execute(cmd, cancel);
-        },
-      );
-      final result = await runner.run();
-      expect(result.results[0].status, RunbookStepStatus.succeeded);
-      expect(result.results[1].status, RunbookStepStatus.cancelled);
-      expect(ssh.calls, ['a']);
-    });
+              command: 'b',
+            ),
+          ],
+        );
+        runner = RunbookRunner(
+          runbook: rb,
+          params: const {},
+          executeCommand: (cmd, cancel) async {
+            if (cmd == 'a') runner.cancellation.cancel();
+            return ssh.execute(cmd, cancel);
+          },
+        );
+        final result = await runner.run();
+        expect(result.results[0].status, RunbookStepStatus.succeeded);
+        expect(result.results[1].status, RunbookStepStatus.cancelled);
+        expect(ssh.calls, ['a']);
+      },
+    );
   });
 }

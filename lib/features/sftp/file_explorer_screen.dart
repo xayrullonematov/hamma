@@ -8,8 +8,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/models/server_profile.dart';
+import '../../core/palette/sources/sftp_files_source.dart';
 import '../../core/ssh/sftp_service.dart';
 import '../../core/storage/app_prefs_storage.dart';
+import '../../core/storage/frecency_storage.dart';
 import 'file_editor_screen.dart';
 import '../../core/theme/app_colors.dart';
 
@@ -41,6 +43,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen>
 
   final SftpService _sftpService = SftpService();
   final AppPrefsStorage _prefs = const AppPrefsStorage();
+  final FrecencyStorage _frecencyStorage = FrecencyStorage();
   late final TextEditingController _pathController;
   late final TextEditingController _searchController;
 
@@ -97,6 +100,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen>
         privateKeyPassword: widget.server.privateKeyPassword,
         onTrustHostKey: _confirmHostKeyTrust,
       );
+      _recordServerOpen();
       final initialPath = widget.initialPath?.trim();
       if (initialPath == null || initialPath.isEmpty) {
         await _loadDirectory('.');
@@ -204,6 +208,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen>
         await _loadDirectory(trimmedPath);
       } else {
         final content = await _sftpService.readFile(trimmedPath);
+        _recordSftpFileOpen(trimmedPath);
         if (!mounted) return;
 
         await Navigator.of(context).push(
@@ -228,6 +233,32 @@ class _FileExplorerScreenState extends State<FileExplorerScreen>
         });
       }
     }
+  }
+
+  void _recordServerOpen() {
+    final serverId = widget.server.id;
+    if (serverId.isEmpty) return;
+
+    unawaited(
+      _frecencyStorage
+          .record(FrecencyStorage.categoryServers, serverId)
+          .catchError((_) {}),
+    );
+  }
+
+  void _recordSftpFileOpen(String path) {
+    final trimmedPath = path.trim();
+    if (trimmedPath.isEmpty || widget.server.id.isEmpty) return;
+
+    final id = SftpRecentFile.frecencyId(
+      serverId: widget.server.id,
+      path: trimmedPath,
+    );
+    unawaited(
+      _frecencyStorage
+          .record(FrecencyStorage.categorySftpFiles, id)
+          .catchError((_) {}),
+    );
   }
 
   Future<void> _toggleHiddenFiles() async {
@@ -273,6 +304,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen>
 
     try {
       final content = await _sftpService.readFile(entryPath);
+      _recordSftpFileOpen(entryPath);
       if (!mounted) {
         return;
       }
@@ -319,6 +351,7 @@ class _FileExplorerScreenState extends State<FileExplorerScreen>
 
       final localPath = p.join(dir, entry.filename);
       await _sftpService.downloadFile(remotePath, localPath);
+      _recordSftpFileOpen(remotePath);
       _showMessage('Downloaded to $localPath');
     } catch (error) {
       _showMessage('Download failed: $error');

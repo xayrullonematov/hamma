@@ -9,6 +9,7 @@ import 'package:pointycastle/export.dart' as pc;
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../background/background_keepalive.dart';
+import '../storage/frecency_storage.dart';
 import '../storage/trusted_host_key_storage.dart';
 import '../vault/vault_injector.dart';
 import '../vault/vault_secret.dart';
@@ -36,7 +37,10 @@ class SshService implements ShellService {
 
   /// Gets or creates a shared SshService instance for a specific server.
   static SshService forServer(String serverId) {
-    return _instances.putIfAbsent(serverId, () => SshService());
+    return _instances.putIfAbsent(
+      serverId,
+      () => SshService(serverId: serverId),
+    );
   }
 
   /// Removes a server instance from the registry.
@@ -66,18 +70,22 @@ class SshService implements ShellService {
     SshConnector? connector,
     Future<void> Function()? enableBackgroundKeepalive,
     Future<void> Function()? disableBackgroundKeepalive,
+    String? serverId,
+    FrecencyStorage? frecencyStorage,
     List<int>? reconnectBackoffSeconds,
     int maxReconnectAttempts = kDefaultMaxReconnectAttempts,
-  })  : _trustedHostKeyStorage =
-            trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage(),
-        _connector = connector ?? defaultSshConnector,
-        _enableBackgroundKeepalive =
-            enableBackgroundKeepalive ?? BackgroundKeepalive.enable,
-        _disableBackgroundKeepalive =
-            disableBackgroundKeepalive ?? BackgroundKeepalive.disable,
-        _backoffSeconds =
-            reconnectBackoffSeconds ?? kDefaultReconnectBackoffSeconds,
-        _maxReconnectAttempts = maxReconnectAttempts {
+  }) : _trustedHostKeyStorage =
+           trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage(),
+       _connector = connector ?? defaultSshConnector,
+       _enableBackgroundKeepalive =
+           enableBackgroundKeepalive ?? BackgroundKeepalive.enable,
+       _disableBackgroundKeepalive =
+           disableBackgroundKeepalive ?? BackgroundKeepalive.disable,
+       _serverId = serverId,
+       _frecencyStorage = frecencyStorage,
+       _backoffSeconds =
+           reconnectBackoffSeconds ?? kDefaultReconnectBackoffSeconds,
+       _maxReconnectAttempts = maxReconnectAttempts {
     if (reconnectBackoffSeconds != null && reconnectBackoffSeconds.isEmpty) {
       throw ArgumentError.value(
         reconnectBackoffSeconds,
@@ -111,6 +119,8 @@ class SshService implements ShellService {
   final SshConnector _connector;
   final Future<void> Function() _enableBackgroundKeepalive;
   final Future<void> Function() _disableBackgroundKeepalive;
+  final String? _serverId;
+  final FrecencyStorage? _frecencyStorage;
   final List<int> _backoffSeconds;
   final int _maxReconnectAttempts;
 
@@ -137,7 +147,8 @@ class SshService implements ShellService {
     required int port,
     required String algorithm,
     required String fingerprint,
-  })? _lastOnTrustHostKey;
+  })?
+  _lastOnTrustHostKey;
 
   @override
   bool get isConnected => _currentStatus.isConnected;
@@ -196,20 +207,24 @@ class SshService implements ShellService {
       }
       return SshNetworkException(
         userMessage: 'Could not reach the server.',
-        suggestedAction: 'Check your internet connection and the server address.',
+        suggestedAction:
+            'Check your internet connection and the server address.',
         originalError: e,
       );
     }
 
-    if (message.contains('handshake failed') || message.contains('connection reset')) {
+    if (message.contains('handshake failed') ||
+        message.contains('connection reset')) {
       return SshNetworkException(
         userMessage: 'The connection was interrupted during handshake.',
-        suggestedAction: 'This can happen due to poor network or server-side firewall.',
+        suggestedAction:
+            'This can happen due to poor network or server-side firewall.',
         originalError: e,
       );
     }
 
-    if (message.contains('authentication failed') || message.contains('access denied')) {
+    if (message.contains('authentication failed') ||
+        message.contains('access denied')) {
       return SshAuthenticationException(
         userMessage: 'Authentication failed.',
         suggestedAction: 'Verify your username, password, or private key.',
@@ -217,13 +232,16 @@ class SshService implements ShellService {
       );
     }
 
-    if (e is TimeoutException || message.contains('timeout') || message.contains('timed out')) {
+    if (e is TimeoutException ||
+        message.contains('timeout') ||
+        message.contains('timed out')) {
       return SshTimeoutException(originalError: e);
     }
 
     return SshUnknownException(
       userMessage: 'An unexpected SSH error occurred.',
-      suggestedAction: 'Try again later or contact support if the issue persists.',
+      suggestedAction:
+          'Try again later or contact support if the issue persists.',
       originalError: e,
     );
   }
@@ -362,18 +380,31 @@ class SshService implements ShellService {
       // Detect transport closure immediately — covers network drops, server
       // reboots, and any case where the underlying socket closes without an
       // explicit call to disconnect().
-      transport.done.then((_) {
-        _handleDisconnect(reason: 'Transport closed');
-      }, onError: (_) {
-        _handleDisconnect(reason: 'Transport error');
-      });
+      transport.done.then(
+        (_) {
+          _handleDisconnect(reason: 'Transport closed');
+        },
+        onError: (_) {
+          _handleDisconnect(reason: 'Transport error');
+        },
+      );
 
       _startHeartbeat();
-      _updateStatus(ConnectionStatus.connected(lastSuccessfulConnection: _lastSuccessfulConnection));
+      _updateStatus(
+        ConnectionStatus.connected(
+          lastSuccessfulConnection: _lastSuccessfulConnection,
+        ),
+      );
+      _recordServerFrecency();
     } catch (e, stackTrace) {
       Sentry.captureException(e, stackTrace: stackTrace);
       final sshError = _mapError(e);
-      _updateStatus(ConnectionStatus.failed(sshError, lastSuccessfulConnection: _lastSuccessfulConnection));
+      _updateStatus(
+        ConnectionStatus.failed(
+          sshError,
+          lastSuccessfulConnection: _lastSuccessfulConnection,
+        ),
+      );
 
       // Trigger auto-reconnect if enabled and error is recoverable (not auth or host key issue)
       if (_autoReconnectEnabled &&
@@ -387,6 +418,17 @@ class SshService implements ShellService {
     }
   }
 
+  void _recordServerFrecency() {
+    final serverId = _serverId;
+    if (serverId == null || serverId.isEmpty) return;
+
+    unawaited(
+      (_frecencyStorage ?? FrecencyStorage())
+          .record(FrecencyStorage.categoryServers, serverId)
+          .catchError((_) {}),
+    );
+  }
+
   Future<void> reconnect() async {
     if (_lastHost == null) {
       throw StateError('No previous connection to reconnect to.');
@@ -395,11 +437,13 @@ class SshService implements ShellService {
     cancelAutoReconnect();
 
     _reconnectAttempts++;
-    _updateStatus(ConnectionStatus.reconnecting(
-      attempts: _reconnectAttempts,
-      maxAttempts: _maxReconnectAttempts,
-      lastSuccessfulConnection: _lastSuccessfulConnection,
-    ));
+    _updateStatus(
+      ConnectionStatus.reconnecting(
+        attempts: _reconnectAttempts,
+        maxAttempts: _maxReconnectAttempts,
+        lastSuccessfulConnection: _lastSuccessfulConnection,
+      ),
+    );
 
     try {
       await connect(
@@ -424,9 +468,12 @@ class SshService implements ShellService {
       if (transport != null) {
         // ping() returns a Future — use .then/.catchError so async errors
         // are caught rather than silently dropped in a try/catch.
-        transport.ping().then((_) {}, onError: (_) {
-          _handleDisconnect(reason: 'Heartbeat ping failed');
-        });
+        transport.ping().then(
+          (_) {},
+          onError: (_) {
+            _handleDisconnect(reason: 'Heartbeat ping failed');
+          },
+        );
       }
     });
   }
@@ -437,7 +484,9 @@ class SshService implements ShellService {
       _heartbeatTimer?.cancel();
 
       // If auto-reconnect is enabled, we move to a "waiting" reconnecting state
-      if (_autoReconnectEnabled && _lastHost != null && _reconnectAttempts < _maxReconnectAttempts) {
+      if (_autoReconnectEnabled &&
+          _lastHost != null &&
+          _reconnectAttempts < _maxReconnectAttempts) {
         _triggerAutoReconnect();
       } else {
         _updateStatus(ConnectionStatus.disconnected());
@@ -450,32 +499,40 @@ class SshService implements ShellService {
 
     if (_reconnectAttempts >= _maxReconnectAttempts) {
       _clearCachedCredentials();
-      _updateStatus(ConnectionStatus.failed(
-        const SshUnknownException(
-          userMessage: 'Automatic reconnection failed.',
-          suggestedAction: 'Please try to reconnect manually when the server is back online.',
+      _updateStatus(
+        ConnectionStatus.failed(
+          const SshUnknownException(
+            userMessage: 'Automatic reconnection failed.',
+            suggestedAction:
+                'Please try to reconnect manually when the server is back online.',
+          ),
+          lastSuccessfulConnection: _lastSuccessfulConnection,
         ),
-        lastSuccessfulConnection: _lastSuccessfulConnection,
-      ));
+      );
       return;
     }
 
     // Show "Reconnecting (Attempt X/N)" immediately so user knows we are trying
-    _updateStatus(ConnectionStatus.reconnecting(
-      attempts: _reconnectAttempts + 1,
-      maxAttempts: _maxReconnectAttempts,
-      lastSuccessfulConnection: _lastSuccessfulConnection,
-    ));
+    _updateStatus(
+      ConnectionStatus.reconnecting(
+        attempts: _reconnectAttempts + 1,
+        maxAttempts: _maxReconnectAttempts,
+        lastSuccessfulConnection: _lastSuccessfulConnection,
+      ),
+    );
 
     // Backoff schedule is injectable so tests can use [0,0,0,0,0]
     // for fast deterministic retries.
     final delay = Duration(
-      seconds: _backoffSeconds[min(_reconnectAttempts, _backoffSeconds.length - 1)],
+      seconds:
+          _backoffSeconds[min(_reconnectAttempts, _backoffSeconds.length - 1)],
     );
 
     _reconnectTimer = Timer(delay, () async {
       // Guard: Ensure we still want to reconnect
-      if (!_autoReconnectEnabled || _currentStatus.isConnected || _currentStatus.isDisconnected) {
+      if (!_autoReconnectEnabled ||
+          _currentStatus.isConnected ||
+          _currentStatus.isDisconnected) {
         return;
       }
 
@@ -543,11 +600,11 @@ class SshService implements ShellService {
       throw StateError('SSH client is not connected.');
     }
 
-    final List<VaultSecret> secrets = vaultSecrets.whereType<VaultSecret>().toList();
+    final List<VaultSecret> secrets =
+        vaultSecrets.whereType<VaultSecret>().toList();
     final injector = VaultInjector(secrets);
     final hasPlaceholders = injector.hasPlaceholders(command);
-    final wrapped =
-        hasPlaceholders ? injector.buildEnvCommand(command) : null;
+    final wrapped = hasPlaceholders ? injector.buildEnvCommand(command) : null;
     final commandToRun = wrapped?.wrappedCommand ?? command;
     // SSH protocol env-frame channel + inline wrapper fallback.
     // See docs/secrets-vault.md.
@@ -561,8 +618,7 @@ class SshService implements ShellService {
           // Always log the placeholder form so the breadcrumb never
           // contains the substituted secret value.
           'command': command,
-          if (hasPlaceholders)
-            'vaultPlaceholders': wrapped!.placeholderNames,
+          if (hasPlaceholders) 'vaultPlaceholders': wrapped!.placeholderNames,
         },
       ),
     );
@@ -579,25 +635,35 @@ class SshService implements ShellService {
         // Wait for stdout and stderr concurrently to prevent deadlocks
         final stdoutFuture = session.stdout.expand((e) => e).toList();
         final stderrFuture = session.stderr.expand((e) => e).toList();
-        
+
         final results = await Future.wait([stdoutFuture, stderrFuture]);
         final stdoutBytes = results[0];
         final stderrBytes = results[1];
-        
+
         await session.done;
-        
+
         final stdoutResult = utf8.decode(stdoutBytes, allowMalformed: true);
         final stderrResult = utf8.decode(stderrBytes, allowMalformed: true);
-        
+
         if (session.exitCode != null && session.exitCode != 0) {
-          final errMessage = stderrResult.trim().isNotEmpty ? stderrResult.trim() : stdoutResult.trim();
+          final errMessage =
+              stderrResult.trim().isNotEmpty
+                  ? stderrResult.trim()
+                  : stdoutResult.trim();
           final lowerErr = errMessage.toLowerCase();
-          if (lowerErr.contains('permission denied') || lowerErr.contains('password is required')) {
-            throw SshPermissionException(userMessage: 'Permission Denied: $errMessage (Sudo might be required)');
+          if (lowerErr.contains('permission denied') ||
+              lowerErr.contains('password is required')) {
+            throw SshPermissionException(
+              userMessage:
+                  'Permission Denied: $errMessage (Sudo might be required)',
+            );
           }
-          throw SshUnknownException(userMessage: 'Command failed with exit code ${session.exitCode}: $errMessage');
+          throw SshUnknownException(
+            userMessage:
+                'Command failed with exit code ${session.exitCode}: $errMessage',
+          );
         }
-        
+
         return stdoutResult;
       } catch (error, stackTrace) {
         if (_isTransientChannelError(error) && retries < maxRetries) {
@@ -719,7 +785,10 @@ class SshService implements ShellService {
   }
 
   @override
-  Future<void> disconnect({bool updateStatus = true, bool cancelAuto = true}) async {
+  Future<void> disconnect({
+    bool updateStatus = true,
+    bool cancelAuto = true,
+  }) async {
     _heartbeatTimer?.cancel();
     if (cancelAuto) {
       cancelAutoReconnect();
@@ -780,13 +849,13 @@ class SshService implements ShellService {
     int bitrate = 4096,
   ]) {
     try {
-      final keyGen = pc.RSAKeyGenerator()
-        ..init(
-          pc.ParametersWithRandom(
-            pc.RSAKeyGeneratorParameters(BigInt.parse('65537'), bitrate, 64),
-            _getSecureRandom(),
-          ),
-        );
+      final keyGen =
+          pc.RSAKeyGenerator()..init(
+            pc.ParametersWithRandom(
+              pc.RSAKeyGeneratorParameters(BigInt.parse('65537'), bitrate, 64),
+              _getSecureRandom(),
+            ),
+          );
 
       final pair = keyGen.generateKeyPair();
       final myPublic = pair.publicKey as pc.RSAPublicKey;

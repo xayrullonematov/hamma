@@ -7,6 +7,7 @@ import '../ai/ai_command_service.dart';
 import '../ai/ai_provider.dart';
 import '../ai/command_risk_assessor.dart';
 import '../storage/api_key_storage.dart';
+import '../storage/frecency_storage.dart';
 import 'runbook.dart';
 
 /// Outcome reported for each step.
@@ -168,9 +169,7 @@ class RunbookCommandFailed implements Exception {
     final code = exitCode != null ? 'exit $exitCode' : null;
     final sig = exitSignal != null ? 'signal $exitSignal' : null;
     final reason = [code, sig].whereType<String>().join(' / ');
-    final tail = stderr.trim().isNotEmpty
-        ? stderr.trim()
-        : stdout.trim();
+    final tail = stderr.trim().isNotEmpty ? stderr.trim() : stdout.trim();
     return 'Command failed (${reason.isEmpty ? 'non-zero exit' : reason})'
         '${tail.isEmpty ? '' : ': $tail'}';
   }
@@ -179,21 +178,18 @@ class RunbookCommandFailed implements Exception {
 /// Executes a command and returns its stdout. The cancellation
 /// token lets the adapter register a teardown that closes the SSH
 /// session on STOP/timeout.
-typedef RunbookCommandExecutor = Future<String> Function(
-  String command,
-  RunbookCancellation cancellation,
-);
+typedef RunbookCommandExecutor =
+    Future<String> Function(String command, RunbookCancellation cancellation);
 
-typedef RiskGateConfirm = Future<bool> Function(
-  RunbookStep step,
-  String renderedCommand,
-  CommandAnalysis analysis,
-);
+typedef RiskGateConfirm =
+    Future<bool> Function(
+      RunbookStep step,
+      String renderedCommand,
+      CommandAnalysis analysis,
+    );
 
-typedef PromptUserConfirm = Future<String?> Function(
-  RunbookStep step,
-  String? defaultValue,
-);
+typedef PromptUserConfirm =
+    Future<String?> Function(RunbookStep step, String? defaultValue);
 
 typedef ManualWaitConfirm = Future<bool> Function(RunbookStep step);
 
@@ -207,13 +203,14 @@ class RunbookRunner {
     this.aiSettings,
     this.callLocalAi,
     this.riskAssessor = const CommandRiskAssessor(),
+    this.frecencyStorage,
     this.confirmRiskGate,
     this.promptUser,
     this.confirmManualWait,
     Duration? defaultTimeout,
     Duration Function(int seconds)? sleepFactory,
-  })  : _defaultTimeout = defaultTimeout ?? const Duration(minutes: 2),
-        _sleepFactory = sleepFactory ?? _defaultSleepFactory {
+  }) : _defaultTimeout = defaultTimeout ?? const Duration(minutes: 2),
+       _sleepFactory = sleepFactory ?? _defaultSleepFactory {
     final problems = runbook.validate();
     if (problems.isNotEmpty) {
       throw RunbookSchemaException(
@@ -228,6 +225,7 @@ class RunbookRunner {
   final AiSettings? aiSettings;
   final Future<String> Function(String prompt)? callLocalAi;
   final CommandRiskAssessor riskAssessor;
+  final FrecencyStorage? frecencyStorage;
   final RiskGateConfirm? confirmRiskGate;
   final PromptUserConfirm? promptUser;
   final ManualWaitConfirm? confirmManualWait;
@@ -249,6 +247,7 @@ class RunbookRunner {
     final results = <RunbookStepResult>[];
     final startedAt = DateTime.now().toUtc();
     _events.add(RunbookStarted(runbook));
+    await _recordRunbookFrecency();
 
     bool cancelled = false;
 
@@ -260,11 +259,13 @@ class RunbookRunner {
     while (ip < runbook.steps.length) {
       if (execCount++ >= maxExec) {
         cancelled = true;
-        results.add(_skipResult(
-          runbook.steps[ip],
-          status: RunbookStepStatus.cancelled,
-          summary: 'Aborted: branch loop exceeded $maxExec executions.',
-        ));
+        results.add(
+          _skipResult(
+            runbook.steps[ip],
+            status: RunbookStepStatus.cancelled,
+            summary: 'Aborted: branch loop exceeded $maxExec executions.',
+          ),
+        );
         _events.add(StepFinished(results.last, ip));
         break;
       }
@@ -273,11 +274,13 @@ class RunbookRunner {
 
       if (cancellation.isCancelled || cancelled) {
         cancelled = true;
-        results.add(_skipResult(
-          step,
-          status: RunbookStepStatus.cancelled,
-          summary: 'Run was cancelled before this step.',
-        ));
+        results.add(
+          _skipResult(
+            step,
+            status: RunbookStepStatus.cancelled,
+            summary: 'Run was cancelled before this step.',
+          ),
+        );
         _events.add(StepFinished(results.last, ip));
         ip++;
         continue;
@@ -286,11 +289,13 @@ class RunbookRunner {
       _events.add(StepStarted(step, ip));
 
       if (_shouldSkip(step)) {
-        results.add(_skipResult(
-          step,
-          status: RunbookStepStatus.skipped,
-          summary: 'Skipped: skipIfRegex matched referenced output.',
-        ));
+        results.add(
+          _skipResult(
+            step,
+            status: RunbookStepStatus.skipped,
+            summary: 'Skipped: skipIfRegex matched referenced output.',
+          ),
+        );
         _events.add(StepFinished(results.last, ip));
         ip++;
         continue;
@@ -299,21 +304,18 @@ class RunbookRunner {
       final stepStartedAt = DateTime.now().toUtc();
       int? jumpToIndex;
       try {
-        final outcome = await _runStep(
-          step,
-          paramValues,
-          stepStartedAt,
-        );
+        final outcome = await _runStep(step, paramValues, stepStartedAt);
         results.add(outcome.result);
         _events.add(StepFinished(outcome.result, ip));
         if (outcome.jumpToStepId != null) {
-          final idx = runbook.steps
-              .indexWhere((s) => s.id == outcome.jumpToStepId);
+          final idx = runbook.steps.indexWhere(
+            (s) => s.id == outcome.jumpToStepId,
+          );
           if (idx >= 0) jumpToIndex = idx;
         }
         final softStop =
             outcome.result.status == RunbookStepStatus.failed ||
-                outcome.result.status == RunbookStepStatus.cancelled;
+            outcome.result.status == RunbookStepStatus.cancelled;
         if (softStop && !step.continueOnError) {
           cancelled = true;
         }
@@ -333,7 +335,8 @@ class RunbookRunner {
       ip = jumpToIndex ?? (ip + 1);
     }
 
-    final anyCancelled = cancellation.isCancelled ||
+    final anyCancelled =
+        cancellation.isCancelled ||
         results.any((r) => r.status == RunbookStepStatus.cancelled);
     final final_ = RunbookRunResult(
       runbook: runbook,
@@ -347,13 +350,25 @@ class RunbookRunner {
     return final_;
   }
 
+  Future<void> _recordRunbookFrecency() async {
+    final storage = frecencyStorage;
+    if (storage == null || runbook.id.isEmpty) return;
+
+    try {
+      await storage.record(FrecencyStorage.categoryRunbooks, runbook.id);
+    } catch (_) {
+      // Frecency improves recall but must never make a runbook fail.
+    }
+  }
+
   bool _shouldSkip(RunbookStep step) {
     final pattern = step.skipIfRegex;
     if (pattern == null || pattern.isEmpty) return false;
     final refId = step.skipIfReferenceStepId;
-    final source = refId == null
-        ? (_stepStdout.values.isEmpty ? '' : _stepStdout.values.last)
-        : (_stepStdout[refId] ?? '');
+    final source =
+        refId == null
+            ? (_stepStdout.values.isEmpty ? '' : _stepStdout.values.last)
+            : (_stepStdout[refId] ?? '');
     try {
       return RegExp(pattern, multiLine: true).hasMatch(source);
     } catch (_) {
@@ -384,9 +399,10 @@ class RunbookRunner {
 
   _StepOutcome _runBranch(RunbookStep step, DateTime startedAt) {
     final refId = step.branchReferenceStepId;
-    final source = refId == null
-        ? (_stepStdout.values.isEmpty ? '' : _stepStdout.values.last)
-        : (_stepStdout[refId] ?? '');
+    final source =
+        refId == null
+            ? (_stepStdout.values.isEmpty ? '' : _stepStdout.values.last)
+            : (_stepStdout[refId] ?? '');
     final pattern = step.branchRegex ?? '';
     bool matched;
     String? error;
@@ -401,12 +417,14 @@ class RunbookRunner {
     return _StepOutcome(
       RunbookStepResult(
         step: step,
-        status: error != null
-            ? RunbookStepStatus.failed
-            : RunbookStepStatus.succeeded,
+        status:
+            error != null
+                ? RunbookStepStatus.failed
+                : RunbookStepStatus.succeeded,
         startedAt: startedAt,
         finishedAt: DateTime.now().toUtc(),
-        summary: error ??
+        summary:
+            error ??
             'Branch ${matched ? "matched" : "did not match"}; '
                 '${target == null ? "fell through" : "jumped to $target"}.',
         error: error,
@@ -429,15 +447,17 @@ class RunbookRunner {
     final analysis = riskAssessor.assess(rendered);
     if (analysis.riskLevel != CommandRiskLevel.low) {
       _events.add(StepRiskGate(step, rendered, analysis));
-      final ok = await (confirmRiskGate?.call(step, rendered, analysis) ??
-          Future<bool>.value(false));
+      final ok =
+          await (confirmRiskGate?.call(step, rendered, analysis) ??
+              Future<bool>.value(false));
       if (!ok) {
         return RunbookStepResult(
           step: step,
           status: RunbookStepStatus.cancelled,
           startedAt: startedAt,
           finishedAt: DateTime.now().toUtc(),
-          summary: 'Risk gate refused (level '
+          summary:
+              'Risk gate refused (level '
               '${analysis.riskLevel.name.toUpperCase()}).',
         );
       }
@@ -448,9 +468,10 @@ class RunbookRunner {
     final commandCancel = RunbookCancellation();
     cancellation.onCancel(commandCancel.cancel);
 
-    final timeout = step.timeoutSeconds != null
-        ? Duration(seconds: step.timeoutSeconds!)
-        : _defaultTimeout;
+    final timeout =
+        step.timeoutSeconds != null
+            ? Duration(seconds: step.timeoutSeconds!)
+            : _defaultTimeout;
 
     Future<String>? execFuture;
     try {
@@ -567,22 +588,22 @@ class RunbookRunner {
           summary: 'Slept ${step.waitSeconds}s.',
         );
       case 'manual':
-        final ok = await (confirmManualWait?.call(step) ??
-            Future<bool>.value(false));
+        final ok =
+            await (confirmManualWait?.call(step) ?? Future<bool>.value(false));
         return RunbookStepResult(
           step: step,
-          status: ok
-              ? RunbookStepStatus.succeeded
-              : RunbookStepStatus.cancelled,
+          status:
+              ok ? RunbookStepStatus.succeeded : RunbookStepStatus.cancelled,
           startedAt: startedAt,
           finishedAt: DateTime.now().toUtc(),
           summary: ok ? 'Operator approved.' : 'Operator cancelled.',
         );
       case 'regex':
         final refId = step.waitReferenceStepId;
-        final source = refId == null
-            ? (_stepStdout.values.isEmpty ? '' : _stepStdout.values.last)
-            : (_stepStdout[refId] ?? '');
+        final source =
+            refId == null
+                ? (_stepStdout.values.isEmpty ? '' : _stepStdout.values.last)
+                : (_stepStdout[refId] ?? '');
         final pattern = step.waitRegex ?? '';
         final matched = RegExp(pattern, multiLine: true).hasMatch(source);
         return RunbookStepResult(
@@ -591,9 +612,10 @@ class RunbookRunner {
               matched ? RunbookStepStatus.succeeded : RunbookStepStatus.failed,
           startedAt: startedAt,
           finishedAt: DateTime.now().toUtc(),
-          summary: matched
-              ? 'Pattern matched in referenced output.'
-              : 'Pattern did not match referenced output.',
+          summary:
+              matched
+                  ? 'Pattern matched in referenced output.'
+                  : 'Pattern did not match referenced output.',
         );
       default:
         return RunbookStepResult(
@@ -612,9 +634,10 @@ class RunbookRunner {
     DateTime startedAt,
   ) async {
     final refId = step.aiReferenceStepId;
-    final source = refId == null
-        ? (_stepStdout.values.isEmpty ? '' : _stepStdout.values.last)
-        : (_stepStdout[refId] ?? '');
+    final source =
+        refId == null
+            ? (_stepStdout.values.isEmpty ? '' : _stepStdout.values.last)
+            : (_stepStdout[refId] ?? '');
     final basePrompt = renderTemplate(
       step.aiPrompt ??
           'Summarize the following command output for an SRE in 3 bullets, '
@@ -743,11 +766,9 @@ List<String> dryRunCommands(Runbook runbook, Map<String, String> params) {
   final out = <String>[];
   for (final step in runbook.steps) {
     if (step.type != RunbookStepType.command) continue;
-    out.add(renderTemplate(
-      step.command ?? '',
-      params: params,
-      stepStdout: const {},
-    ));
+    out.add(
+      renderTemplate(step.command ?? '', params: params, stepStdout: const {}),
+    );
   }
   return out;
 }
@@ -760,19 +781,20 @@ String encodeRunResult(RunbookRunResult result) {
     'cancelled': result.cancelled,
     'startedAt': result.startedAt.toIso8601String(),
     'finishedAt': result.finishedAt.toIso8601String(),
-    'steps': result.results
-        .map(
-          (r) => {
-            'stepId': r.step.id,
-            'label': r.step.label,
-            'type': r.step.type.wireName,
-            'status': r.status.name,
-            'durationMs': r.duration.inMilliseconds,
-            if (r.stdout.isNotEmpty) 'stdout': r.stdout,
-            if (r.summary.isNotEmpty) 'summary': r.summary,
-            if (r.error != null) 'error': r.error,
-          },
-        )
-        .toList(),
+    'steps':
+        result.results
+            .map(
+              (r) => {
+                'stepId': r.step.id,
+                'label': r.step.label,
+                'type': r.step.type.wireName,
+                'status': r.status.name,
+                'durationMs': r.duration.inMilliseconds,
+                if (r.stdout.isNotEmpty) 'stdout': r.stdout,
+                if (r.summary.isNotEmpty) 'summary': r.summary,
+                if (r.error != null) 'error': r.error,
+              },
+            )
+            .toList(),
   });
 }

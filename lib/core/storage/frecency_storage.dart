@@ -82,6 +82,10 @@ class FrecencyStorage {
   static const _storageKey = 'frecency_v1';
   static const _maxEntries = 5000;
 
+  static const categoryServers = 'servers';
+  static const categoryRunbooks = 'runbooks';
+  static const categorySftpFiles = 'sftp_files';
+
   final FlutterSecureStorage _secureStorage;
   final Clock _clock;
 

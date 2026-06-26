@@ -4,6 +4,7 @@ import '../../core/ai/ai_provider.dart';
 import '../../core/models/server_profile.dart';
 import '../../core/ssh/connection_status.dart';
 import '../../core/ssh/ssh_service.dart';
+import '../../core/storage/frecency_storage.dart';
 import '../../core/storage/saved_servers_storage.dart';
 import '../fleet/fleet_dashboard_screen.dart';
 import '../settings/settings_screen.dart';
@@ -51,6 +52,7 @@ class _ServerListScreenState extends State<ServerListScreen> {
   static const _shadowColor = Color(0x33000000);
 
   final SavedServersStorage _savedServersStorage = const SavedServersStorage();
+  final FrecencyStorage _frecencyStorage = FrecencyStorage();
 
   bool _isLoading = true;
   String? _loadError;
@@ -99,12 +101,13 @@ class _ServerListScreenState extends State<ServerListScreen> {
   Future<void> _loadServers() async {
     try {
       final servers = await _savedServersStorage.loadServers();
+      final rankedServers = await _rankServers(servers);
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _servers = servers;
+        _servers = rankedServers;
         _loadError = null;
       });
     } catch (error) {
@@ -127,12 +130,13 @@ class _ServerListScreenState extends State<ServerListScreen> {
   Future<void> _saveServers(List<ServerProfile> servers) async {
     try {
       await _savedServersStorage.saveServers(servers);
+      final rankedServers = await _rankServers(servers);
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _servers = servers;
+        _servers = rankedServers;
         _loadError = null;
       });
     } catch (error) {
@@ -144,6 +148,13 @@ class _ServerListScreenState extends State<ServerListScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text(error.toString())));
     }
+  }
+
+  Future<List<ServerProfile>> _rankServers(List<ServerProfile> servers) async {
+    final scores = await _frecencyStorage.scoresForCategory(
+      FrecencyStorage.categoryServers,
+    );
+    return sortServersByFrecency(servers, scores);
   }
 
   Future<void> _addServer() async {
@@ -262,8 +273,8 @@ class _ServerListScreenState extends State<ServerListScreen> {
     }
   }
 
-  void _openServer(ServerProfile server) {
-    Navigator.of(context).push(
+  Future<void> _openServer(ServerProfile server) async {
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder:
             (_) => ServerDashboardScreen(
@@ -278,6 +289,9 @@ class _ServerListScreenState extends State<ServerListScreen> {
             ),
       ),
     );
+    if (mounted) {
+      await _loadServers();
+    }
   }
 
   void _openSettings() {
@@ -337,7 +351,10 @@ class _ServerListScreenState extends State<ServerListScreen> {
                     border: InputBorder.none,
                     hintStyle: TextStyle(color: _subtitleColor),
                   ),
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 18),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                  ),
                   onChanged: (value) {
                     setState(() {
                       _searchQuery = value;
@@ -362,9 +379,12 @@ class _ServerListScreenState extends State<ServerListScreen> {
             )
           else ...[
             IconButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const AiCliScreen()),
-              ),
+              onPressed:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const AiCliScreen(),
+                    ),
+                  ),
               icon: const Icon(Icons.terminal_rounded),
               tooltip: 'AI CLI Launcher',
             ),
@@ -379,11 +399,12 @@ class _ServerListScreenState extends State<ServerListScreen> {
               tooltip: 'Fleet Command Center',
             ),
             IconButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const LocalDevelopmentScreen(),
-                ),
-              ),
+              onPressed:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const LocalDevelopmentScreen(),
+                    ),
+                  ),
               icon: const Icon(Icons.computer),
               tooltip: 'Local Development',
             ),
@@ -496,32 +517,35 @@ class _ServerListScreenState extends State<ServerListScreen> {
                         SliverPadding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                           sliver: SliverGrid(
-                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 450,
-                              mainAxisExtent: 180,
-                              mainAxisSpacing: 16,
-                              crossAxisSpacing: 16,
-                            ),
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                final server = filteredServers[index];
-                                final sshService = SshService.forServer(server.id);
-                                
-                                return ValueListenableBuilder<ConnectionStatus>(
-                                  valueListenable: sshService.statusNotifier,
-                                  builder: (context, status, _) {
-                                    return _ServerDashboardCard(
-                                      server: server,
-                                      status: status,
-                                      onOpen: () => _openServer(server),
-                                      onEdit: () => _editServer(server),
-                                      onDelete: () => _deleteServer(server),
-                                    );
-                                  },
-                                );
-                              },
-                              childCount: filteredServers.length,
-                            ),
+                            gridDelegate:
+                                const SliverGridDelegateWithMaxCrossAxisExtent(
+                                  maxCrossAxisExtent: 450,
+                                  mainAxisExtent: 180,
+                                  mainAxisSpacing: 16,
+                                  crossAxisSpacing: 16,
+                                ),
+                            delegate: SliverChildBuilderDelegate((
+                              context,
+                              index,
+                            ) {
+                              final server = filteredServers[index];
+                              final sshService = SshService.forServer(
+                                server.id,
+                              );
+
+                              return ValueListenableBuilder<ConnectionStatus>(
+                                valueListenable: sshService.statusNotifier,
+                                builder: (context, status, _) {
+                                  return _ServerDashboardCard(
+                                    server: server,
+                                    status: status,
+                                    onOpen: () => _openServer(server),
+                                    onEdit: () => _editServer(server),
+                                    onDelete: () => _deleteServer(server),
+                                  );
+                                },
+                              );
+                            }, childCount: filteredServers.length),
                           ),
                         ),
                     ],
@@ -535,6 +559,26 @@ class _ServerListScreenState extends State<ServerListScreen> {
       ),
     );
   }
+}
+
+List<ServerProfile> sortServersByFrecency(
+  List<ServerProfile> servers,
+  Map<String, double> scores,
+) {
+  final indexed = List.generate(
+    servers.length,
+    (index) => MapEntry(index, servers[index]),
+  );
+
+  indexed.sort((a, b) {
+    final aScore = scores[a.value.id] ?? 0;
+    final bScore = scores[b.value.id] ?? 0;
+    final scoreOrder = bScore.compareTo(aScore);
+    if (scoreOrder != 0) return scoreOrder;
+    return a.key.compareTo(b.key);
+  });
+
+  return indexed.map((entry) => entry.value).toList(growable: false);
 }
 
 class _ServerDashboardCard extends StatelessWidget {
@@ -619,9 +663,10 @@ class _ServerDashboardCard extends StatelessWidget {
                   ),
                   child: Icon(
                     status.isConnected ? Icons.dns : Icons.dns_outlined,
-                    color: status.isConnected 
-                        ? AppColors.textPrimary 
-                        : _ServerListScreenState._cardAccent,
+                    color:
+                        status.isConnected
+                            ? AppColors.textPrimary
+                            : _ServerListScreenState._cardAccent,
                   ),
                 ),
                 const SizedBox(width: 16),
