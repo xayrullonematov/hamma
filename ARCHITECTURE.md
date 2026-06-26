@@ -108,7 +108,7 @@ HAMMA is a modular, layered application. The UI layer never talks to the network
 
 | Technology | Role |
 |---|---|
-| **flutter_test** | Unit and widget testing (746/747 passing) |
+| **flutter_test** | Unit and widget testing (857 passing, 1 skipped integration test) |
 | **mocktail** | Service mocking in tests |
 | **flutter_lints** | Standard lint rules |
 | **GitHub Actions** | CI pipeline |
@@ -276,19 +276,19 @@ All five platforms share the same Dart business logic. Only platform-specific UI
 
 ---
 
-## Future Architecture: Built-in Engine (Phase 4)
+## Next Architecture: Built-in Engine (Phase 4)
 
-The current architecture requires Ollama as a separate process. Phase 4 replaces this with a bundled inference engine:
+The current production local-AI path supports Ollama and OpenAI-compatible loopback servers. Phase 4 moves the primary path to a bundled inference engine while keeping Ollama as a fallback:
 
 ```
-Current (Phase 2):
+Current local AI path:
   HAMMA App  ──HTTP──►  Ollama (separate process)  ──►  GGUF
 
-Future (Phase 4):
+Phase 4 target:
   HAMMA App  ──FFI──►  llama.cpp (bundled dylib)  ──►  GGUF module
 ```
 
-The inference library will be bundled as a platform-specific dynamic library (`libllama.so` / `llama.dll` / `libllama.dylib`) and called via Dart FFI. No separate install. No separate process. One app, one install, full capability.
+The codebase already has groundwork for this path: `fllama` native assets, bundled-engine abstractions, a model downloader, and loopback-compatible engine tests. The remaining Phase 4 work is making that production-grade across platforms: package the native libraries, verify model checksums, stream inference through Dart FFI, and fall back cleanly to Ollama if the bundled engine is unavailable.
 
 Modules will be downloaded on-demand from the HAMMA module registry — small, specialized GGUF adapters for each domain.
 
@@ -308,7 +308,7 @@ flutter pub get
 
 # Verify
 flutter analyze        # → No issues found
-flutter test           # → 746/747 passed
+flutter test           # → 857 passed, 1 skipped
 
 # Run on your platform
 flutter run            # uses connected device / emulator

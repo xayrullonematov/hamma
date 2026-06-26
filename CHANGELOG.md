@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Phase 3 Natural Language Ops is complete on `main`.** The app now has the command palette spine, frecency ranking, AI command plans, command preview/risk gating, approved execution, local execution audit records, multi-step runbooks, and terminal session memory.
+- **Resilient terminal sessions.** Terminal scrollback is redacted, bounded to 100k characters, persisted in secure storage per server, restored on reopen, and capped with per-server LRU eviction.
+
+### Changed
+- Project documentation now marks Phase 3 as shipped and Phase 4 Built-in Engine as the active next implementation target.
+- Verification baseline is now `flutter analyze --fatal-warnings` clean and `flutter test` at 857 passed, 1 skipped integration test.
+
+---
+
 ## [1.2.0] — 2026-06-18
 
 ### Fixed
@@ -32,14 +44,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Settings screen now validates the Local AI endpoint inline; the Test, Detect, and Manage Models buttons gate on a passing validation so misconfigured endpoints can't trigger network calls.
 
 ### Security
-- Added a runtime guard that prevents non-loopback Local AI endpoints from ever being instantiated, backed by `local_ai_loopback_guard_test.dart` (3 tests) and `zero_trust_network_guard_test.dart` (4 tests). Total suite is now 746/747 green.
-
-### Suggested next step
-- Tag and push to trigger the existing release pipeline:
-  ```bash
-  git tag v1.1.0
-  git push origin v1.1.0
-  ```
+- Added a runtime guard that prevents non-loopback Local AI endpoints from ever being instantiated, backed by `local_ai_loopback_guard_test.dart` (3 tests) and `zero_trust_network_guard_test.dart` (4 tests). At the v1.1.0 release, the suite was 746/747 green.
 
 ---
 

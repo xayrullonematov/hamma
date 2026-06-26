@@ -17,9 +17,9 @@
 
 <p>
   <a href="https://github.com/xayrullonematov/hamma/actions/workflows/main.yml"><img src="https://github.com/xayrullonematov/hamma/actions/workflows/main.yml/badge.svg?branch=main" alt="CI"/></a>
-  <img src="https://img.shields.io/badge/VERSION-1.1.0-FFFFFF?style=flat-square&labelColor=000000" alt="Version"/>
+  <img src="https://img.shields.io/badge/VERSION-1.2.0-FFFFFF?style=flat-square&labelColor=000000" alt="Version"/>
   <img src="https://img.shields.io/badge/STATUS-BETA--RC-00FF88?style=flat-square&labelColor=000000" alt="Status"/>
-  <img src="https://img.shields.io/badge/TESTS-746%2F747-00FF88?style=flat-square&labelColor=000000" alt="Tests"/>
+  <img src="https://img.shields.io/badge/TESTS-857%20passed%20%7C%201%20skipped-00FF88?style=flat-square&labelColor=000000" alt="Tests"/>
   <img src="https://img.shields.io/badge/MODEL-1.4K%2B%20Downloads-00FF88?style=flat-square&labelColor=000000" alt="Downloads"/>
 </p>
 
@@ -56,9 +56,9 @@ HAMMA is built for the places that need it most — the hospital running a local
 
 | | Capability | |
 |---|---|---|
-| ![ai](https://img.shields.io/badge/-AI_Copilot-000000?style=flat-square&logo=openai&logoColor=00FF88) | **AI Copilot** — streaming local LLMs, risk-scored commands, one-tap error analysis | [→ LOCAL_AI.md](LOCAL_AI.md) |
+| ![ai](https://img.shields.io/badge/-AI_Copilot-000000?style=flat-square&logo=openai&logoColor=00FF88) | **AI Copilot** — streaming local LLMs, risk-scored plans, command preview, approved execution | [→ LOCAL_AI.md](LOCAL_AI.md) |
 | ![security](https://img.shields.io/badge/-Security-000000?style=flat-square&logo=gnuprivacyguard&logoColor=00FF88) | **Zero-Trust Security** — loopback-only AI, Argon2id backups, biometric lock | [→ SECURITY.md](SECURITY.md) |
-| ![terminal](https://img.shields.io/badge/-Terminal-000000?style=flat-square&logo=gnubash&logoColor=00FF88) | **Mobile Terminal** — xterm, 256-color, custom keyboard row, reconnect-on-wake | |
+| ![terminal](https://img.shields.io/badge/-Terminal-000000?style=flat-square&logo=gnubash&logoColor=00FF88) | **Mobile Terminal** — xterm, 256-color, custom keyboard row, restored scrollback, reconnect UX | |
 | ![sftp](https://img.shields.io/badge/-SFTP-000000?style=flat-square&logo=files&logoColor=00FF88) | **Visual SFTP** — browse, edit, chmod, sudo fallback, syntax highlighting | |
 | ![docker](https://img.shields.io/badge/-Docker-000000?style=flat-square&logo=docker&logoColor=00FF88) | **Docker & Services** — container control, live logs, systemd, process viewer | |
 | ![fleet](https://img.shields.io/badge/-Fleet-000000?style=flat-square&logo=cloudflare&logoColor=00FF88) | **Fleet Dashboard** — multi-server health, port forwarding, encrypted sync | [→ ARCHITECTURE.md](ARCHITECTURE.md) |
@@ -127,7 +127,7 @@ git clone https://github.com/xayrullonematov/hamma.git
 cd hamma
 flutter pub get
 flutter analyze        # → No issues found
-flutter test           # → 746/747 passed
+flutter test           # → 857 passed, 1 skipped
 flutter run
 ```
 
@@ -159,8 +159,8 @@ flutter run
 |---|---|---|
 | **Phase 1** — Core Client | ✅ Shipped | SSH, SFTP, terminal, vault, biometric lock |
 | **Phase 2** — Local AI | ✅ Shipped | Local inference, HAMMA fine-tuned model, risk scoring |
-| **Phase 3** — Natural Language Ops | 🔨 In Progress | Say "restart nginx" → AI generates command → you approve → executes |
-| **Phase 4** — Built-in Engine | 📅 Planned | No Ollama dependency — inference ships inside HAMMA |
+| **Phase 3** — Natural Language Ops | ✅ Shipped | Command palette, AI command plans, previews, audit log, runbooks, resilient sessions |
+| **Phase 4** — Built-in Engine | 🔨 Active next | No Ollama dependency — inference ships inside HAMMA |
 | **Phase 5** — Module Marketplace | 📅 Planned | Swappable specialist adapters: DevOps, Security, Networking, Database |
 
 **The end goal:** describe intent in plain English, approve the AI-generated action, done. No command line. No clicking. Every action is logged, explained, and human-approved before execution — making it more auditable than typing commands manually.
@@ -177,6 +177,11 @@ flutter run
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System diagram, project layout, tech stack |
 | [LOCAL_AI.md](LOCAL_AI.md) | Local AI setup, model manager, onboarding wizard |
 | [ROADMAP.md](ROADMAP.md) | Phase breakdown, what's shipped, what's next |
+| [docs/runbooks.md](docs/runbooks.md) | Approved multi-step command workflows |
+| [docs/observability.md](docs/observability.md) | Health, metrics, log triage, and local explanations |
+| [docs/secrets-vault.md](docs/secrets-vault.md) | Vault placeholders, redaction, and zero-trust sync |
+| [docs/voice-mode.md](docs/voice-mode.md) | On-device voice controls and pager wake behavior |
+| [docs/plugin-api.md](docs/plugin-api.md) | Local plugin API and sandbox rules |
 | [threat_model.md](threat_model.md) | Full asset / boundary / actor / mitigation breakdown |
 
 ---

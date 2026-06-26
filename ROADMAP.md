@@ -12,8 +12,8 @@
 <p>
   <img src="https://img.shields.io/badge/PHASE_1-SHIPPED-00FF88?style=flat-square&labelColor=000000"/>
   <img src="https://img.shields.io/badge/PHASE_2-SHIPPED-00FF88?style=flat-square&labelColor=000000"/>
-  <img src="https://img.shields.io/badge/PHASE_3-IN_PROGRESS-FFAA00?style=flat-square&labelColor=000000"/>
-  <img src="https://img.shields.io/badge/PHASE_4-PLANNED-555555?style=flat-square&labelColor=000000"/>
+  <img src="https://img.shields.io/badge/PHASE_3-SHIPPED-00FF88?style=flat-square&labelColor=000000"/>
+  <img src="https://img.shields.io/badge/PHASE_4-ACTIVE_NEXT-FFAA00?style=flat-square&labelColor=000000"/>
   <img src="https://img.shields.io/badge/PHASE_5-PLANNED-555555?style=flat-square&labelColor=000000"/>
 </p>
 
@@ -54,8 +54,8 @@ Every action proposed by AI is shown to you before execution. You approve. HAMMA
 |---|---|---|---|
 | **1** | Core Client | ✅ Shipped | SSH, SFTP, terminal, vault, biometric lock |
 | **2** | Local AI | ✅ Shipped | Fine-tuned Gemma 4 model, Ollama integration, risk scoring |
-| **3** | Natural Language Ops | 🔨 In Progress | Intent → command → approve → execute |
-| **4** | Built-in Engine | 📅 Planned | Inference ships inside HAMMA, no Ollama required |
+| **3** | Natural Language Ops | ✅ Shipped | Intent → command → approve → execute, with audit and session memory |
+| **4** | Built-in Engine | 🔨 Active next | Inference ships inside HAMMA, no Ollama required |
 | **5** | Module Marketplace | 📅 Planned | Swappable specialist AI adapters |
 
 ---
@@ -79,7 +79,7 @@ The foundation. A fully featured SSH/SFTP client that works as a daily driver ac
 - [x] Local port forwarding
 - [x] Ed25519, RSA, ECDSA key support
 - [x] Cross-platform: Linux, macOS, Windows, Android, iOS
-- [x] 746/747 unit tests passing
+- [x] 857 passing tests, 1 skipped integration test
 
 ---
 
@@ -107,26 +107,30 @@ The intelligence layer. A purpose-built, fine-tuned AI model that runs entirely 
 
 ---
 
-## 🔨 Phase 3 — Natural Language Ops
+## ✅ Phase 3 — Natural Language Ops
 
-**Status: In Progress — v1.2.0**
+**Status: Shipped on `main` — v1.2.x**
 
 The operational layer. You describe what you want. HAMMA proposes the exact commands. You approve. It executes.
 
-### In Progress
+### Delivered
 
-- [ ] Intent parser — converts natural language to SSH command candidates
-- [ ] Command preview panel — shows proposed command before execution with full explanation
-- [ ] One-tap approve and execute from the AI chat panel
-- [ ] Execution audit log — every AI-proposed command that ran, when, on which server, approved by whom
-- [ ] Undo suggestions — for reversible operations, AI suggests the rollback command alongside the fix
+- [x] Global command palette — keyboard-driven access to servers, screens, commands, runbooks, files, and plugin actions
+- [x] Frecency ranking — server activity, palette choices, recent commands, and runbooks become easier to reach as they are used
+- [x] Intent-to-command flow — AI command service converts natural language into executable command candidates
+- [x] Command preview and risk panel — proposed command, explanation, and risk score are shown before execution
+- [x] One-tap approved execution from the AI Copilot panel when a live SSH transport is available
+- [x] Execution audit log — local record of executed commands, target server, timing, status, stdout/stderr, and risk level
+- [x] Multi-step runbooks — approved command sequences with branching, cancellation, risk gates, and per-step output
+- [x] Context awareness — AI Copilot can use recent terminal output and the active server context
+- [x] Session memory — terminal scrollback is redacted, bounded, persisted securely, restored on reopen, and refreshed through reconnects
+- [x] Resilient terminal UX — restored-session ribbon, debounced persistence, LRU session eviction, and non-modal reconnect notice
 
-### Planned for Phase 3
+### Follow-up Work
 
-- [ ] Multi-step runbooks — "deploy the latest build to staging" executes a sequence of approved commands
-- [ ] Context awareness — AI knows which server you're connected to and its OS/distro
-- [ ] Error loop detection — if a command fails, AI automatically reads the output and proposes the next step
-- [ ] Session memory — AI remembers what was run earlier in the same session
+- [ ] Undo suggestions — for reversible operations, suggest a rollback command alongside the fix
+- [ ] Error loop detection — if a command fails, AI reads the output and proposes the next step
+- [ ] OS/distro fingerprinting — enrich prompts with verified remote host facts, not guessed state
 
 ### Design principles for Phase 3
 
@@ -138,16 +142,16 @@ The operational layer. You describe what you want. HAMMA proposes the exact comm
 
 ---
 
-## 📅 Phase 4 — Built-in Engine
+## 🔨 Phase 4 — Built-in Engine
 
-**Target: v2.0.0**
+**Status: Active next — target v2.0.0**
 
 The independence layer. No Ollama. No separate install. No configuration. Install HAMMA, and the AI is ready.
 
 ### What changes
 
 ```
-Phase 2 (current):          Phase 4 (target):
+Current local AI path:      Phase 4 target:
 ──────────────────          ─────────────────
 Install HAMMA          →    Install HAMMA
 Install Ollama         →    (done)
@@ -173,9 +177,10 @@ HAMMA-Gemma4 GGUF
 
 ### Planned deliverables
 
-- [ ] llama.cpp compiled as `.so` / `.dll` / `.dylib` per platform
-- [ ] Dart FFI bindings for inference
-- [ ] On-demand model download on first launch (with progress indicator)
+- [x] Initial native inference groundwork through `fllama`, bundled-engine abstractions, model downloader, and local-engine tests
+- [ ] Production llama.cpp packaging as `.so` / `.dll` / `.dylib` per platform
+- [ ] Production Dart FFI inference path with lifecycle, cancellation, and streaming
+- [ ] On-demand model download on first launch with progress indicator and resumable failure handling
 - [ ] Model integrity verification (SHA256 checksum before load)
 - [ ] Graceful fallback to Ollama if FFI engine unavailable
 - [ ] GPU acceleration via Metal (macOS/iOS), Vulkan (Linux/Windows/Android)
@@ -215,7 +220,7 @@ Each module is a small LoRA adapter (~200-500 MB) layered on top of the base Gem
 
 ## Contributing
 
-Phase 3 is where contributions matter most right now. The highest-impact areas:
+Phase 4 is where contributions matter most right now. The highest-impact areas:
 
 **AI / ML:**
 - Improving the HAMMA-Gemma4 training dataset (adding multi-turn examples, edge cases, ambiguous queries)
@@ -223,9 +228,10 @@ Phase 3 is where contributions matter most right now. The highest-impact areas:
 - Experimenting with alternative base models
 
 **Flutter / Dart:**
-- Command preview panel UI (Phase 3)
-- Audit log storage and display
-- Dart FFI bindings for llama.cpp (Phase 4 groundwork)
+- Production Dart FFI bindings for llama.cpp
+- Model download, checksum verification, and cache management UX
+- Graceful fallback paths when the bundled engine is unavailable
+- Performance telemetry surfaced locally, without analytics or remote reporting
 
 **Documentation:**
 - Testing setup guides on different hardware configurations
@@ -240,6 +246,7 @@ Phase 3 is where contributions matter most right now. The highest-impact areas:
 
 | Version | Phase | Highlights |
 |---|---|---|
+| **v1.2.x** | Phase 3 complete | Command palette, frecency, AI command plans, audit log, runbooks, resilient terminal sessions |
 | **v1.1.0** | Phase 2 complete | HAMMA-Gemma4 model, Ollama integration, AI risk scoring, Docker panel |
 | **v1.0.0** | Phase 1 complete | SSH/SFTP client, encrypted vault, biometric lock, fleet dashboard |
 

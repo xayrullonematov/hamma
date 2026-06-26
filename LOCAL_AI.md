@@ -323,13 +323,15 @@ Verify the Base URL matches your inference server's actual address and port. The
 
 ## Roadmap: Built-in Engine
 
-The current architecture requires Ollama (or equivalent) as a separate install. **Phase 4** of the HAMMA roadmap ships the inference engine directly inside the app:
+The current production path supports Ollama or another loopback OpenAI-compatible server. **Phase 4** of the HAMMA roadmap makes the bundled engine the primary path so AI is ready without a separate daemon:
 
 ```
 Future state:
   Install HAMMA  →  Choose modules  →  Done.
   No Ollama. No separate download. No configuration.
 ```
+
+Groundwork already exists in the codebase for native inference, bundled-engine lifecycle, model download, and local-engine health checks. The next implementation work is production packaging, checksum verification, streaming FFI inference, and graceful fallback to Ollama.
 
 Modules will be swappable adapters — install only what you need:
 
