@@ -16,6 +16,8 @@ import '../../core/shell/shell_service.dart';
 import '../../core/ssh/connection_status.dart';
 import '../../core/storage/api_key_storage.dart';
 import '../../core/storage/app_prefs_storage.dart';
+import '../../core/terminal/session_store.dart';
+import '../../core/terminal/terminal_session.dart';
 import '../../core/vault/vault_change_bus.dart';
 import '../../core/vault/vault_injector.dart';
 import '../../core/vault/vault_redactor.dart';
@@ -40,6 +42,7 @@ class TerminalScreen extends StatefulWidget {
     this.localModel,
     this.serverId,
     this.vaultStorage,
+    this.terminalSessionStore,
   });
 
   final ShellService sshService;
@@ -58,11 +61,15 @@ class TerminalScreen extends StatefulWidget {
   /// Injectable for tests. Defaults to `VaultStorage()` at runtime.
   final VaultStorage? vaultStorage;
 
+  /// Injectable for tests. Defaults to `TerminalSessionStore()` at runtime.
+  final TerminalSessionStore? terminalSessionStore;
+
   @override
   State<TerminalScreen> createState() => _TerminalScreenState();
 }
 
-class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAliveClientMixin<TerminalScreen> {
+class _TerminalScreenState extends State<TerminalScreen>
+    with AutomaticKeepAliveClientMixin<TerminalScreen> {
   static const _maxContextChars = 3500;
   static final _panelColor = AppColors.panel;
 
@@ -73,6 +80,17 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
   StreamSubscription<String>? _stderrSubscription;
   String _recentTerminalOutput = '';
   bool _isFullScreen = false;
+
+  late final TerminalSessionStore _terminalSessionStore;
+  Timer? _terminalSessionFlushTimer;
+  String? _terminalSessionId;
+  int? _terminalSessionCreatedAtMs;
+  String _sessionScrollback = '';
+  bool _isRestoringTerminalSession = true;
+  bool _hasRestoredScrollback = false;
+  bool _showRestoreRibbon = false;
+  bool _hadLiveShell = false;
+  bool _awaitingReconnectNotice = false;
 
   // FIX 1: live BundledEngine endpoint resolved asynchronously in initState.
   String? _resolvedLocalEndpoint;
@@ -87,9 +105,36 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
   String _ghostText = '';
 
   static const Map<String, List<String>> _suggestionMap = {
-    'git': ['status', 'add .', 'commit -m "', 'push', 'pull', 'log --oneline', 'checkout', 'branch', 'diff'],
-    'docker': ['ps', 'images', 'logs -f', 'stop', 'start', 'restart', 'exec -it', 'system prune'],
-    'systemctl': ['status', 'restart', 'start', 'stop', 'enable', 'disable', 'daemon-reload'],
+    'git': [
+      'status',
+      'add .',
+      'commit -m "',
+      'push',
+      'pull',
+      'log --oneline',
+      'checkout',
+      'branch',
+      'diff',
+    ],
+    'docker': [
+      'ps',
+      'images',
+      'logs -f',
+      'stop',
+      'start',
+      'restart',
+      'exec -it',
+      'system prune',
+    ],
+    'systemctl': [
+      'status',
+      'restart',
+      'start',
+      'stop',
+      'enable',
+      'disable',
+      'daemon-reload',
+    ],
     'apt': ['update', 'upgrade', 'install', 'remove', 'autoremove', 'search'],
     'ls': ['-la', '-lh', '-R'],
     'cd': ['..', '~', '/var/www', '/etc'],
@@ -113,18 +158,23 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
   // chunks are arbitrary, so a secret can straddle two of them; a
   // per-chunk redact() would emit the leading half before the second
   // chunk arrived. See StreamingVaultRedactor.
-  final StreamingVaultRedactor _stdoutRedactor =
-      StreamingVaultRedactor(VaultRedactor.empty);
-  final StreamingVaultRedactor _stderrRedactor =
-      StreamingVaultRedactor(VaultRedactor.empty);
+  final StreamingVaultRedactor _stdoutRedactor = StreamingVaultRedactor(
+    VaultRedactor.empty,
+  );
+  final StreamingVaultRedactor _stderrRedactor = StreamingVaultRedactor(
+    VaultRedactor.empty,
+  );
   StreamSubscription<void>? _vaultSub;
 
-  bool get _isDesktop => !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
+  bool get _isDesktop =>
+      !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
   @override
   void initState() {
     super.initState();
     _terminal = Terminal(maxLines: 10000);
+    _terminalSessionStore =
+        widget.terminalSessionStore ?? const TerminalSessionStore();
     _terminal.onOutput = _handleTerminalOutput;
     _terminal.onResize = _handleTerminalResize;
 
@@ -146,9 +196,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
     _resolveLocalEndpoint();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.sshService.isConnected) {
-        _openShell();
-      }
+      unawaited(_restoreAndMaybeOpenShell());
       if (_isDesktop) {
         Future.delayed(const Duration(milliseconds: 100), () {
           if (mounted) _terminalFocusNode.requestFocus();
@@ -187,6 +235,124 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
           ? _resolvedLocalEndpoint
           : widget.localEndpoint;
 
+  String get _terminalPersistenceServerId {
+    final serverId = widget.serverId?.trim();
+    if (serverId != null && serverId.isNotEmpty) return serverId;
+    return widget.serverName.trim().isEmpty
+        ? 'default'
+        : widget.serverName.trim();
+  }
+
+  Future<void> _restoreAndMaybeOpenShell() async {
+    await _restoreTerminalSession();
+    if (!mounted) return;
+    if (widget.sshService.isConnected && _session == null) {
+      await _openShell();
+    }
+  }
+
+  Future<void> _restoreTerminalSession() async {
+    final serverId = _terminalPersistenceServerId;
+    try {
+      final restored = await _terminalSessionStore.loadLatest(
+        serverId: serverId,
+      );
+      if (!mounted) return;
+
+      if (restored == null) {
+        _createTerminalSessionIdentity(serverId: serverId);
+        setState(() {
+          _isRestoringTerminalSession = false;
+        });
+        return;
+      }
+
+      _terminalSessionId = restored.sessionId;
+      _terminalSessionCreatedAtMs = restored.createdAtMs;
+      _sessionScrollback = trimTerminalScrollback(restored.scrollback);
+      _recentTerminalOutput = trimTerminalScrollback(
+        _sessionScrollback,
+        _maxContextChars,
+      );
+
+      if (_sessionScrollback.isNotEmpty) {
+        _terminal.write(_sessionScrollback);
+      }
+
+      setState(() {
+        _hasRestoredScrollback = _sessionScrollback.isNotEmpty;
+        _showRestoreRibbon = _hasRestoredScrollback;
+        _isRestoringTerminalSession = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      _createTerminalSessionIdentity(serverId: serverId);
+      setState(() {
+        _isRestoringTerminalSession = false;
+      });
+    }
+  }
+
+  void _createTerminalSessionIdentity({required String serverId}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _terminalSessionId ??= 'term-$now';
+    _terminalSessionCreatedAtMs ??= now;
+  }
+
+  void _scheduleTerminalSessionFlush() {
+    _terminalSessionFlushTimer?.cancel();
+    _terminalSessionFlushTimer = Timer(
+      const Duration(milliseconds: 750),
+      () => unawaited(_flushTerminalSession()),
+    );
+  }
+
+  Future<void> _flushTerminalSession() async {
+    final sessionId = _terminalSessionId;
+    if (sessionId == null || _sessionScrollback.isEmpty) return;
+
+    final serverId = _terminalPersistenceServerId;
+    _createTerminalSessionIdentity(serverId: serverId);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final redactedScrollback = trimTerminalScrollback(
+      _vaultRedactor.redact(_sessionScrollback),
+    );
+    _sessionScrollback = redactedScrollback;
+
+    await _terminalSessionStore.save(
+      TerminalSession(
+        serverId: serverId,
+        sessionId: sessionId,
+        serverName: widget.serverName,
+        scrollback: redactedScrollback,
+        createdAtMs: _terminalSessionCreatedAtMs ?? now,
+        updatedAtMs: now,
+      ),
+    );
+  }
+
+  void _writeTerminal(
+    String data, {
+    bool alreadyRedacted = false,
+    bool persist = true,
+  }) {
+    if (data.isEmpty) return;
+    final visible = alreadyRedacted ? data : _vaultRedactor.redact(data);
+    if (visible.isEmpty) return;
+    _terminal.write(visible);
+    if (persist) _trackOutput(visible);
+  }
+
+  void _showReconnectedNotice() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Reconnected - picked up where you left off.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
   Future<void> _loadTerminalPreferences() async {
     final size = await widget.appPrefsStorage.getTerminalFontSize();
     final family = await widget.appPrefsStorage.getTerminalFontFamily();
@@ -205,6 +371,8 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
     _vaultSub?.cancel();
     _stdoutSubscription?.cancel();
     _stderrSubscription?.cancel();
+    _terminalSessionFlushTimer?.cancel();
+    unawaited(_flushTerminalSession());
     _session?.close();
     _terminalFocusNode.dispose();
     super.dispose();
@@ -218,6 +386,13 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       _vaultRedactor = VaultRedactor.from(_vaultSecrets);
       _stdoutRedactor.updateRedactor(_vaultRedactor);
       _stderrRedactor.updateRedactor(_vaultRedactor);
+      final redactedScrollback = trimTerminalScrollback(
+        _vaultRedactor.redact(_sessionScrollback),
+      );
+      if (redactedScrollback != _sessionScrollback) {
+        _sessionScrollback = redactedScrollback;
+        _scheduleTerminalSessionFlush();
+      }
     } catch (_) {
       // Vault unavailable (e.g. test harness with no secure-storage
       // plugin). Leave the empty redactor in place and carry on —
@@ -229,16 +404,26 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
     if (!mounted) return;
     final status = widget.sshService.currentStatus;
 
-    if (status.isConnected && _session == null) {
-      _openShell();
+    if (status.isConnected &&
+        _session == null &&
+        !_isRestoringTerminalSession) {
+      unawaited(_openShell());
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _terminalFocusNode.requestFocus();
       });
-    } else if (!status.isConnected && _session != null) {
-      // Ensure session is nulled if we transition to disconnected, failed,
-      // or reconnecting states.
-      _session = null;
-      setState(() {});
+      return;
+    }
+
+    if (!status.isConnected) {
+      if (_hadLiveShell) {
+        _awaitingReconnectNotice = true;
+      }
+      unawaited(_flushTerminalSession());
+      setState(() {
+        _session = null;
+        _showRestoreRibbon =
+            _hasRestoredScrollback || _sessionScrollback.isNotEmpty;
+      });
     }
   }
 
@@ -253,7 +438,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
 
   Future<void> _openShell() async {
     if (!widget.sshService.isConnected) return;
-    
+
     try {
       // Use fallback dimensions if the terminal hasn't been laid out yet.
       // Starting with 0x0 can cause some shells to freeze or ignore input.
@@ -267,49 +452,54 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((data) {
-        // Stream through a carry-buffered redactor so a secret split
-        // across SSH chunks is still caught before either half is
-        // emitted to xterm or the AI-context buffer.
-        final text = _stdoutRedactor.feed(data);
-        if (text.isEmpty) return;
-        _terminal.write(text);
-        _trackOutput(text);
-      });
+            // Stream through a carry-buffered redactor so a secret split
+            // across SSH chunks is still caught before either half is
+            // emitted to xterm or the AI-context buffer.
+            final text = _stdoutRedactor.feed(data);
+            if (text.isEmpty) return;
+            _writeTerminal(text, alreadyRedacted: true);
+          });
 
       _stderrSubscription?.cancel();
       _stderrSubscription = (session.stderr as Stream<Uint8List>)
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen((data) {
-        final text = _stderrRedactor.feed(data);
-        if (text.isEmpty) return;
-        _terminal.write(text);
-        _trackOutput(text);
-      });
+            final text = _stderrRedactor.feed(data);
+            if (text.isEmpty) return;
+            _writeTerminal(text, alreadyRedacted: true);
+          });
 
       (session.done as Future).then((_) {
         if (!mounted) return;
+        if (_session != null && !identical(_session, session)) return;
         // Flush any held-back carry so a trailing secret at EOF is
         // still scrubbed before the closing banner.
         final tailOut = _stdoutRedactor.flush();
         final tailErr = _stderrRedactor.flush();
         if (tailOut.isNotEmpty) {
-          _terminal.write(tailOut);
-          _trackOutput(tailOut);
+          _writeTerminal(tailOut, alreadyRedacted: true);
         }
         if (tailErr.isNotEmpty) {
-          _terminal.write(tailErr);
-          _trackOutput(tailErr);
+          _writeTerminal(tailErr, alreadyRedacted: true);
         }
         setState(() {
           _session = null;
         });
-        _terminal.write('\r\n[session closed]\r\n');
+        _writeTerminal('\r\n[session closed]\r\n');
+        unawaited(_flushTerminalSession());
       });
 
+      final shouldShowReconnectNotice = _awaitingReconnectNotice;
       setState(() {
         _session = session;
+        _hadLiveShell = true;
+        _awaitingReconnectNotice = false;
+        _showRestoreRibbon = false;
       });
+      if (shouldShowReconnectNotice) {
+        _showReconnectedNotice();
+      }
 
       if (_terminal.viewWidth > 0 && _terminal.viewHeight > 0) {
         _session?.resizeTerminal(_terminal.viewWidth, _terminal.viewHeight);
@@ -319,7 +509,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       setState(() {
         _session = null;
       });
-      _terminal.write('Failed to open shell: $e\r\n');
+      _writeTerminal('Failed to open shell: $e\r\n');
     }
   }
 
@@ -346,15 +536,27 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
     _session?.write(Uint8List.fromList(utf8.encode(data)));
   }
 
-  void _handleTerminalResize(int width, int height, int pixelWidth, int pixelHeight) {
+  void _handleTerminalResize(
+    int width,
+    int height,
+    int pixelWidth,
+    int pixelHeight,
+  ) {
     _session?.resizeTerminal(width, height);
   }
 
   void _trackOutput(String data) {
-    _recentTerminalOutput += data;
-    if (_recentTerminalOutput.length > _maxContextChars) {
-      _recentTerminalOutput = _recentTerminalOutput.substring(_recentTerminalOutput.length - _maxContextChars);
-    }
+    final safe = _vaultRedactor.redact(data);
+    if (safe.isEmpty) return;
+    _recentTerminalOutput = trimTerminalScrollback(
+      '$_recentTerminalOutput$safe',
+      _maxContextChars,
+    );
+    _createTerminalSessionIdentity(serverId: _terminalPersistenceServerId);
+    _sessionScrollback = trimTerminalScrollback('$_sessionScrollback$safe');
+    _hasRestoredScrollback =
+        _hasRestoredScrollback || _sessionScrollback.isNotEmpty;
+    _scheduleTerminalSessionFlush();
   }
 
   void _sendToolbarKey(String data) {
@@ -363,41 +565,40 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
 
   Future<void> _openCopilot() async {
     Widget buildBody(BuildContext _) => AiCopilotSheet(
-          serverId: widget.serverName,
-          provider: widget.aiProvider,
-          apiKeyStorage: widget.apiKeyStorage,
-          openRouterModel: widget.openRouterModel,
-          localEndpoint: _effectiveLocalEndpoint, // FIX 1: was widget.localEndpoint
-          localModel: widget.localModel,
-          executionTarget: AiCopilotExecutionTarget.terminal,
-          canRunCommands: () =>
-              _session != null && widget.sshService.isConnected,
-          getContext: () => _recentTerminalOutput,
-          onRunCommand: (cmd) async {
-            // Route through the non-interactive exec path so the
-            // resolved command bytes never enter the TTY echo stream
-            // or the remote shell history. The pane shows the
-            // placeholder form + redacted output.
-            _terminal.write('\r\n\$ $cmd\r\n');
-            try {
-              final out = await widget.sshService.execute(
-                cmd,
-                vaultSecrets: _vaultSecrets,
-              );
-              _terminal.write('${_vaultRedactor.redact(out)}\r\n');
-              return out;
-            } on VaultInjectionException catch (e) {
-              _terminal.write('[vault: ${e.message}]\r\n');
-              return null;
-            } catch (e) {
-              _terminal.write('[error: $e]\r\n');
-              return null;
-            }
-          },
-          executionUnavailableMessage:
-              'Commands can only be run when the terminal is connected.',
-          isModal: !Breakpoints.isDesktop(context),
-        );
+      serverId: widget.serverName,
+      provider: widget.aiProvider,
+      apiKeyStorage: widget.apiKeyStorage,
+      openRouterModel: widget.openRouterModel,
+      localEndpoint: _effectiveLocalEndpoint, // FIX 1: was widget.localEndpoint
+      localModel: widget.localModel,
+      executionTarget: AiCopilotExecutionTarget.terminal,
+      canRunCommands: () => _session != null && widget.sshService.isConnected,
+      getContext: () => _recentTerminalOutput,
+      onRunCommand: (cmd) async {
+        // Route through the non-interactive exec path so the
+        // resolved command bytes never enter the TTY echo stream
+        // or the remote shell history. The pane shows the
+        // placeholder form + redacted output.
+        _writeTerminal('\r\n\$ $cmd\r\n');
+        try {
+          final out = await widget.sshService.execute(
+            cmd,
+            vaultSecrets: _vaultSecrets,
+          );
+          _writeTerminal('$out\r\n');
+          return out;
+        } on VaultInjectionException catch (e) {
+          _writeTerminal('[vault: ${e.message}]\r\n');
+          return null;
+        } catch (e) {
+          _writeTerminal('[error: $e]\r\n');
+          return null;
+        }
+      },
+      executionUnavailableMessage:
+          'Commands can only be run when the terminal is connected.',
+      isModal: !Breakpoints.isDesktop(context),
+    );
 
     // Dock at desktop widths when a CopilotDock is installed; else modal.
     final dock = CopilotDock.maybeOf(context);
@@ -414,10 +615,11 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => FractionallySizedBox(
-        heightFactor: 0.82,
-        child: buildBody(context),
-      ),
+      builder:
+          (_) => FractionallySizedBox(
+            heightFactor: 0.82,
+            child: buildBody(context),
+          ),
     );
   }
 
@@ -439,13 +641,17 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       final suggestions = _suggestionMap[baseCommand];
 
       if (suggestions == null) {
-        return KeyEventResult.ignored; // Let literal Tab through if no command match
+        return KeyEventResult
+            .ignored; // Let literal Tab through if no command match
       }
 
       // 3. Filter suggestions (case-insensitive)
-      final filtered = suggestions
-          .where((s) => s.toLowerCase().startsWith(partialSuffix.toLowerCase()))
-          .toList();
+      final filtered =
+          suggestions
+              .where(
+                (s) => s.toLowerCase().startsWith(partialSuffix.toLowerCase()),
+              )
+              .toList();
 
       // 4. If no matches -> normal tab
       if (filtered.isEmpty) {
@@ -459,7 +665,9 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
       } else {
         // 6. Else -> Cycle
         if (isShiftPressed) {
-          _tabCycleIndex = (_tabCycleIndex - 1 + _tabSuggestions.length) % _tabSuggestions.length;
+          _tabCycleIndex =
+              (_tabCycleIndex - 1 + _tabSuggestions.length) %
+              _tabSuggestions.length;
         } else {
           _tabCycleIndex = (_tabCycleIndex + 1) % _tabSuggestions.length;
         }
@@ -480,7 +688,8 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
           event.logicalKey == LogicalKeyboardKey.arrowRight) {
         // Calculate the suffix to type
         final parts = _currentInput.trimLeft().split(' ');
-        final partialSuffix = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+        final partialSuffix =
+            parts.length > 1 ? parts.sublist(1).join(' ') : '';
         final suffix = _ghostText.substring(partialSuffix.length);
 
         // Send suffix to terminal
@@ -534,7 +743,9 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
           if (_isDesktop)
             IconButton(
               onPressed: _toggleFullScreen,
-              icon: Icon(_isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen),
+              icon: Icon(
+                _isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+              ),
               tooltip: 'Toggle Full Screen',
             ),
           IconButton(
@@ -549,6 +760,11 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
         children: [
           Column(
             children: [
+              if (_showRestoreRibbon)
+                _RestoredSessionRibbon(
+                  isTransportConnected:
+                      widget.sshService.currentStatus.isConnected,
+                ),
               Expanded(
                 child: Focus(
                   onKeyEvent: _handleKeyEvent,
@@ -559,9 +775,7 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
                         horizontal: _isDesktop ? 16 : 8,
                         vertical: _isDesktop ? 0 : 8,
                       ),
-                      decoration: const BoxDecoration(
-                        color: Colors.black,
-                      ),
+                      decoration: const BoxDecoration(color: Colors.black),
                       child: ClipRRect(
                         borderRadius: BorderRadius.zero,
                         child: TerminalView(
@@ -586,12 +800,17 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
               if (_isDesktop && _ghostText.isNotEmpty)
                 Container(
                   color: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   child: Row(
                     children: [
                       // Ghost text: dim accepted portion
                       Text(
-                        _currentInput.split(' ').length > 1 ? _currentInput.split(' ').last : '',
+                        _currentInput.split(' ').length > 1
+                            ? _currentInput.split(' ').last
+                            : '',
                         style: const TextStyle(
                           color: Colors.white38,
                           fontFamily: AppColors.monoFamily,
@@ -613,17 +832,19 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
                       ..._tabSuggestions
                           .where((s) => s != _ghostText)
                           .take(5)
-                          .map((s) => Padding(
-                                padding: const EdgeInsets.only(right: 12),
-                                child: Text(
-                                  s,
-                                  style: const TextStyle(
-                                    color: Colors.white24,
-                                    fontFamily: AppColors.monoFamily,
-                                    fontSize: 13,
-                                  ),
+                          .map(
+                            (s) => Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: Text(
+                                s,
+                                style: const TextStyle(
+                                  color: Colors.white24,
+                                  fontFamily: AppColors.monoFamily,
+                                  fontSize: 13,
                                 ),
-                              )),
+                              ),
+                            ),
+                          ),
                       const Spacer(),
                       // Key hint
                       const Text(
@@ -639,7 +860,8 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
                 ),
               ValueListenableBuilder<ConnectionStatus>(
                 valueListenable: widget.sshService.statusNotifier,
-                builder: (context, status, _) => _buildToolbar(status.isConnected),
+                builder:
+                    (context, status, _) => _buildToolbar(status.isConnected),
               ),
               if (_isDesktop) const SizedBox(height: 16),
             ],
@@ -665,13 +887,34 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _ToolbarButton(label: 'ESC', onTap: () => _sendToolbarKey('\x1b')),
-                  _ToolbarButton(label: 'TAB', onTap: () => _sendToolbarKey('\t')),
-                  _ToolbarButton(label: 'CTRL+C', onTap: () => _sendToolbarKey('\x03')),
-                  _ToolbarButton(label: '↑', onTap: () => _sendToolbarKey('\x1b[A')),
-                  _ToolbarButton(label: '↓', onTap: () => _sendToolbarKey('\x1b[B')),
-                  _ToolbarButton(label: '←', onTap: () => _sendToolbarKey('\x1b[D')),
-                  _ToolbarButton(label: '→', onTap: () => _sendToolbarKey('\x1b[C')),
+                  _ToolbarButton(
+                    label: 'ESC',
+                    onTap: () => _sendToolbarKey('\x1b'),
+                  ),
+                  _ToolbarButton(
+                    label: 'TAB',
+                    onTap: () => _sendToolbarKey('\t'),
+                  ),
+                  _ToolbarButton(
+                    label: 'CTRL+C',
+                    onTap: () => _sendToolbarKey('\x03'),
+                  ),
+                  _ToolbarButton(
+                    label: '↑',
+                    onTap: () => _sendToolbarKey('\x1b[A'),
+                  ),
+                  _ToolbarButton(
+                    label: '↓',
+                    onTap: () => _sendToolbarKey('\x1b[B'),
+                  ),
+                  _ToolbarButton(
+                    label: '←',
+                    onTap: () => _sendToolbarKey('\x1b[D'),
+                  ),
+                  _ToolbarButton(
+                    label: '→',
+                    onTap: () => _sendToolbarKey('\x1b[C'),
+                  ),
                   _ToolbarButton(label: '|', onTap: () => _sendToolbarKey('|')),
                   _ToolbarButton(label: '-', onTap: () => _sendToolbarKey('-')),
                   _ToolbarButton(label: '_', onTap: () => _sendToolbarKey('_')),
@@ -679,6 +922,46 @@ class _TerminalScreenState extends State<TerminalScreen> with AutomaticKeepAlive
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RestoredSessionRibbon extends StatelessWidget {
+  const _RestoredSessionRibbon({required this.isTransportConnected});
+
+  final bool isTransportConnected;
+
+  @override
+  Widget build(BuildContext context) {
+    final text =
+        isTransportConnected
+            ? 'Restored - opening live shell...'
+            : 'Restored - reconnecting...';
+    return Container(
+      width: double.infinity,
+      color: AppColors.panel,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+      child: SafeArea(
+        bottom: false,
+        child: Row(
+          children: [
+            Icon(Icons.history_rounded, size: 14, color: AppColors.accent),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: AppColors.monoFamily,
+                  fontFamilyFallback: AppColors.monoFallback,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -705,7 +988,11 @@ class _ToolbarButton extends StatelessWidget {
           ),
           child: Text(
             label,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
       ),
