@@ -567,13 +567,15 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
           height: _terminal.viewHeight > 0 ? _terminal.viewHeight : 24,
         );
         
-        _stdoutSub = (_sshSession!.stdout as Stream<List<int>>)
+        _stdoutSub = _sshSession!.stdout
+            .cast<List<int>>()
             .transform(const Utf8Decoder(allowMalformed: true))
             .listen((data) {
               _handleData(data);
             });
             
-        _stderrSub = (_sshSession!.stderr as Stream<List<int>>)
+        _stderrSub = _sshSession!.stderr
+            .cast<List<int>>()
             .transform(const Utf8Decoder(allowMalformed: true))
             .listen((data) {
               _handleData(data);

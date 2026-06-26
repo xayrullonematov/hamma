@@ -44,9 +44,15 @@ Future<bool> _handleHealthTask() async {
 
   final notifications = FlutterLocalNotificationsPlugin();
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const iosInit = DarwinInitializationSettings();
+  const darwinInit = DarwinInitializationSettings();
+  const linuxInit = LinuxInitializationSettings(defaultActionName: 'Open');
   await notifications.initialize(
-    const InitializationSettings(android: androidInit, iOS: iosInit),
+    const InitializationSettings(
+      android: androidInit,
+      iOS: darwinInit,
+      macOS: darwinInit,
+      linux: linuxInit,
+    ),
   );
 
   for (final server in servers) {

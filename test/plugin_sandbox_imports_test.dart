@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:hamma/plugins/builtin/kubernetes_plugin.dart';
+import 'package:hamma/plugins/builtin/proxmox_plugin.dart';
 
 /// Mechanically enforces the v1 plugin sandbox import policy.
 ///
@@ -49,6 +51,21 @@ void main() {
       reason:
           'Plugins must reach the rest of Hamma through HammaApi only. '
           'Forbidden imports detected:\n${violations.join("\n")}',
+    );
+  });
+
+  test('built-in plugin palette action surface stays SDK-only', () {
+    final kubernetesActions = KubernetesPlugin().paletteActions().toList();
+    final proxmoxActions = ProxmoxPlugin().paletteActions().toList();
+
+    expect(kubernetesActions, isNotEmpty);
+    expect(kubernetesActions.map((a) => a.id), contains('list-pods'));
+    expect(
+      [
+        ...kubernetesActions,
+        ...proxmoxActions,
+      ].every((action) => action.label.trim().isNotEmpty),
+      isTrue,
     );
   });
 }

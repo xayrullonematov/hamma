@@ -27,26 +27,136 @@ class KubernetesPlugin extends HammaPlugin {
 
   @override
   PluginManifest get manifest => const PluginManifest(
-        id: pluginId,
-        name: 'Kubernetes',
-        version: '1.0.0',
-        author: 'Hamma core team',
-        description:
-            'Runs kubectl on the active SSH session and renders pod / log views.',
-        icon: Icons.hub_rounded,
-      );
+    id: pluginId,
+    name: 'Kubernetes',
+    version: '1.0.0',
+    author: 'Hamma core team',
+    description:
+        'Runs kubectl on the active SSH session and renders pod / log views.',
+    icon: Icons.hub_rounded,
+  );
 
   @override
   PluginCapabilities get capabilities => const PluginCapabilities(
-        needsSshSession: true,
-        permissionsSummary:
-            'Runs kubectl commands on the connected server. Every command '
-            'is screened by Hamma\'s risk assessor before execution.',
-      );
+    needsSshSession: true,
+    permissionsSummary:
+        'Runs kubectl commands on the connected server. Every command '
+        'is screened by Hamma\'s risk assessor before execution.',
+  );
+
+  @override
+  Iterable<HammaPluginPaletteAction> paletteActions() {
+    return [
+      HammaPluginPaletteAction(
+        id: 'list-pods',
+        label: 'List Kubernetes pods',
+        description: 'Run kubectl get pods across all namespaces',
+        icon: Icons.hub_rounded,
+        run: (context, api) async {
+          final messenger = ScaffoldMessenger.maybeOf(context);
+          final result = await api.runCommand('kubectl get pods -A -o wide');
+          if (!context.mounted) return;
+          await showDialog<void>(
+            context: context,
+            builder:
+                (dialogContext) => _CommandOutputDialog(
+                  title: 'KUBERNETES PODS',
+                  command: result.command,
+                  body: result.stdout,
+                ),
+          );
+          messenger?.hideCurrentSnackBar();
+        },
+      ),
+    ];
+  }
 
   @override
   Widget buildPanel(BuildContext context, HammaApi api) =>
       _KubernetesPanel(api: api);
+}
+
+class _CommandOutputDialog extends StatelessWidget {
+  const _CommandOutputDialog({
+    required this.title,
+    required this.command,
+    required this.body,
+  });
+
+  final String title;
+  final String command;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppColors.surface,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 560),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Icon(Icons.hub_rounded, color: AppColors.textPrimary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontFamily: AppColors.monoFamily,
+                        fontFamilyFallback: AppColors.monoFallback,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded),
+                    color: AppColors.textMuted,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: SelectableText(
+                command,
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontFamily: AppColors.monoFamily,
+                  fontFamilyFallback: AppColors.monoFallback,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: SelectableText(
+                  body.trim().isEmpty ? '(no output)' : body,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: AppColors.monoFamily,
+                    fontFamilyFallback: AppColors.monoFallback,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _KubernetesPanel extends StatefulWidget {
@@ -111,7 +221,9 @@ class _KubernetesPanelState extends State<_KubernetesPanel> {
     } on HammaApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('kubectl logs failed: $e')));
+      messenger.showSnackBar(
+        SnackBar(content: Text('kubectl logs failed: $e')),
+      );
     }
   }
 
@@ -216,7 +328,8 @@ class _PodsTable extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView.separated(
       itemCount: pods.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
+      separatorBuilder:
+          (_, __) => const Divider(height: 1, color: AppColors.border),
       itemBuilder: (context, i) {
         final p = pods[i];
         return ListTile(
@@ -327,7 +440,11 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 32),
+            const Icon(
+              Icons.error_outline_rounded,
+              color: AppColors.danger,
+              size: 32,
+            ),
             const SizedBox(height: 12),
             Text(
               error,
@@ -358,10 +475,13 @@ class _Pod {
   });
 
   factory _Pod.fromJson(Map<String, dynamic> json) {
-    final metadata = (json['metadata'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final metadata =
+        (json['metadata'] as Map?)?.cast<String, dynamic>() ?? const {};
     final spec = (json['spec'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final status = (json['status'] as Map?)?.cast<String, dynamic>() ?? const {};
-    final containerStatuses = (status['containerStatuses'] as List?) ?? const [];
+    final status =
+        (json['status'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final containerStatuses =
+        (status['containerStatuses'] as List?) ?? const [];
     var readyCount = 0;
     for (final cs in containerStatuses) {
       if (cs is Map && cs['ready'] == true) readyCount++;

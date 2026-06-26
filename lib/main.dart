@@ -9,16 +9,30 @@ import 'package:window_manager/window_manager.dart';
 
 import 'core/ai/ai_command_service.dart';
 import 'core/ai/ai_provider.dart';
+import 'core/ai/command_risk_assessor.dart';
 import 'core/ai/inference_engine.dart';
 import 'core/background/background_keepalive.dart';
+import 'core/audit/execution_audit_entry.dart';
+import 'core/audit/execution_audit_service.dart';
 import 'core/error/crash_screen.dart';
 import 'core/error/error_reporter.dart';
 import 'core/error/error_scrubber.dart';
 import 'core/models/server_profile.dart';
+import 'core/palette/palette_index.dart';
+import 'core/palette/sources/plugin_actions_source.dart';
+import 'core/palette/sources/recent_commands_source.dart';
+import 'core/palette/sources/runbooks_source.dart';
+import 'core/palette/sources/screens_source.dart';
+import 'core/palette/sources/servers_source.dart';
+import 'core/palette/sources/sftp_files_source.dart';
+import 'core/runbooks/runbook.dart';
+import 'core/runbooks/runbook_storage.dart';
+import 'core/runbooks/starter_pack.dart';
 import 'core/ssh/ssh_service.dart';
 import 'core/storage/api_key_storage.dart';
 import 'core/storage/app_lock_storage.dart';
 import 'core/storage/app_prefs_storage.dart';
+import 'core/storage/frecency_storage.dart';
 import 'core/storage/saved_servers_storage.dart';
 import 'core/sync/runbook_sync_service.dart';
 import 'core/sync/snippet_sync_service.dart';
@@ -28,11 +42,21 @@ import 'core/vault/vault_change_bus.dart';
 import 'core/vault/vault_redactor.dart';
 import 'core/vault/vault_storage.dart';
 import 'core/theme/app_colors.dart';
-import 'features/ai_assistant/global_command_palette.dart';
+import 'features/ai_assistant/command_palette_manager.dart';
+import 'features/ai_cli/ai_cli_screen.dart';
+import 'features/fleet/fleet_dashboard_screen.dart';
+import 'features/local/local_development_screen.dart';
+import 'features/shortcuts/cheatsheet.dart';
 import 'features/onboarding/onboarding_screen.dart';
+import 'plugins/hamma_api.dart';
+import 'plugins/hamma_plugin.dart';
 import 'plugins/plugin_registry.dart';
 import 'features/security/app_lock_screen.dart';
+import 'features/servers/server_dashboard_screen.dart';
+import 'features/runbooks/runbook_run_screen.dart';
 import 'features/servers/server_list_screen.dart';
+import 'features/sftp/file_explorer_screen.dart';
+import 'features/settings/settings_screen.dart';
 
 /// Production flag to disable debug-only features and logs.
 const bool kProduction = bool.fromEnvironment('dart.vm.product');
@@ -46,53 +70,63 @@ int _restartAttempts = 0;
 const int _maxRestartAttempts = 3;
 
 void main() {
-  runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-    // Ensure native LLM libraries are loaded on desktop before bootstrap.
-    InferenceEngine.ensureNativeLibraryLoaded();
+      // Ensure native LLM libraries are loaded on desktop before bootstrap.
+      InferenceEngine.ensureNativeLibraryLoaded();
 
-    // Install our error hooks (FlutterError.onError, PlatformDispatcher
-    // .instance.onError, ErrorWidget.builder) BEFORE SentryFlutter.init
-    // so Sentry's own integrations layer on top and chain to ours
-    // rather than replacing them.
-    ErrorReporter.install();
+      // Install our error hooks (FlutterError.onError, PlatformDispatcher
+      // .instance.onError, ErrorWidget.builder) BEFORE SentryFlutter.init
+      // so Sentry's own integrations layer on top and chain to ours
+      // rather than replacing them.
+      ErrorReporter.install();
 
-    try {
-      await _bootstrapAndRun();
-      // Successful boot — reset the restart counter so a subsequent
-      // failure starts from a fresh budget rather than inheriting
-      // attempts from earlier in this session.
-      _restartAttempts = 0;
-    } catch (error, stack) {
-      // Fatal startup failure: report and fall back to the standalone
-      // crash screen so the user sees a friendly recovery UI instead
-      // of a black window. Suppress the restart button after enough
-      // consecutive failures so a deterministic crash can't loop.
-      await ErrorReporter.report(error, stack, hint: 'Startup failure');
-      final canRestart = _restartAttempts < _maxRestartAttempts;
-      runApp(CrashApp(
-        error: error,
-        stackTrace: stack,
-        hint: canRestart
-            ? 'Hamma failed to start.'
-            : 'Hamma failed to start, and automatic restart has been '
-                'disabled after $_restartAttempts attempts. Please quit '
-                'and relaunch.',
-        onRestart: canRestart
-            ? () {
-                _restartAttempts++;
-                main();
-              }
-            : null,
-      ));
-    }
-  }, (exception, stackTrace) async {
-    // Async errors that escaped the zone — also funnel through the
-    // central reporter so they appear on the crash screen if fatal.
-    await ErrorReporter.report(exception, stackTrace,
-        hint: 'Uncaught async error');
-  });
+      try {
+        await _bootstrapAndRun();
+        // Successful boot — reset the restart counter so a subsequent
+        // failure starts from a fresh budget rather than inheriting
+        // attempts from earlier in this session.
+        _restartAttempts = 0;
+      } catch (error, stack) {
+        // Fatal startup failure: report and fall back to the standalone
+        // crash screen so the user sees a friendly recovery UI instead
+        // of a black window. Suppress the restart button after enough
+        // consecutive failures so a deterministic crash can't loop.
+        await ErrorReporter.report(error, stack, hint: 'Startup failure');
+        final canRestart = _restartAttempts < _maxRestartAttempts;
+        runApp(
+          CrashApp(
+            error: error,
+            stackTrace: stack,
+            hint:
+                canRestart
+                    ? 'Hamma failed to start.'
+                    : 'Hamma failed to start, and automatic restart has been '
+                        'disabled after $_restartAttempts attempts. Please quit '
+                        'and relaunch.',
+            onRestart:
+                canRestart
+                    ? () {
+                      _restartAttempts++;
+                      main();
+                    }
+                    : null,
+          ),
+        );
+      }
+    },
+    (exception, stackTrace) async {
+      // Async errors that escaped the zone — also funnel through the
+      // central reporter so they appear on the crash screen if fatal.
+      await ErrorReporter.report(
+        exception,
+        stackTrace,
+        hint: 'Uncaught async error',
+      );
+    },
+  );
 }
 
 /// Performs the full app startup sequence and calls `runApp` exactly
@@ -125,9 +159,15 @@ Future<void> _bootstrapAndRun() async {
   // Initialize notifications
   final notifications = FlutterLocalNotificationsPlugin();
   const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const iosInit = DarwinInitializationSettings();
+  const darwinInit = DarwinInitializationSettings();
+  const linuxInit = LinuxInitializationSettings(defaultActionName: 'Open');
   await notifications.initialize(
-    const InitializationSettings(android: androidInit, iOS: iosInit),
+    const InitializationSettings(
+      android: androidInit,
+      iOS: darwinInit,
+      macOS: darwinInit,
+      linux: linuxInit,
+    ),
   );
 
   // Initialize background sentinel
@@ -211,7 +251,9 @@ Future<void> _bootstrapAndRun() async {
       try {
         final next = await vaultStorage.loadAll();
         GlobalVaultRedactor.set(VaultRedactor.from(next));
-      } catch (_) {/* best-effort */}
+      } catch (_) {
+        /* best-effort */
+      }
     });
     final vaultSync = VaultSyncService(
       vaultStorage: vaultStorage,
@@ -256,97 +298,100 @@ Future<void> _bootstrapAndRun() async {
     return;
   }
 
-  await SentryFlutter.init(
-    (options) {
-      options.dsn = kProduction ? productionDsn : '';
-      options.tracesSampleRate = 1.0;
-      options.attachStacktrace = true;
-      options.enableAutoSessionTracking = true;
+  await SentryFlutter.init((options) {
+    options.dsn = kProduction ? productionDsn : '';
+    options.tracesSampleRate = 1.0;
+    options.attachStacktrace = true;
+    options.enableAutoSessionTracking = true;
 
-      // Transport-side scrubbing: every event leaving the device
-      // passes through the same scrubber the in-app crash screen uses
-      // so the two views of an error stay consistent.
-      //
-      // ErrorScrubber.scrub already runs the GlobalVaultRedactor as a
-      // pre-pass, so calling it once on every string-shaped field
-      // gets us regex-pattern scrubbing AND vault-value redaction in
-      // one go.
-      options.beforeSend = (SentryEvent event, Hint hint) {
-        String s(String? input) => ErrorScrubber.scrub(input ?? '');
-        Object? scrubAny(Object? value) {
-          if (value == null) return null;
-          if (value is String) return s(value);
-          if (value is num || value is bool) return value;
-          if (value is Map) {
-            return value.map(
-              (k, v) => MapEntry(k, scrubAny(v)),
-            );
-          }
-          if (value is List) return value.map(scrubAny).toList();
-          return s(value.toString());
+    // Transport-side scrubbing: every event leaving the device
+    // passes through the same scrubber the in-app crash screen uses
+    // so the two views of an error stay consistent.
+    //
+    // ErrorScrubber.scrub already runs the GlobalVaultRedactor as a
+    // pre-pass, so calling it once on every string-shaped field
+    // gets us regex-pattern scrubbing AND vault-value redaction in
+    // one go.
+    options.beforeSend = (SentryEvent event, Hint hint) {
+      String s(String? input) => ErrorScrubber.scrub(input ?? '');
+      Object? scrubAny(Object? value) {
+        if (value == null) return null;
+        if (value is String) return s(value);
+        if (value is num || value is bool) return value;
+        if (value is Map) {
+          return value.map((k, v) => MapEntry(k, scrubAny(v)));
         }
+        if (value is List) return value.map(scrubAny).toList();
+        return s(value.toString());
+      }
 
-        // 1. message (formatted + template + params)
-        if (event.message != null) {
-          event.message = SentryMessage(
-            s(event.message!.formatted),
-            template: event.message!.template == null
-                ? null
-                : s(event.message!.template),
-            params: event.message!.params
-                ?.map((p) => scrubAny(p))
-                .toList(growable: false),
+      // 1. message (formatted + template + params)
+      if (event.message != null) {
+        event.message = SentryMessage(
+          s(event.message!.formatted),
+          template:
+              event.message!.template == null
+                  ? null
+                  : s(event.message!.template),
+          params: event.message!.params
+              ?.map((p) => scrubAny(p))
+              .toList(growable: false),
+        );
+      }
+
+      // 2. exception values (the human-readable thrown text)
+      if (event.exceptions != null) {
+        for (final ex in event.exceptions!) {
+          ex.value = s(ex.value);
+        }
+      }
+
+      // 3. breadcrumbs (message + the entire data map). These are
+      //    the worst leak surface in practice — every navigation,
+      //    HTTP call, and console log lands here.
+      if (event.breadcrumbs != null) {
+        for (final b in event.breadcrumbs!) {
+          b.message = b.message == null ? null : s(b.message);
+          if (b.data != null) {
+            b.data = (scrubAny(b.data) as Map).cast<String, dynamic>();
+          }
+        }
+      }
+
+      // 4. tags: short labels but they CAN contain user input.
+      if (event.tags != null) {
+        event.tags = event.tags!.map((k, v) => MapEntry(k, s(v)));
+      }
+
+      // 6. contexts: drop obviously sensitive keys outright, then
+      //    recursively scrub everything that survives.
+      for (final entry in event.contexts.entries.toList()) {
+        final value = entry.value;
+        if (value is Map) {
+          value.removeWhere(
+            (k, _) =>
+                k.toString().toLowerCase().contains('password') ||
+                k.toString().toLowerCase().contains('key') ||
+                k.toString().toLowerCase().contains('secret') ||
+                k.toString().toLowerCase().contains('token'),
           );
+          // Now scrub the surviving values in place.
+          value.forEach((k, v) {
+            value[k] = scrubAny(v);
+          });
         }
+      }
 
-        // 2. exception values (the human-readable thrown text)
-        if (event.exceptions != null) {
-          for (final ex in event.exceptions!) {
-            ex.value = s(ex.value);
-          }
-        }
+      return event;
+    };
+  }, appRunner: () => runApp(app));
+}
 
-        // 3. breadcrumbs (message + the entire data map). These are
-        //    the worst leak surface in practice — every navigation,
-        //    HTTP call, and console log lands here.
-        if (event.breadcrumbs != null) {
-          for (final b in event.breadcrumbs!) {
-            b.message = b.message == null ? null : s(b.message);
-            if (b.data != null) {
-              b.data = (scrubAny(b.data) as Map).cast<String, dynamic>();
-            }
-          }
-        }
-
-        // 4. tags: short labels but they CAN contain user input.
-        if (event.tags != null) {
-          event.tags = event.tags!.map((k, v) => MapEntry(k, s(v)));
-        }
-
-        // 6. contexts: drop obviously sensitive keys outright, then
-        //    recursively scrub everything that survives.
-        for (final entry in event.contexts.entries.toList()) {
-          final value = entry.value;
-          if (value is Map) {
-            value.removeWhere(
-              (k, _) =>
-                  k.toString().toLowerCase().contains('password') ||
-                  k.toString().toLowerCase().contains('key') ||
-                  k.toString().toLowerCase().contains('secret') ||
-                  k.toString().toLowerCase().contains('token'),
-            );
-            // Now scrub the surviving values in place.
-            value.forEach((k, v) {
-              value[k] = scrubAny(v);
-            });
-          }
-        }
-
-        return event;
-      };
-    },
-    appRunner: () => runApp(app),
-  );
+/// Intent fired by the global `?` chord. The handler opens the
+/// [ShortcutCheatsheet] — wired in [AiServerApp]'s MaterialApp.builder
+/// so it's reachable from every screen.
+class _ShowCheatsheetIntent extends Intent {
+  const _ShowCheatsheetIntent();
 }
 
 class AiServerApp extends StatefulWidget {
@@ -373,12 +418,22 @@ class AiServerApp extends StatefulWidget {
   State<AiServerApp> createState() => _AiServerAppState();
 }
 
-class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowListener {
+class _AiServerAppState extends State<AiServerApp>
+    with TrayListener, WindowListener {
   static const _scaffoldBackground = AppColors.scaffoldBackground;
   static const _surface = AppColors.surface;
   static const _primary = AppColors.primary;
 
-  final GlobalKey<ScaffoldMessengerState> _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  final GlobalKey<ScaffoldMessengerState> _messengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+  // Used by the root `?` shortcut so showDialog can resolve a
+  // BuildContext that sits below the Navigator. The builder context
+  // exposed by MaterialApp is above the Navigator, so Navigator.of(it)
+  // throws "context that does not include a Navigator".
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  final FrecencyStorage _frecencyStorage = FrecencyStorage();
+  final ExecutionAuditService _executionAuditService = ExecutionAuditService();
+  final RunbookStorage _runbookStorage = const RunbookStorage();
   late AiProvider _aiProvider;
   late String _apiKey;
   late String? _openRouterModel;
@@ -393,7 +448,7 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
     windowManager.addListener(this);
     trayManager.addListener(this);
     _initTray();
-    
+
     _aiProvider = widget.initialSettings.provider;
     _apiKey = widget.initialSettings.apiKey;
     _openRouterModel = widget.initialSettings.openRouterModel;
@@ -417,15 +472,9 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
 
     final menu = Menu(
       items: [
-        MenuItem(
-          key: 'show_hamma',
-          label: 'Show Hamma',
-        ),
+        MenuItem(key: 'show_hamma', label: 'Show Hamma'),
         MenuItem.separator(),
-        MenuItem(
-          key: 'quit_hamma',
-          label: 'Quit',
-        ),
+        MenuItem(key: 'quit_hamma', label: 'Quit'),
       ],
     );
     await trayManager.setContextMenu(menu);
@@ -480,35 +529,46 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
     final targetName = intent.targetServer?.toLowerCase();
     if (targetName == null || targetName.isEmpty) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Target server not found.'), behavior: SnackBarBehavior.floating),
+        const SnackBar(
+          content: Text('Target server not found.'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
 
     final profile = _servers.firstWhere(
       (s) => s.name.toLowerCase() == targetName || s.id == targetName,
-      orElse: () => ServerProfile(
-        id: '',
-        name: '',
-        host: '',
-        port: 22,
-        username: '',
-        password: '',
-      ),
+      orElse:
+          () => ServerProfile(
+            id: '',
+            name: '',
+            host: '',
+            port: 22,
+            username: '',
+            password: '',
+          ),
     );
 
     if (profile.id.isEmpty) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Target server not found.'), behavior: SnackBarBehavior.floating),
+        const SnackBar(
+          content: Text('Target server not found.'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
 
     messenger.showSnackBar(
-      const SnackBar(content: Text('Connecting and executing...'), behavior: SnackBarBehavior.floating),
+      const SnackBar(
+        content: Text('Connecting and executing...'),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
 
-    final sshService = SshService(); // Use a fresh instance for background execution
+    final sshService =
+        SshService(); // Use a fresh instance for background execution
     try {
       await sshService.connect(
         host: profile.host,
@@ -520,10 +580,12 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
       );
 
       final output = await sshService.execute(intent.command);
-      
+
       messenger.showSnackBar(
         SnackBar(
-          content: Text('OK: Command executed on ${profile.name}.\n${output.length > 80 ? "${output.substring(0, 80)}..." : output}'),
+          content: Text(
+            'OK: Command executed on ${profile.name}.\n${output.length > 80 ? "${output.substring(0, 80)}..." : output}',
+          ),
           backgroundColor: AppColors.surface,
           behavior: SnackBarBehavior.floating,
           shape: const RoundedRectangleBorder(
@@ -538,14 +600,352 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
           content: Text('ERROR on ${profile.name}: $e'),
           backgroundColor: AppColors.danger,
           behavior: SnackBarBehavior.floating,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
-          ),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         ),
       );
     } finally {
       await sshService.disconnect();
     }
+  }
+
+  PaletteIndex _buildPaletteIndex() {
+    return PaletteIndex(
+      sources: [
+        ServersSource(
+          loader: () async => _servers,
+          onSelect: _openServerFromPalette,
+        ),
+        ScreensSource(screens: _buildPaletteScreens()),
+        RecentCommandsSource(
+          loader: () => _executionAuditService.recentEntries(limit: 40),
+          onSelect: _previewRecentCommandFromPalette,
+        ),
+        RunbooksSource(
+          loader: _loadPaletteRunbooks,
+          onSelect: _runRunbookFromPalette,
+        ),
+        SftpFilesSource(
+          loader: _loadPaletteSftpFiles,
+          onSelect: _openSftpFileFromPalette,
+        ),
+        PluginActionsSource(
+          pluginsLoader: () => PluginRegistry.instance.enabled,
+          apiFactory: _buildPluginActionApi,
+        ),
+      ],
+      frecency: _frecencyStorage,
+    );
+  }
+
+  Future<List<Runbook>> _loadPaletteRunbooks() async {
+    final stored = await _runbookStorage.loadAll();
+    final seen = <String>{};
+    final all = <Runbook>[...stored, ...starterPackRunbooks];
+    return [
+      for (final runbook in all)
+        if (seen.add(runbook.id)) runbook,
+    ];
+  }
+
+  Future<List<SftpRecentFile>> _loadPaletteSftpFiles() async {
+    final ids = await _frecencyStorage.topItems('sftp_files', limit: 40);
+    String serverNameFor(String serverId) {
+      for (final server in _servers) {
+        if (server.id == serverId) return server.name;
+      }
+      return serverId;
+    }
+
+    final files = <SftpRecentFile>[];
+    for (final id in ids) {
+      final parsed = SftpRecentFile.fromFrecencyId(
+        id,
+        serverNameFor: serverNameFor,
+      );
+      if (parsed != null) files.add(parsed);
+    }
+    return files;
+  }
+
+  List<PaletteScreen> _buildPaletteScreens() {
+    return [
+      PaletteScreen(
+        id: 'screen.servers',
+        label: 'Servers',
+        subtitle: 'Saved SSH hosts',
+        icon: Icons.dns_outlined,
+        navigate: (context) async {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        },
+      ),
+      PaletteScreen(
+        id: 'screen.settings',
+        label: 'Settings',
+        subtitle: 'AI providers, vault, sync',
+        icon: Icons.settings_outlined,
+        navigate: _openSettingsFromPalette,
+      ),
+      PaletteScreen(
+        id: 'screen.fleet',
+        label: 'Fleet command center',
+        subtitle: 'Cross-server overview',
+        icon: Icons.dashboard_customize_outlined,
+        navigate: (context) async {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const FleetDashboardScreen(),
+            ),
+          );
+        },
+      ),
+      PaletteScreen(
+        id: 'screen.ai_cli',
+        label: 'AI CLI launchpad',
+        subtitle: 'Claude, Gemini, Codex terminals',
+        icon: Icons.terminal_outlined,
+        navigate: (context) async {
+          await Navigator.of(
+            context,
+          ).push(MaterialPageRoute<void>(builder: (_) => const AiCliScreen()));
+        },
+      ),
+      PaletteScreen(
+        id: 'screen.local_dev',
+        label: 'Local development',
+        subtitle: 'Local tools and diagnostics',
+        icon: Icons.developer_mode_outlined,
+        navigate: (context) async {
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => const LocalDevelopmentScreen(),
+            ),
+          );
+        },
+      ),
+    ];
+  }
+
+  Future<void> _previewRecentCommandFromPalette(
+    ExecutionAuditEntry entry,
+    BuildContext context,
+  ) async {
+    final intent = CommandIntent(
+      action:
+          entry.naturalLanguageIntent.trim().isEmpty
+              ? 'Run recent command'
+              : entry.naturalLanguageIntent,
+      command: entry.proposedCommand,
+      explanation: 'Recent command from ${entry.serverName}.',
+      targetServer: entry.serverName,
+    );
+    await _showCommandPreview(context, intent);
+  }
+
+  Future<void> _showCommandPreview(
+    BuildContext context,
+    CommandIntent intent,
+  ) async {
+    final analysis = const CommandRiskAssessor().assess(intent.command);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('REVIEW COMMAND'),
+            content: SizedBox(
+              width: 560,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    intent.action,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      border: Border.all(color: AppColors.border),
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    child: SelectableText(
+                      intent.command,
+                      style: const TextStyle(
+                        fontFamily: AppColors.monoFamily,
+                        fontFamilyFallback: AppColors.monoFallback,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Risk: ${analysis.riskLevel.name.toUpperCase()}'),
+                  const SizedBox(height: 4),
+                  Text(analysis.explanation),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('CANCEL'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('RUN'),
+              ),
+            ],
+          ),
+    );
+    if (confirmed != true) return;
+    await _handleExecuteIntent(intent);
+  }
+
+  Future<void> _runRunbookFromPalette(
+    Runbook runbook,
+    BuildContext context,
+  ) async {
+    final server = await _selectPaletteServer(
+      context,
+      preferredServerId: runbook.serverId,
+      title: 'RUNBOOK TARGET',
+    );
+    if (server == null || !context.mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => RunbookRunScreen(
+              runbook: runbook,
+              sshService: SshService.forServer(server.id),
+              aiSettings: _currentAiSettings,
+            ),
+      ),
+    );
+  }
+
+  Future<void> _openSftpFileFromPalette(
+    SftpRecentFile file,
+    BuildContext context,
+  ) async {
+    final server = await _selectPaletteServer(
+      context,
+      preferredServerId: file.serverId,
+      title: 'SFTP TARGET',
+    );
+    if (server == null || !context.mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => FileExplorerScreen(server: server, initialPath: file.path),
+      ),
+    );
+  }
+
+  Future<HammaApi?> _buildPluginActionApi(
+    HammaPlugin plugin,
+    BuildContext context,
+  ) async {
+    final server = await _selectPaletteServer(
+      context,
+      title: '${plugin.manifest.name.toUpperCase()} TARGET',
+    );
+    if (server == null) return null;
+
+    return PluginRegistry.instance.buildApi(
+      plugin: plugin,
+      server: server,
+      sshService: SshService.forServer(server.id),
+      aiSettings: _currentAiSettings,
+    );
+  }
+
+  Future<ServerProfile?> _selectPaletteServer(
+    BuildContext context, {
+    String? preferredServerId,
+    required String title,
+  }) async {
+    if (preferredServerId != null) {
+      for (final server in _servers) {
+        if (server.id == preferredServerId) return server;
+      }
+    }
+
+    if (_servers.isEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(
+          content: Text('Add a server before running this action.'),
+        ),
+      );
+      return null;
+    }
+
+    if (_servers.length == 1) return _servers.single;
+
+    final selected = await showDialog<ServerProfile>(
+      context: context,
+      builder:
+          (dialogContext) => SimpleDialog(
+            title: Text(title),
+            children: [
+              for (final server in _servers)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.of(dialogContext).pop(server),
+                  child: Text(
+                    '${server.name} · ${server.username}@${server.host}',
+                  ),
+                ),
+            ],
+          ),
+    );
+    return selected;
+  }
+
+  AiSettings get _currentAiSettings => AiSettings(
+    provider: _aiProvider,
+    apiKeys: {_aiProvider: _apiKey},
+    openRouterModel: _openRouterModel,
+    localEndpoint: _localEndpoint,
+    localModel: _localModel,
+  );
+
+  Future<void> _openServerFromPalette(
+    ServerProfile server,
+    BuildContext context,
+  ) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => ServerDashboardScreen(
+              server: server,
+              aiProvider: _aiProvider,
+              apiKey: _apiKey,
+              openRouterModel: _openRouterModel,
+              localEndpoint: _localEndpoint,
+              localModel: _localModel,
+              onSaveAiSettings: _saveAiSettings,
+              onBackupImported: _loadServers,
+            ),
+      ),
+    );
+  }
+
+  Future<void> _openSettingsFromPalette(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => SettingsScreen(
+              initialProvider: _aiProvider,
+              initialApiKey: _apiKey,
+              initialOpenRouterModel: _openRouterModel,
+              initialLocalEndpoint: _localEndpoint,
+              initialLocalModel: _localModel,
+              onSaveAiSettings: _saveAiSettings,
+              onBackupImported: _loadServers,
+            ),
+      ),
+    );
   }
 
   Future<void> _saveAiSettings(
@@ -624,18 +1024,46 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
       localModel: _localModel,
     );
 
+    final paletteIndex = _buildPaletteIndex();
+
     return CommandPaletteManager(
+      navigatorKey: _navigatorKey,
       aiCommandService: aiCommandService,
       availableServers: _servers.map((s) => s.name).toList(),
       onExecute: _handleExecuteIntent,
+      paletteIndex: paletteIndex,
       child: MaterialApp(
         title: 'Hamma',
         debugShowCheckedModeBanner: !kProduction,
+        navigatorKey: _navigatorKey,
         scaffoldMessengerKey: _messengerKey,
         theme: _buildBrutalistTheme(colorScheme),
         builder: (context, child) {
+          // Wrap once so the `?` cheatsheet shortcut is live on every
+          // screen, mobile and desktop alike. Text fields consume
+          // printable keys before they reach this scope, so typing `?`
+          // inside an input doesn't trip the modal.
+          final wrapped = Shortcuts(
+            shortcuts: const <ShortcutActivator, Intent>{
+              CharacterActivator('?'): _ShowCheatsheetIntent(),
+            },
+            child: Actions(
+              actions: <Type, Action<Intent>>{
+                _ShowCheatsheetIntent: CallbackAction<_ShowCheatsheetIntent>(
+                  onInvoke: (_) {
+                    final navContext = _navigatorKey.currentContext;
+                    if (navContext != null) {
+                      unawaited(ShortcutCheatsheet.show(navContext));
+                    }
+                    return null;
+                  },
+                ),
+              },
+              child: child!,
+            ),
+          );
           if (!Platform.isLinux && !Platform.isWindows && !Platform.isMacOS) {
-            return child!;
+            return wrapped;
           }
           return Column(
             children: [
@@ -681,7 +1109,7 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
                   ),
                 ),
               ),
-              Expanded(child: child!),
+              Expanded(child: wrapped),
             ],
           );
         },
@@ -929,14 +1357,16 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? AppColors.onPrimary
-              : AppColors.textMuted,
+          (states) =>
+              states.contains(WidgetState.selected)
+                  ? AppColors.onPrimary
+                  : AppColors.textMuted,
         ),
         trackColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? AppColors.primary
-              : AppColors.panel,
+          (states) =>
+              states.contains(WidgetState.selected)
+                  ? AppColors.primary
+                  : AppColors.panel,
         ),
         trackOutlineColor: const WidgetStatePropertyAll(AppColors.border),
       ),
@@ -944,17 +1374,19 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         side: const BorderSide(color: AppColors.borderStrong, width: 1),
         fillColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? AppColors.primary
-              : Colors.transparent,
+          (states) =>
+              states.contains(WidgetState.selected)
+                  ? AppColors.primary
+                  : Colors.transparent,
         ),
         checkColor: const WidgetStatePropertyAll(AppColors.onPrimary),
       ),
       radioTheme: RadioThemeData(
         fillColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? AppColors.textPrimary
-              : AppColors.textMuted,
+          (states) =>
+              states.contains(WidgetState.selected)
+                  ? AppColors.textPrimary
+                  : AppColors.textMuted,
         ),
       ),
       tabBarTheme: const TabBarThemeData(
@@ -1014,7 +1446,9 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         indicatorColor: AppColors.accentDim,
-        indicatorShape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        indicatorShape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+        ),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return const IconThemeData(color: AppColors.accent);
@@ -1023,7 +1457,11 @@ class _AiServerAppState extends State<AiServerApp> with TrayListener, WindowList
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const TextStyle(color: AppColors.accent, fontSize: 11, fontWeight: FontWeight.w600);
+            return const TextStyle(
+              color: AppColors.accent,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            );
           }
           return const TextStyle(color: AppColors.textMuted, fontSize: 11);
         }),

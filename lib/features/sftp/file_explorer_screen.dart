@@ -16,15 +16,17 @@ import '../../core/theme/app_colors.dart';
 enum FileSortMode { name, size, date }
 
 class FileExplorerScreen extends StatefulWidget {
-  const FileExplorerScreen({super.key, required this.server});
+  const FileExplorerScreen({super.key, required this.server, this.initialPath});
 
   final ServerProfile server;
+  final String? initialPath;
 
   @override
   State<FileExplorerScreen> createState() => _FileExplorerScreenState();
 }
 
-class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticKeepAliveClientMixin<FileExplorerScreen> {
+class _FileExplorerScreenState extends State<FileExplorerScreen>
+    with AutomaticKeepAliveClientMixin<FileExplorerScreen> {
   static const _backgroundColor = AppColors.scaffoldBackground;
   static const _surfaceColor = AppColors.surface;
   static const _panelColor = AppColors.panel;
@@ -95,7 +97,12 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticK
         privateKeyPassword: widget.server.privateKeyPassword,
         onTrustHostKey: _confirmHostKeyTrust,
       );
-      await _loadDirectory('.');
+      final initialPath = widget.initialPath?.trim();
+      if (initialPath == null || initialPath.isEmpty) {
+        await _loadDirectory('.');
+      } else {
+        await _handlePathNavigation(initialPath);
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -132,12 +139,13 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticK
     try {
       final names = await _sftpService.listDirectory(path);
       final displayPath = await _resolveDisplayPath(path);
-      final filteredNames = names.where((entry) {
-        final name = entry.filename;
-        if (name == '.' || name == '..') return false;
-        if (!_showHiddenFiles && name.startsWith('.')) return false;
-        return true;
-      }).toList();
+      final filteredNames =
+          names.where((entry) {
+            final name = entry.filename;
+            if (name == '.' || name == '..') return false;
+            if (!_showHiddenFiles && name.startsWith('.')) return false;
+            return true;
+          }).toList();
 
       final sortedNames = filteredNames..sort(_compareEntries);
 
@@ -355,21 +363,22 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticK
   Future<void> _handleDelete(SftpName entry) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete'),
-        content: Text('Are you sure you want to delete ${entry.filename}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Delete'),
+            content: Text('Are you sure you want to delete ${entry.filename}?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                child: const Text('Delete'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed != true) return;
@@ -399,7 +408,10 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticK
   }
 
   Future<void> _handleNewFolder() async {
-    final name = await _showInputDialog(title: 'New Folder', hint: 'Folder name');
+    final name = await _showInputDialog(
+      title: 'New Folder',
+      hint: 'Folder name',
+    );
     if (name == null || name.isEmpty) return;
 
     setState(() => _isLoading = true);
@@ -432,29 +444,33 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticK
     }
   }
 
-  Future<String?> _showInputDialog({required String title, required String hint}) async {
+  Future<String?> _showInputDialog({
+    required String title,
+    required String hint,
+  }) async {
     final controller = TextEditingController();
     return showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(hintText: hint),
-          style: const TextStyle(color: Colors.white),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      builder:
+          (context) => AlertDialog(
+            title: Text(title),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: InputDecoration(hintText: hint),
+              style: const TextStyle(color: Colors.white),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, controller.text.trim()),
+                child: const Text('Create'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -717,9 +733,15 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticK
                       value: 'delete',
                       child: Row(
                         children: [
-                          Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                          Icon(
+                            Icons.delete_outline_rounded,
+                            color: AppColors.danger,
+                          ),
                           SizedBox(width: 12),
-                          Text('Delete', style: TextStyle(color: AppColors.danger)),
+                          Text(
+                            'Delete',
+                            style: TextStyle(color: AppColors.danger),
+                          ),
                         ],
                       ),
                     ),
@@ -789,7 +811,10 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticK
     if (_loadError != null && _entries.isEmpty) {
       return Scaffold(
         backgroundColor: _backgroundColor,
-        appBar: AppBar(automaticallyImplyLeading: false, title: const Text('File Explorer')),
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: const Text('File Explorer'),
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -1003,7 +1028,8 @@ class _FileExplorerScreenState extends State<FileExplorerScreen> with AutomaticK
                               color: _mutedColor,
                             ),
                             onPressed:
-                                () => _handlePathNavigation(_pathController.text),
+                                () =>
+                                    _handlePathNavigation(_pathController.text),
                           ),
                         ),
                       ),

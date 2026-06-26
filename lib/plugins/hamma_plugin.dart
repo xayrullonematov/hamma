@@ -2,6 +2,40 @@ import 'package:flutter/material.dart';
 
 import 'hamma_api.dart';
 
+/// One action a plugin can contribute to the universal command palette.
+///
+/// The action descriptor is static and safe to list globally. The [run]
+/// callback receives a sandboxed [HammaApi] at invocation time, so plugin
+/// actions still use the same permission, network, and command-risk gates as
+/// plugin panels.
+typedef HammaPluginPaletteActionRunner =
+    Future<void> Function(BuildContext context, HammaApi api);
+
+@immutable
+class HammaPluginPaletteAction {
+  const HammaPluginPaletteAction({
+    required this.id,
+    required this.label,
+    required this.run,
+    this.description,
+    this.icon,
+  });
+
+  /// Stable id scoped to the plugin manifest id.
+  final String id;
+
+  /// Display label shown by the global palette.
+  final String label;
+
+  /// Optional secondary text for search and display.
+  final String? description;
+
+  /// Optional action icon. Defaults to the plugin manifest icon.
+  final IconData? icon;
+
+  final HammaPluginPaletteActionRunner run;
+}
+
 /// Public contract every Hamma extension implements.
 ///
 /// v1 of the plugin API ships compiled in: there is no dynamic loading,
@@ -50,6 +84,12 @@ abstract class HammaPlugin {
 
   /// Hook the plugin runs on disable / app shutdown. Default no-op.
   Future<void> onUnload() async {}
+
+  /// Palette actions this plugin contributes. Default empty so existing
+  /// plugins remain source-compatible.
+  Iterable<HammaPluginPaletteAction> paletteActions() {
+    return const <HammaPluginPaletteAction>[];
+  }
 
   /// Build the plugin's main panel inside a server dashboard tab.
   Widget buildPanel(BuildContext context, HammaApi api);
