@@ -79,7 +79,7 @@ The foundation. A fully featured SSH/SFTP client that works as a daily driver ac
 - [x] Local port forwarding
 - [x] Ed25519, RSA, ECDSA key support
 - [x] Cross-platform: Linux, macOS, Windows, Android, iOS
-- [x] 857 passing tests, 1 skipped integration test
+- [x] 860 passing tests, 1 skipped integration test
 
 ---
 
@@ -181,7 +181,7 @@ HAMMA-Gemma4 GGUF
 - [ ] Production llama.cpp packaging as `.so` / `.dll` / `.dylib` per platform
 - [ ] Production Dart FFI inference path with lifecycle, cancellation, and streaming
 - [ ] On-demand model download on first launch with progress indicator and resumable failure handling
-- [ ] Model integrity verification (SHA256 checksum before load)
+- [x] Model integrity verification (SHA-256 checksum before load)
 - [ ] Graceful fallback to Ollama if FFI engine unavailable
 - [ ] GPU acceleration via Metal (macOS/iOS), Vulkan (Linux/Windows/Android)
 

@@ -13,6 +13,7 @@ class BundledModel {
     required this.summary,
     required this.downloadUrl,
     required this.sizeBytes,
+    required this.sha256,
     required this.parameterCount,
     required this.quantization,
     this.recommended = false,
@@ -32,9 +33,13 @@ class BundledModel {
   /// HTTPS URL the file is fetched from. MUST be `https://`.
   final String downloadUrl;
 
-  /// Approximate size on disk, in bytes. Used for the download progress
-  /// bar and the disk-space warning.
+  /// Exact size on disk, in bytes. Used for the download progress
+  /// bar, the disk-space warning, and cache validation.
   final int sizeBytes;
+
+  /// Expected SHA-256 digest of the downloaded GGUF file, lowercase hex.
+  /// Hugging Face LFS metadata is the source of truth for these values.
+  final String sha256;
 
   /// "1B", "3B", "8B" — informational, displayed in the catalog row.
   final String parameterCount;
@@ -60,6 +65,9 @@ class BundledModel {
       return 'downloadUrl must be https://';
     }
     if (sizeBytes <= 0) return 'sizeBytes must be positive';
+    if (!RegExp(r'^[a-f0-9]{64}$').hasMatch(sha256)) {
+      return 'sha256 must be a lowercase 64-character hex digest';
+    }
     return null;
   }
 }
@@ -68,9 +76,10 @@ class BundledModel {
 /// support for. Order matters — [recommended] entries surface first in
 /// the picker.
 ///
-/// All URLs point at upstream HuggingFace mirrors. The values below are
-/// approximations; the downloader verifies the actual size as it
-/// streams the file.
+/// All URLs point at upstream Hugging Face mirrors. The exact sizes
+/// and SHA-256 digests come from Hugging Face LFS metadata; the
+/// downloader verifies both before a file is made available to the
+/// engine.
 class BundledModelCatalog {
   const BundledModelCatalog._();
 
@@ -105,6 +114,8 @@ class BundledModelCatalog {
           'https://huggingface.co/xayrullonematov/hamma-gemma-4-devops-GGUF/'
           'resolve/main/gemma-4-e4b-it.Q4_K_M.gguf',
       sizeBytes: 5335290240,
+      sha256:
+          '0ca33fab4eeb7382218ac7b23214f0b19f151a9969dea6134163db6448999a6b',
       parameterCount: '8B',
       quantization: 'Q4_K_M',
       recommended: true,
@@ -118,7 +129,9 @@ class BundledModelCatalog {
       downloadUrl:
           'https://huggingface.co/bartowski/google_gemma-3-1b-it-GGUF/'
           'resolve/main/google_gemma-3-1b-it-Q4_K_M.gguf',
-      sizeBytes: 806 * 1024 * 1024,
+      sizeBytes: 806058496,
+      sha256:
+          '12bf0fff8815d5f73a3c9b586bd8fee8e7b248c935de70dec367679873d0f29d',
       parameterCount: '1B',
       quantization: 'Q4_K_M',
       recommended: false,
@@ -132,7 +145,9 @@ class BundledModelCatalog {
       downloadUrl:
           'https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/'
           'resolve/main/qwen2.5-coder-3b-instruct-q4_k_m.gguf',
-      sizeBytes: 1900 * 1024 * 1024,
+      sizeBytes: 2104932800,
+      sha256:
+          '724fb256bec1ff062b2f65e4569e871ad2e95ab2a3989723d1769c54294730b7',
       parameterCount: '3B',
       quantization: 'Q4_K_M',
     ),
@@ -145,7 +160,9 @@ class BundledModelCatalog {
       downloadUrl:
           'https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/'
           'resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf',
-      sizeBytes: 2000 * 1024 * 1024,
+      sizeBytes: 2019377696,
+      sha256:
+          '6c1a2b41161032677be168d354123594c0e6e67d2b9227c84f296ad037c728ff',
       parameterCount: '3B',
       quantization: 'Q4_K_M',
     ),
@@ -158,7 +175,9 @@ class BundledModelCatalog {
       downloadUrl:
           'https://huggingface.co/bartowski/Phi-3.5-mini-instruct-GGUF/'
           'resolve/main/Phi-3.5-mini-instruct-Q4_K_M.gguf',
-      sizeBytes: 2400 * 1024 * 1024,
+      sizeBytes: 2393232672,
+      sha256:
+          'e4165e3a71af97f1b4820da61079826d8752a2088e313af0c7d346796c38eff5',
       parameterCount: '3.8B',
       quantization: 'Q4_K_M',
     ),

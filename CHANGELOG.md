@@ -11,10 +11,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ### Added
 - **Phase 3 Natural Language Ops is complete on `main`.** The app now has the command palette spine, frecency ranking, AI command plans, command preview/risk gating, approved execution, local execution audit records, multi-step runbooks, and terminal session memory.
 - **Resilient terminal sessions.** Terminal scrollback is redacted, bounded to 100k characters, persisted in secure storage per server, restored on reopen, and capped with per-server LRU eviction.
+- **Phase 4 model integrity verification.** Bundled GGUF catalog entries now include exact byte sizes and SHA-256 digests from Hugging Face LFS metadata; downloads and cached files are verified before the built-in engine can load them.
 
 ### Changed
 - Project documentation now marks Phase 3 as shipped and Phase 4 Built-in Engine as the active next implementation target.
-- Verification baseline is now `flutter analyze --fatal-warnings` clean and `flutter test` at 857 passed, 1 skipped integration test.
+- Verification baseline is now `flutter analyze --fatal-warnings` clean and `flutter test` at 860 passed, 1 skipped integration test.
 
 ---
 

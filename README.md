@@ -19,7 +19,7 @@
   <a href="https://github.com/xayrullonematov/hamma/actions/workflows/main.yml"><img src="https://github.com/xayrullonematov/hamma/actions/workflows/main.yml/badge.svg?branch=main" alt="CI"/></a>
   <img src="https://img.shields.io/badge/VERSION-1.2.0-FFFFFF?style=flat-square&labelColor=000000" alt="Version"/>
   <img src="https://img.shields.io/badge/STATUS-BETA--RC-00FF88?style=flat-square&labelColor=000000" alt="Status"/>
-  <img src="https://img.shields.io/badge/TESTS-857%20passed%20%7C%201%20skipped-00FF88?style=flat-square&labelColor=000000" alt="Tests"/>
+  <img src="https://img.shields.io/badge/TESTS-860%20passed%20%7C%201%20skipped-00FF88?style=flat-square&labelColor=000000" alt="Tests"/>
   <img src="https://img.shields.io/badge/MODEL-1.4K%2B%20Downloads-00FF88?style=flat-square&labelColor=000000" alt="Downloads"/>
 </p>
 
@@ -127,7 +127,7 @@ git clone https://github.com/xayrullonematov/hamma.git
 cd hamma
 flutter pub get
 flutter analyze        # → No issues found
-flutter test           # → 857 passed, 1 skipped
+flutter test           # → 860 passed, 1 skipped
 flutter run
 ```
 

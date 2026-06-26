@@ -166,7 +166,8 @@ class _LocalAiOnboardingScreenState extends State<LocalAiOnboardingScreen> {
     try {
       final dir = await _modelDirectory();
       modelPath = BundledModelDownloader.resolvePath(_selectedModel, dir);
-      if (!BundledModelDownloader.isCached(_selectedModel, dir)) {
+      if (!await BundledModelDownloader.isCachedVerified(_selectedModel, dir)) {
+        await BundledModelDownloader.deleteCached(_selectedModel, dir);
         await _downloadSub?.cancel();
         final downloader = BundledModelDownloader();
         final completer = Completer<void>();

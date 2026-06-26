@@ -13,8 +13,11 @@ void main() {
   group('BundledModelCatalog', () {
     test('every catalog entry validates clean', () {
       for (final m in BundledModelCatalog.all()) {
-        expect(m.validate(), isNull,
-            reason: 'catalog entry "${m.id}" failed validation');
+        expect(
+          m.validate(),
+          isNull,
+          reason: 'catalog entry "${m.id}" failed validation',
+        );
       }
     });
 
@@ -28,8 +31,10 @@ void main() {
     test('byId is case-insensitive and trims', () {
       final pick = BundledModelCatalog.defaultPick;
       expect(BundledModelCatalog.byId(pick.id), isNotNull);
-      expect(BundledModelCatalog.byId('  ${pick.id.toUpperCase()}  '),
-          isNotNull);
+      expect(
+        BundledModelCatalog.byId('  ${pick.id.toUpperCase()}  '),
+        isNotNull,
+      );
       expect(BundledModelCatalog.byId('does-not-exist'), isNull);
       expect(BundledModelCatalog.byId(''), isNull);
     });
@@ -37,8 +42,18 @@ void main() {
     test('all download URLs are https only', () {
       for (final m in BundledModelCatalog.all()) {
         final uri = Uri.parse(m.downloadUrl);
-        expect(uri.scheme, 'https',
-            reason: '${m.id} must download over https');
+        expect(uri.scheme, 'https', reason: '${m.id} must download over https');
+      }
+    });
+
+    test('all catalog entries declare sha256 integrity metadata', () {
+      final sha256Pattern = RegExp(r'^[a-f0-9]{64}$');
+      for (final m in BundledModelCatalog.all()) {
+        expect(
+          sha256Pattern.hasMatch(m.sha256),
+          isTrue,
+          reason: '${m.id} must include a lowercase SHA-256 digest',
+        );
       }
     });
   });
@@ -88,35 +103,34 @@ void main() {
       expect((data.first as Map)['id'], 'echo-demo');
     });
 
-    test('GET /api/version returns a bundled marker (Ollama compat)',
-        () async {
+    test('GET /api/version returns a bundled marker (Ollama compat)', () async {
       final body = await _httpGetJson(engine.endpoint!, '/api/version');
       expect((body['version'] as String).startsWith('bundled-'), isTrue);
     });
 
-    test('POST /v1/chat/completions (non-streaming) returns OpenAI shape',
-        () async {
-      final body = await _httpPostJson(
-        engine.endpoint!,
-        '/v1/chat/completions',
-        {
-          'model': 'echo-demo',
-          'messages': [
-            {'role': 'user', 'content': 'hello'}
-          ],
-        },
-      );
-      expect(body['object'], 'chat.completion');
-      final choices = body['choices'] as List;
-      final message = (choices.first as Map)['message'] as Map;
-      expect(message['role'], 'assistant');
-      expect(message['content'], 'echo: hello');
-    });
-
     test(
-        'POST /v1/chat/completions (streaming) yields SSE deltas '
-        'consumable by AiCommandService.decodeOpenAiSseBody',
-        () async {
+      'POST /v1/chat/completions (non-streaming) returns OpenAI shape',
+      () async {
+        final body = await _httpPostJson(
+          engine.endpoint!,
+          '/v1/chat/completions',
+          {
+            'model': 'echo-demo',
+            'messages': [
+              {'role': 'user', 'content': 'hello'},
+            ],
+          },
+        );
+        expect(body['object'], 'chat.completion');
+        final choices = body['choices'] as List;
+        final message = (choices.first as Map)['message'] as Map;
+        expect(message['role'], 'assistant');
+        expect(message['content'], 'echo: hello');
+      },
+    );
+
+    test('POST /v1/chat/completions (streaming) yields SSE deltas '
+        'consumable by AiCommandService.decodeOpenAiSseBody', () async {
       final lines = await _httpPostSseLines(
         engine.endpoint!,
         '/v1/chat/completions',
@@ -124,20 +138,20 @@ void main() {
           'model': 'echo-demo',
           'stream': true,
           'messages': [
-            {'role': 'user', 'content': 'hi'}
+            {'role': 'user', 'content': 'hi'},
           ],
         },
       );
       // Feed the captured lines through the same decoder the real
       // app uses — that's the actual integration we care about.
-      final chunks = await AiCommandService.decodeOpenAiSseBody(
-        Stream<String>.fromIterable(lines),
-      ).toList();
+      final chunks =
+          await AiCommandService.decodeOpenAiSseBody(
+            Stream<String>.fromIterable(lines),
+          ).toList();
       expect(chunks.join(), 'echo: hi');
     });
 
-    test('POST /v1/chat/completions surfaces backend errors as JSON',
-        () async {
+    test('POST /v1/chat/completions surfaces backend errors as JSON', () async {
       // A backend that throws on generate must produce a 500 JSON
       // body, not a hung request.
       final fail = BundledEngine(backend: _FailingBackend());
@@ -148,11 +162,13 @@ void main() {
         Uri.parse('${fail.endpoint!}/v1/chat/completions'),
       );
       req.headers.contentType = ContentType.json;
-      req.write(jsonEncode({
-        'messages': [
-          {'role': 'user', 'content': 'x'}
-        ],
-      }));
+      req.write(
+        jsonEncode({
+          'messages': [
+            {'role': 'user', 'content': 'x'},
+          ],
+        }),
+      );
       final resp = await req.close();
       expect(resp.statusCode, 500);
       final body = await resp.transform(utf8.decoder).join();
@@ -166,13 +182,11 @@ void main() {
       expect(engine.endpoint, isNull);
       expect(engine.snapshot.isRunning, isFalse);
       // Port should be re-bindable now.
-      final reuse =
-          await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
+      final reuse = await ServerSocket.bind(InternetAddress.loopbackIPv4, port);
       await reuse.close();
     });
 
-    test('snapshots stream emits a current value to new subscribers',
-        () async {
+    test('snapshots stream emits a current value to new subscribers', () async {
       final first = await engine.snapshots.first;
       expect(first.isRunning, isTrue);
       expect(first.modelId, 'echo-demo');
@@ -190,8 +204,11 @@ void main() {
       final f = File('${tmp.path}/m.gguf')..writeAsBytesSync(const [0]);
       await engine.start(modelPath: f.path);
       final uri = Uri.parse(engine.endpoint!);
-      expect(uri.host, '127.0.0.1',
-          reason: 'bundled engine must never bind anywhere but loopback');
+      expect(
+        uri.host,
+        '127.0.0.1',
+        reason: 'bundled engine must never bind anywhere but loopback',
+      );
     });
   });
 
@@ -214,14 +231,15 @@ void main() {
   });
 
   group('BundledModelDownloader', () {
-    test('rejects non-https download URLs before opening any socket',
-        () async {
+    test('rejects non-https download URLs before opening any socket', () async {
       final m = BundledModel(
         id: 'http-test',
         displayName: 'plain-http',
         summary: '',
         downloadUrl: 'http://example.com/model.gguf',
         sizeBytes: 1000,
+        sha256:
+            '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         parameterCount: '1B',
         quantization: 'Q4',
       );
@@ -229,23 +247,19 @@ void main() {
       expect(m.validate(), isNotNull);
     });
 
-    test('downloads a small file end-to-end and writes the final name',
-        () async {
+    test('cache helpers verify exact size and checksum', () async {
       final tmp = await Directory.systemTemp.createTemp('hamma_dl_');
       addTearDown(() async {
         if (tmp.existsSync()) await tmp.delete(recursive: true);
       });
-      // Spin a TLS-less HTTP server and bypass the https check by
-      // forging a custom HttpClient. Easiest route: drive the
-      // downloader against a real loopback HTTPS endpoint isn't
-      // worth wiring a self-signed cert for a unit test; instead we
-      // exercise the catalog/cache/path helpers that don't need IO.
       const m = BundledModel(
         id: 'cache-probe',
         displayName: 'cache probe',
         summary: '',
         downloadUrl: 'https://example.com/model.gguf',
         sizeBytes: 100,
+        sha256:
+            'cd00e292c5970d3c5e2f0ffa5171e555bc46bfc4faddfb4a418b6840b86e79a3',
         parameterCount: '1B',
         quantization: 'Q4',
       );
@@ -255,6 +269,65 @@ void main() {
       // Drop a fake "downloaded" file of the right size and re-check.
       File(path).writeAsBytesSync(List.filled(m.sizeBytes, 0));
       expect(BundledModelDownloader.isCached(m, tmp.path), isTrue);
+      expect(
+        await BundledModelDownloader.isCachedVerified(m, tmp.path),
+        isTrue,
+      );
+    });
+
+    test(
+      'verified cache rejects a same-size file with the wrong checksum',
+      () async {
+        final tmp = await Directory.systemTemp.createTemp('hamma_dl_bad_');
+        addTearDown(() async {
+          if (tmp.existsSync()) await tmp.delete(recursive: true);
+        });
+        const m = BundledModel(
+          id: 'cache-bad',
+          displayName: 'cache bad',
+          summary: '',
+          downloadUrl: 'https://example.com/model.gguf',
+          sizeBytes: 3,
+          sha256:
+              '0000000000000000000000000000000000000000000000000000000000000000',
+          parameterCount: '1B',
+          quantization: 'Q4',
+        );
+        final path = BundledModelDownloader.resolvePath(m, tmp.path);
+        File(path).writeAsBytesSync(const [1, 2, 3]);
+
+        expect(BundledModelDownloader.isCached(m, tmp.path), isTrue);
+        expect(
+          await BundledModelDownloader.isCachedVerified(m, tmp.path),
+          isFalse,
+        );
+      },
+    );
+
+    test('deleteCached removes final and partial files', () async {
+      final tmp = await Directory.systemTemp.createTemp('hamma_dl_delete_');
+      addTearDown(() async {
+        if (tmp.existsSync()) await tmp.delete(recursive: true);
+      });
+      const m = BundledModel(
+        id: 'cache-delete',
+        displayName: 'cache delete',
+        summary: '',
+        downloadUrl: 'https://example.com/model.gguf',
+        sizeBytes: 3,
+        sha256:
+            '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+        parameterCount: '1B',
+        quantization: 'Q4',
+      );
+      final path = BundledModelDownloader.resolvePath(m, tmp.path);
+      File(path).writeAsBytesSync(const [1, 2, 3]);
+      File('$path.partial').writeAsBytesSync(const [1]);
+
+      await BundledModelDownloader.deleteCached(m, tmp.path);
+
+      expect(File(path).existsSync(), isFalse);
+      expect(File('$path.partial').existsSync(), isFalse);
     });
   });
 }
@@ -326,8 +399,9 @@ Future<List<String>> _httpPostSseLines(
     final resp = await req.close();
     expect(resp.statusCode, 200);
     final lines = <String>[];
-    await for (final line
-        in resp.transform(utf8.decoder).transform(const LineSplitter())) {
+    await for (final line in resp
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())) {
       lines.add(line);
     }
     return lines;

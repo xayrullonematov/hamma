@@ -108,7 +108,7 @@ HAMMA is a modular, layered application. The UI layer never talks to the network
 
 | Technology | Role |
 |---|---|
-| **flutter_test** | Unit and widget testing (857 passing, 1 skipped integration test) |
+| **flutter_test** | Unit and widget testing (860 passing, 1 skipped integration test) |
 | **mocktail** | Service mocking in tests |
 | **flutter_lints** | Standard lint rules |
 | **GitHub Actions** | CI pipeline |
@@ -308,7 +308,7 @@ flutter pub get
 
 # Verify
 flutter analyze        # → No issues found
-flutter test           # → 857 passed, 1 skipped
+flutter test           # → 860 passed, 1 skipped
 
 # Run on your platform
 flutter run            # uses connected device / emulator
