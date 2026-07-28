@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:dartssh2/dartssh2.dart';
-
 import '../models/server_profile.dart';
 import '../storage/trusted_host_key_storage.dart';
 import 'ssh_service.dart'
@@ -11,14 +9,17 @@ import 'ssh_service.dart'
         SshHostKeyMismatchException,
         SshUnknownHostKeyException,
         SshUnknownHostKeyRejectedException;
+import 'ssh_transport.dart';
 
 class FleetService {
   const FleetService({
     TrustedHostKeyStorage? trustedHostKeyStorage,
+    SshConnector? sshConnector,
     Duration connectTimeout = const Duration(seconds: 5),
     Duration commandTimeout = const Duration(seconds: 8),
   }) : _trustedHostKeyStorage =
            trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage(),
+       _sshConnector = sshConnector ?? defaultSshConnector,
        _connectTimeout = connectTimeout,
        _commandTimeout = commandTimeout;
 
@@ -35,6 +36,7 @@ df -P /
 ''';
 
   final TrustedHostKeyStorage _trustedHostKeyStorage;
+  final SshConnector _sshConnector;
   final Duration _connectTimeout;
   final Duration _commandTimeout;
 
@@ -74,28 +76,21 @@ df -P /
       return ServerMetrics.failed('Saved profile is incomplete.');
     }
 
-    SSHClient? client;
+    SshTransport? transport;
 
     try {
       final trustedHostKey = await _trustedHostKeyStorage.loadTrustedHostKey(
         host: server.host,
         port: server.port,
       );
-      final identities = _resolveIdentities(
+
+      transport = await _sshConnector(
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        password: server.password,
         privateKey: server.privateKey,
         privateKeyPassword: server.privateKeyPassword,
-      );
-
-      final socket = await SSHSocket.connect(
-        server.host,
-        server.port,
-      ).timeout(_connectTimeout);
-
-      client = SSHClient(
-        socket,
-        username: server.username,
-        identities: identities,
-        onPasswordRequest: () => server.password,
         onVerifyHostKey: (algorithm, fingerprintBytes) async {
           final fingerprint = _formatFingerprint(fingerprintBytes);
 
@@ -124,12 +119,12 @@ df -P /
             actualFingerprint: fingerprint,
           );
         },
-      );
+      ).timeout(_connectTimeout);
 
-      await client.authenticated.timeout(_connectTimeout);
+      await transport.authenticated.timeout(_connectTimeout);
 
       final output = utf8.decode(
-        await client.run(_metricsCommand).timeout(_commandTimeout),
+        await transport.run(_metricsCommand).timeout(_commandTimeout),
         allowMalformed: true,
       );
 
@@ -145,7 +140,7 @@ df -P /
     } catch (error) {
       return ServerMetrics.failed(_friendlyErrorMessage(error));
     } finally {
-      client?.close();
+      transport?.close();
     }
   }
 
@@ -157,28 +152,21 @@ df -P /
       return 'Error: Saved profile is incomplete.';
     }
 
-    SSHClient? client;
+    SshTransport? transport;
 
     try {
       final trustedHostKey = await _trustedHostKeyStorage.loadTrustedHostKey(
         host: server.host,
         port: server.port,
       );
-      final identities = _resolveIdentities(
+
+      transport = await _sshConnector(
+        host: server.host,
+        port: server.port,
+        username: server.username,
+        password: server.password,
         privateKey: server.privateKey,
         privateKeyPassword: server.privateKeyPassword,
-      );
-
-      final socket = await SSHSocket.connect(
-        server.host,
-        server.port,
-      ).timeout(_connectTimeout);
-
-      client = SSHClient(
-        socket,
-        username: server.username,
-        identities: identities,
-        onPasswordRequest: () => server.password,
         onVerifyHostKey: (algorithm, fingerprintBytes) async {
           final fingerprint = _formatFingerprint(fingerprintBytes);
 
@@ -207,12 +195,12 @@ df -P /
             actualFingerprint: fingerprint,
           );
         },
-      );
+      ).timeout(_connectTimeout);
 
-      await client.authenticated.timeout(_connectTimeout);
+      await transport.authenticated.timeout(_connectTimeout);
 
       final output = utf8.decode(
-        await client.run(command).timeout(_commandTimeout),
+        await transport.run(command).timeout(_commandTimeout),
         allowMalformed: true,
       );
 
@@ -222,20 +210,8 @@ df -P /
     } catch (error) {
       return 'Error: ${_friendlyErrorMessage(error)}';
     } finally {
-      client?.close();
+      transport?.close();
     }
-  }
-
-  List<SSHKeyPair>? _resolveIdentities({
-    required String? privateKey,
-    required String? privateKeyPassword,
-  }) {
-    final resolvedPrivateKey = privateKey?.trim();
-    if (resolvedPrivateKey == null || resolvedPrivateKey.isEmpty) {
-      return null;
-    }
-
-    return SSHKeyPair.fromPem(resolvedPrivateKey, privateKeyPassword);
   }
 
   ServerMetrics _parseMetrics(String output) {
