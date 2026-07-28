@@ -531,6 +531,10 @@ class HammaTerminalViewState extends State<HammaTerminalView> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode focusNode, KeyEvent event) {
+    if (event is KeyUpEvent) {
+      return KeyEventResult.ignored;
+    }
+
     // Check Copy / Paste keyboard shortcuts
     final isControlPressed = HardwareKeyboard.instance.isControlPressed;
     final isMetaPressed = HardwareKeyboard.instance.isMetaPressed;
@@ -565,10 +569,6 @@ class HammaTerminalViewState extends State<HammaTerminalView> {
 
     if (shortcutResult != KeyEventResult.ignored) {
       return shortcutResult;
-    }
-
-    if (event is KeyUpEvent) {
-      return KeyEventResult.ignored;
     }
 
     final key = keyToTerminalKey(event.logicalKey);
