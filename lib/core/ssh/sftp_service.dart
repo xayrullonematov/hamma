@@ -11,16 +11,47 @@ import 'ssh_service.dart'
         SshUnknownHostKeyException,
         SshUnknownHostKeyRejectedException;
 
+typedef SshSocketConnector = Future<SSHSocket> Function(String host, int port);
+
+typedef SshClientFactory = SSHClient Function(
+  SSHSocket socket, {
+  required String username,
+  List<SSHKeyPair>? identities,
+  String Function()? onPasswordRequest,
+  Future<bool> Function(String, Uint8List)? onVerifyHostKey,
+});
+
 class SftpService {
-  SftpService({TrustedHostKeyStorage? trustedHostKeyStorage})
-    : _trustedHostKeyStorage =
-          trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage();
+  SftpService({
+    TrustedHostKeyStorage? trustedHostKeyStorage,
+    SshSocketConnector? socketConnector,
+    SshClientFactory? clientFactory,
+  }) : _trustedHostKeyStorage =
+           trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage(),
+       _socketConnector = socketConnector ?? SSHSocket.connect,
+       _clientFactory =
+           clientFactory ??
+           ((
+             socket, {
+             required username,
+             identities,
+             onPasswordRequest,
+             onVerifyHostKey,
+           }) => SSHClient(
+             socket,
+             username: username,
+             identities: identities,
+             onPasswordRequest: onPasswordRequest,
+             onVerifyHostKey: onVerifyHostKey,
+           ));
 
   static const _tempEditPath = '/tmp/hamma_temp_edit';
 
   SSHClient? _sshClient;
   SftpClient? _sftpClient;
   final TrustedHostKeyStorage _trustedHostKeyStorage;
+  final SshSocketConnector _socketConnector;
+  final SshClientFactory _clientFactory;
 
   bool get isConnected => _sshClient != null && _sftpClient != null;
 
@@ -60,8 +91,8 @@ class SftpService {
             ? null
             : SSHKeyPair.fromPem(resolvedPrivateKey, privateKeyPassword);
 
-    final socket = await SSHSocket.connect(host, port);
-    final sshClient = SSHClient(
+    final socket = await _socketConnector(host, port);
+    final sshClient = _clientFactory(
       socket,
       username: username,
       identities: identities,
