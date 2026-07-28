@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
@@ -54,12 +53,12 @@ class FakeSshTransport implements SshTransport {
   @override
   Future<Uint8List> run(String command, {Map<String, String>? environment}) async {
     if (delay != null) {
-      await Future.delayed(delay!);
+      await Future<void>.delayed(delay!);
     }
 
     if (timeout) {
       // Simulate taking longer than the commandTimeout (8s)
-      await Future.delayed(const Duration(seconds: 10));
+      await Future<void>.delayed(const Duration(seconds: 10));
       return Uint8List(0);
     }
 
