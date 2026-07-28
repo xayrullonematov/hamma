@@ -231,9 +231,11 @@ class VaultStorage {
   Future<List<VaultGroup>> loadAllGroups() async {
     final index = await _readGroupIndex();
     final out = <VaultGroup>[];
-    for (final entry in index) {
-      final id = entry['id']!;
-      final raw = await _secureStorage.read(key: '$_groupPrefix$id');
+
+    final futures = index.map((entry) => _secureStorage.read(key: '$_groupPrefix${entry['id']!}'));
+    final rawValues = await Future.wait(futures);
+
+    for (final raw in rawValues) {
       if (raw == null) continue;
       try {
         final decoded = jsonDecode(raw);
