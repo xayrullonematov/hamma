@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hamma/core/ssh/fleet_service.dart';
 import 'package:hamma/core/models/server_profile.dart';
@@ -13,13 +12,12 @@ class _FakeTrustedHostKeyStorage implements TrustedHostKeyStorage {
 
 class _TestFleetService extends FleetService {
   final Map<String, ServerMetrics> mockResponses;
-  final Duration delay;
+  final Duration delay = const Duration(milliseconds: 50);
   int concurrentCalls = 0;
   int maxConcurrentCalls = 0;
 
   _TestFleetService({
     required this.mockResponses,
-    this.delay = const Duration(milliseconds: 50),
   }) : super(trustedHostKeyStorage: _FakeTrustedHostKeyStorage());
 
   @override
@@ -29,7 +27,7 @@ class _TestFleetService extends FleetService {
       maxConcurrentCalls = concurrentCalls;
     }
 
-    await Future.delayed(delay);
+    await Future<void>.delayed(delay);
 
     concurrentCalls--;
     return mockResponses[server.id] ?? ServerMetrics.failed('Not mocked');
