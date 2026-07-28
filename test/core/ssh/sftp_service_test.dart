@@ -10,6 +10,7 @@ class _FakeSftpFile implements SftpFile {
 
   final Uint8List bytes;
   final bool shouldThrow;
+  @override
   bool isClosed = false;
 
   @override
