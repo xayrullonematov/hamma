@@ -103,5 +103,12 @@ void main() {
       expect(buf.samples.first.v, 40);
       expect(buf.samples.last.v, 49);
     });
+
+    test('setCapacity throws ArgumentError for capacity < 2', () {
+      final buf = RollingBuffer();
+      expect(() => buf.setCapacity(1), throwsArgumentError);
+      expect(() => buf.setCapacity(0), throwsArgumentError);
+      expect(() => buf.setCapacity(-1), throwsArgumentError);
+    });
   });
 }
