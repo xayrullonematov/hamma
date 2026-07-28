@@ -50,6 +50,32 @@ void main() {
       expect(buf.samples.first.v, 40);
     });
 
+    test('shrinking to exact current size does nothing', () {
+      final buf = RollingBuffer(capacity: 100, minSamplesForAnomaly: 5);
+      final t0 = DateTime(2025, 1, 1);
+      for (var i = 0; i < 50; i++) {
+        buf.push(t0.add(Duration(seconds: i)), i.toDouble());
+      }
+      expect(buf.samples.length, 50);
+      buf.setCapacity(50);
+      expect(buf.samples.length, 50);
+      expect(buf.samples.last.v, 49);
+      expect(buf.samples.first.v, 0);
+    });
+
+    test('shrinking by exactly one element drops oldest', () {
+      final buf = RollingBuffer(capacity: 100, minSamplesForAnomaly: 5);
+      final t0 = DateTime(2025, 1, 1);
+      for (var i = 0; i < 50; i++) {
+        buf.push(t0.add(Duration(seconds: i)), i.toDouble());
+      }
+      expect(buf.samples.length, 50);
+      buf.setCapacity(49);
+      expect(buf.samples.length, 49);
+      expect(buf.samples.last.v, 49);
+      expect(buf.samples.first.v, 1);
+    });
+
     test('growing preserves all current samples', () {
       final buf = RollingBuffer(capacity: 5, minSamplesForAnomaly: 3);
       final t0 = DateTime(2025, 1, 1);
