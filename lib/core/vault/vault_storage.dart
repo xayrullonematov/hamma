@@ -297,9 +297,7 @@ class VaultStorage {
 
     // Ungroup member secrets.
     final members = await loadByGroup(id);
-    for (final s in members) {
-      await upsert(s.copyWith(groupId: null));
-    }
+    await Future.wait(members.map((s) => upsert(s.copyWith(groupId: null))));
 
     final meta = await loadSyncMeta();
     final now = DateTime.now().toUtc();
