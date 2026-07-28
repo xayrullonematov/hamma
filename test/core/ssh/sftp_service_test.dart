@@ -33,7 +33,6 @@ class InMemoryTrustedHostKeyStorage implements TrustedHostKeyStorage {
     _records[_key(host, port)] = record;
   }
 
-  @override
   Future<void> removeTrustedHostKey({
     required String host,
     required int port,
@@ -65,11 +64,13 @@ class FakeSftpClient implements SftpClient {
 }
 
 class FakeSSHClient implements SSHClient {
+  @override
   bool isClosed = false;
   FakeSftpClient sftpClient = FakeSftpClient();
   final Completer<void> _authenticatedCompleter = Completer<void>();
   bool simulateAuthenticationError = false;
 
+  @override
   Future<bool> Function(String algorithm, Uint8List fingerprintBytes)? onVerifyHostKey;
 
   FakeSSHClient({this.onVerifyHostKey, this.simulateAuthenticationError = false}) {
