@@ -44,4 +44,9 @@ class AppLockStorage {
   Future<void> deletePin() async {
     await _secureStorage.delete(key: _appPinStorageKey);
   }
+
+  Future<bool> verifyPin(String pin) async {
+    final storedPin = await readPin();
+    return storedPin != null && storedPin == pin;
+  }
 }
