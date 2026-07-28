@@ -14,9 +14,11 @@ List<String> _resolveShell() {
 
 class LocalShellService implements ShellService {
   static final Map<String, LocalShellService> _instances = {};
-  static LocalShellService get local => _instances.putIfAbsent('__local__', () => LocalShellService());
+  static LocalShellService get local =>
+      _instances.putIfAbsent('__local__', () => LocalShellService());
 
-  final StreamController<ConnectionStatus> _statusController = StreamController<ConnectionStatus>.broadcast();
+  final StreamController<ConnectionStatus> _statusController =
+      StreamController<ConnectionStatus>.broadcast();
   late final ValueNotifier<ConnectionStatus> _statusNotifier;
   ConnectionStatus _currentStatus = ConnectionStatus.disconnected();
   String _workingDirectory = '';
@@ -73,38 +75,62 @@ class LocalShellService implements ShellService {
     try {
       if (Platform.isWindows) {
         // Verify wsl.exe is reachable
-        final check = await Process.run('wsl.exe', ['--status'])
-            .catchError((_) => ProcessResult(-1, 1, '', ''));
+        final check = await Process.run('wsl.exe', [
+          '--status',
+        ]).catchError((_) => ProcessResult(-1, 1, '', ''));
         if (check.exitCode != 0) {
-          throw Exception('WSL not found. Please install WSL to use local shell on Windows.');
+          throw Exception(
+            'WSL not found. Please install WSL to use local shell on Windows.',
+          );
         }
 
         // Resolve WSL home directory and user
-        final homeR = await Process.run('wsl.exe', ['bash', '-c', 'echo \$HOME']);
+        final homeR = await Process.run('wsl.exe', [
+          'bash',
+          '-c',
+          'echo \$HOME',
+        ]);
         _workingDirectory = (homeR.stdout as String).trim();
-        final userR = await Process.run('wsl.exe', ['bash', '-c', 'echo \$USER']);
+        final userR = await Process.run('wsl.exe', [
+          'bash',
+          '-c',
+          'echo \$USER',
+        ]);
         _wslUser = (userR.stdout as String).trim();
 
         // Passwordless sudo setup
-        await Process.run('wsl.exe', [
-          'bash', '-c',
-          'echo "\$USER ALL=(ALL) NOPASSWD:ALL" | sudo SUDO_ASKPASS=/bin/true sudo -A tee /etc/sudoers.d/hamma-nopasswd >/dev/null 2>&1 || true'
-        ], environment: {'USER': _wslUser});
+        await Process.run(
+          'wsl.exe',
+          [
+            'bash',
+            '-c',
+            'echo "\$USER ALL=(ALL) NOPASSWD:ALL" | sudo SUDO_ASKPASS=/bin/true sudo -A tee /etc/sudoers.d/hamma-nopasswd >/dev/null 2>&1 || true',
+          ],
+          environment: {'USER': _wslUser},
+        );
       } else {
-        _workingDirectory = workingDirectory ?? Platform.environment['HOME'] ?? Directory.current.path;
+        _workingDirectory =
+            workingDirectory ??
+            Platform.environment['HOME'] ??
+            Directory.current.path;
       }
 
       _isConnected = true;
       _updateStatus(ConnectionStatus.connected());
     } catch (e) {
       _isConnected = false;
-      _updateStatus(ConnectionStatus.failed(SshUnknownException(userMessage: e.toString())));
+      _updateStatus(
+        ConnectionStatus.failed(SshUnknownException(userMessage: e.toString())),
+      );
       rethrow;
     }
   }
 
   @override
-  Future<void> disconnect({bool updateStatus = true, bool cancelAuto = true}) async {
+  Future<void> disconnect({
+    bool updateStatus = true,
+    bool cancelAuto = true,
+  }) async {
     _isConnected = false;
     _activeProcess?.kill();
     _activeProcess = null;
@@ -112,25 +138,44 @@ class LocalShellService implements ShellService {
   }
 
   @override
-  Future<String> execute(String command, {Iterable<dynamic> vaultSecrets = const []}) async {
+  Future<String> execute(
+    String command, {
+    Iterable<dynamic> vaultSecrets = const [],
+  }) async {
     if (!_isConnected) throw StateError('Local shell is not connected.');
     try {
       final shell = _resolveShell();
       final shellFlag = '-c';
-      final actualCommand = Platform.isWindows ? 'cd "$_workingDirectory" && $command' : command;
-      
+
+      final args = Platform.isWindows
+          ? [
+              ...shell.skip(1),
+              shellFlag,
+              r'cd "$1" && CMD="$2" && shift 2 && eval "$CMD"',
+              '--',
+              _workingDirectory,
+              command,
+            ]
+          : [...shell.skip(1), shellFlag, command];
+
       final result = await Process.run(
         shell.first,
-        [...shell.skip(1), shellFlag, actualCommand],
+        args,
         workingDirectory: Platform.isWindows ? null : _workingDirectory,
-        environment: Platform.isWindows ? _getEnvironment(80, 24) : Platform.environment,
+        environment: Platform.isWindows
+            ? _getEnvironment(80, 24)
+            : Platform.environment,
         runInShell: false,
       );
-      
+
       final stdout = result.stdout as String;
       final stderr = result.stderr as String;
       if (result.exitCode != 0 && stdout.isEmpty) {
-        throw Exception(stderr.isNotEmpty ? stderr : 'Command exited with code ${result.exitCode}');
+        throw Exception(
+          stderr.isNotEmpty
+              ? stderr
+              : 'Command exited with code ${result.exitCode}',
+        );
       }
       return stdout;
     } on ProcessException catch (e) {
@@ -151,13 +196,25 @@ class LocalShellService implements ShellService {
 
     final shell = _resolveShell();
     final shellFlag = '-c';
-    final actualCommand = Platform.isWindows ? 'cd "$_workingDirectory" && $command' : command;
+
+    final args = Platform.isWindows
+        ? [
+            ...shell.skip(1),
+            shellFlag,
+            r'cd "$1" && CMD="$2" && shift 2 && eval "$CMD"',
+            '--',
+            _workingDirectory,
+            command,
+          ]
+        : [...shell.skip(1), shellFlag, command];
 
     final process = await Process.start(
       shell.first,
-      [...shell.skip(1), shellFlag, actualCommand],
+      args,
       workingDirectory: Platform.isWindows ? null : _workingDirectory,
-      environment: Platform.isWindows ? _getEnvironment(80, 24) : Platform.environment,
+      environment: Platform.isWindows
+          ? _getEnvironment(80, 24)
+          : Platform.environment,
       runInShell: true,
     );
 
@@ -168,9 +225,14 @@ class LocalShellService implements ShellService {
       if (_activeProcess == process) {
         _activeProcess = null;
         if (code != 0) {
-          _updateStatus(ConnectionStatus.failed(
-            SshUnknownException(userMessage: 'Local process exited unexpectedly with code $code'),
-          ));
+          _updateStatus(
+            ConnectionStatus.failed(
+              SshUnknownException(
+                userMessage:
+                    'Local process exited unexpectedly with code $code',
+              ),
+            ),
+          );
         } else {
           _updateStatus(ConnectionStatus.disconnected());
         }
@@ -184,7 +246,7 @@ class LocalShellService implements ShellService {
   Future<LocalPtySession> startShell({int width = 80, int height = 24}) async {
     if (!_isConnected) throw StateError('Local shell is not connected.');
     final shell = _resolveShell();
-    
+
     final pty = Pty.start(
       shell.first,
       arguments: shell.skip(1).toList(),
@@ -193,12 +255,16 @@ class LocalShellService implements ShellService {
       environment: _getEnvironment(width, height),
       workingDirectory: Platform.isWindows ? null : _workingDirectory,
     );
-    
+
     return LocalPtySession(pty);
   }
 
   @override
-  Future<void> startLocalForwarding({required int localPort, required String remoteHost, required int remotePort}) async {
+  Future<void> startLocalForwarding({
+    required int localPort,
+    required String remoteHost,
+    required int remotePort,
+  }) async {
     throw UnsupportedError('Port forwarding is not available in local mode.');
   }
 
@@ -220,8 +286,10 @@ class LocalShellSession {
 
   final Process _process;
 
-  Stream<Uint8List> get stdout => _process.stdout.map((list) => Uint8List.fromList(list));
-  Stream<Uint8List> get stderr => _process.stderr.map((list) => Uint8List.fromList(list));
+  Stream<Uint8List> get stdout =>
+      _process.stdout.map((list) => Uint8List.fromList(list));
+  Stream<Uint8List> get stderr =>
+      _process.stderr.map((list) => Uint8List.fromList(list));
 
   void write(Uint8List data) {
     try {
