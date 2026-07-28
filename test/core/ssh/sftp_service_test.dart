@@ -8,7 +8,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:hamma/core/ssh/sftp_service.dart';
-import 'package:dartssh2/src/sftp/sftp_stream_io.dart';
 import 'package:hamma/core/ssh/ssh_service.dart'
     show
         SshHostKeyMismatchException,
