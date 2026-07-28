@@ -104,5 +104,12 @@ void main() {
         throwsA(isA<VaultExportException>()),
       );
     });
+
+    test('throws on empty passphrase during export', () async {
+      expect(
+        () => service.export(''),
+        throwsA(isA<VaultExportException>()),
+      );
+    });
   });
 }
