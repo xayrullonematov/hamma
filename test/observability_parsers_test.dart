@@ -47,6 +47,14 @@ void main() {
     test('missing Mem: row returns null', () {
       expect(MetricParsers.parseFree('garbage\n'), isNull);
     });
+
+    test('malformed Mem: row with too few columns returns null', () {
+      expect(MetricParsers.parseFree('Mem: 1024\n'), isNull);
+    });
+
+    test('malformed Mem: row with non-numeric values returns null', () {
+      expect(MetricParsers.parseFree('Mem: abc def\n'), isNull);
+    });
   });
 
   group('parseDf', () {
