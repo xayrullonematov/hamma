@@ -112,11 +112,7 @@ class VaultAuthService {
   Future<bool> verifyPin(String pin) async {
     if (isLockedOut) return false;
 
-    final storedPin = await _appLockStorage.readPin();
-    
-    // TODO: Verify if AppLockStorage has a canonical way to check PINs.
-    // Currently using direct comparison with readPin().
-    if (storedPin != null && storedPin == pin) {
+    if (await _appLockStorage.verifyPin(pin)) {
       _onSuccess();
       return true;
     }

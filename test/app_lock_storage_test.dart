@@ -20,6 +20,22 @@ void main() {
     test('hasPin returns false when nothing saved', () async {
       expect(await storage.hasPin(), isFalse);
     });
+
+    test('verifyPin returns false when nothing saved', () async {
+      expect(await storage.verifyPin('1234'), isFalse);
+    });
+  });
+
+  group('verifyPin', () {
+    test('returns true for correct PIN', () async {
+      await storage.savePin('1234');
+      expect(await storage.verifyPin('1234'), isTrue);
+    });
+
+    test('returns false for incorrect PIN', () async {
+      await storage.savePin('1234');
+      expect(await storage.verifyPin('5678'), isFalse);
+    });
   });
 
   group('savePin', () {
