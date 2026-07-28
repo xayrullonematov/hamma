@@ -28,6 +28,11 @@ class AppLockStorage {
     return (await readPin()) != null;
   }
 
+  Future<bool> verifyPin(String pin) async {
+    final storedPin = await readPin();
+    return storedPin != null && storedPin == pin;
+  }
+
   Future<void> savePin(String pin) async {
     final trimmedPin = pin.trim();
     if (trimmedPin.isEmpty) {
