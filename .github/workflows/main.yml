@@ -286,8 +286,12 @@ jobs:
                -O appimagetool
           chmod +x appimagetool
 
+          wget -q "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64" \
+               -O runtime-x86_64
+          chmod +x runtime-x86_64
+
           ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 \
-            ./appimagetool --no-appstream Hamma.AppDir Hamma-x86_64.AppImage
+            ./appimagetool --runtime-file runtime-x86_64 --no-appstream Hamma.AppDir Hamma-x86_64.AppImage
 
       # Signs the AppImage with your GPG key and produces a detached .asc file.
       # Skipped automatically when GPG_PRIVATE_KEY secret is not set.
