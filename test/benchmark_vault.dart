@@ -27,6 +27,7 @@ void main() {
     }
     stopwatch.stop();
 
+    // ignore: avoid_print
     print('Time taken to loadAllGroups 50 times with 1000 items: ${stopwatch.elapsedMilliseconds}ms');
   });
 }
