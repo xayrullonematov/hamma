@@ -72,7 +72,7 @@ void main() {
     // mockFile.write throw when any stream is passed in, matching what happens if it consumes
     // a bad stream, OR we just let write throw PathNotFoundException to simulate it bubbling up.
     when(() => mockFile.write(any()))
-        .thenThrow(const PathNotFoundException('/this/file/does/not/exist.txt', const OSError('No such file or directory')));
+        .thenThrow(const PathNotFoundException('/this/file/does/not/exist.txt', OSError('No such file or directory')));
 
     when(() => mockFile.close()).thenAnswer((_) async => {});
     when(() => mockClient.remove(any())).thenAnswer((_) async => {});
