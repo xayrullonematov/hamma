@@ -540,6 +540,34 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
     _terminal.write(data);
     _checkForAuthUrl(data);
   }
+
+  List<String> _parseCommand(String command) {
+    final args = <String>[];
+    final current = StringBuffer();
+    var inSingleQuote = false;
+    var inDoubleQuote = false;
+
+    for (var i = 0; i < command.length; i++) {
+      final char = command[i];
+      if (char == "'" && !inDoubleQuote) {
+        inSingleQuote = !inSingleQuote;
+      } else if (char == '"' && !inSingleQuote) {
+        inDoubleQuote = !inDoubleQuote;
+      } else if (char == ' ' && !inSingleQuote && !inDoubleQuote) {
+        if (current.isNotEmpty) {
+          args.add(current.toString());
+          current.clear();
+        }
+      } else {
+        current.write(char);
+      }
+    }
+
+    if (current.isNotEmpty) {
+      args.add(current.toString());
+    }
+    return args;
+  }
   
   void _checkForAuthUrl(String data) {
     if (data.toLowerCase().contains('device') || data.toLowerCase().contains('login') || data.toLowerCase().contains('auth')) {
@@ -591,11 +619,15 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
           }
         });
       } else {
+        final parsedArgs = _parseCommand(widget.cli.command);
+        final executable = parsedArgs.isNotEmpty ? parsedArgs.first : widget.cli.command;
+        final args = parsedArgs.length > 1 ? parsedArgs.sublist(1) : <String>[];
+
         _process = await Process.start(
-          widget.cli.command,
-          [],
+          executable,
+          args,
           workingDirectory: widget.workingDirectory,
-          runInShell: true,
+          runInShell: false,
           environment: Platform.environment,
         );
 
