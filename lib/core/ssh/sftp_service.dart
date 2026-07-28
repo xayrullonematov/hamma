@@ -11,16 +11,33 @@ import 'ssh_service.dart'
         SshUnknownHostKeyException,
         SshUnknownHostKeyRejectedException;
 
+typedef SshSocketFactory = Future<SSHSocket> Function(String host, int port);
+typedef SshClientFactory = SSHClient Function(
+  SSHSocket socket, {
+  required String username,
+  List<SSHKeyPair>? identities,
+  String Function()? onPasswordRequest,
+  Future<bool> Function(String algorithm, Uint8List fingerprintBytes)?
+  onVerifyHostKey,
+});
+
 class SftpService {
-  SftpService({TrustedHostKeyStorage? trustedHostKeyStorage})
-    : _trustedHostKeyStorage =
-          trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage();
+  SftpService({
+    TrustedHostKeyStorage? trustedHostKeyStorage,
+    SshSocketFactory? sshSocketFactory,
+    SshClientFactory? sshClientFactory,
+  }) : _trustedHostKeyStorage =
+           trustedHostKeyStorage ?? const SecureTrustedHostKeyStorage(),
+       _sshSocketFactory = sshSocketFactory ?? SSHSocket.connect,
+       _sshClientFactory = sshClientFactory ?? SSHClient.new;
 
   static const _tempEditPath = '/tmp/hamma_temp_edit';
 
   SSHClient? _sshClient;
   SftpClient? _sftpClient;
   final TrustedHostKeyStorage _trustedHostKeyStorage;
+  final SshSocketFactory _sshSocketFactory;
+  final SshClientFactory _sshClientFactory;
 
   bool get isConnected => _sshClient != null && _sftpClient != null;
 
@@ -60,8 +77,8 @@ class SftpService {
             ? null
             : SSHKeyPair.fromPem(resolvedPrivateKey, privateKeyPassword);
 
-    final socket = await SSHSocket.connect(host, port);
-    final sshClient = SSHClient(
+    final socket = await _sshSocketFactory(host, port);
+    final sshClient = _sshClientFactory(
       socket,
       username: username,
       identities: identities,
