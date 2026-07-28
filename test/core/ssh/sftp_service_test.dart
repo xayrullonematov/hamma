@@ -20,10 +20,11 @@ class _FakeSftpClient implements SftpClient {
 
 class _FakeSftpFile implements SftpFile {
   final Future<Uint8List> Function({int? length, int offset})? readBytesCallback;
-  final Future<void> Function()? closeCallback;
-  bool isClosed = false;
 
-  _FakeSftpFile({this.readBytesCallback, this.closeCallback});
+  // Custom tracking property, not an override of SftpFile
+  bool hasBeenClosed = false;
+
+  _FakeSftpFile({this.readBytesCallback});
 
   @override
   Future<Uint8List> readBytes({int? length, int offset = 0}) {
@@ -35,10 +36,7 @@ class _FakeSftpFile implements SftpFile {
 
   @override
   Future<void> close() async {
-    isClosed = true;
-    if (closeCallback != null) {
-      await closeCallback!();
-    }
+    hasBeenClosed = true;
   }
 
   @override
@@ -76,7 +74,7 @@ void main() {
         throwsA(isA<Exception>().having((e) => e.toString(), 'message', contains('Failed to read bytes'))),
       );
 
-      expect(fakeFile.isClosed, isTrue);
+      expect(fakeFile.hasBeenClosed, isTrue);
     });
   });
 }
