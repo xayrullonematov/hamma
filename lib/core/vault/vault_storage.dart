@@ -90,15 +90,22 @@ class VaultStorage {
   /// included; callers MUST treat the return value as sensitive.
   Future<List<VaultSecret>> loadAll() async {
     final index = await _readIndex();
+
+    // Instead of doing 2N sequential or concurrent reads across the platform
+    // channel, do a single bulk read, which is drastically faster on all platforms.
+    final allKeys = await _secureStorage.readAll();
     final out = <VaultSecret>[];
+
     for (final entry in index) {
       final id = entry['id']!;
-      final value = await _secureStorage.read(key: '$_valuePrefix$id');
+      final value = allKeys['$_valuePrefix$id'];
       if (value == null) continue; // index/value drift — skip
-      final metaRaw = await _secureStorage.read(key: '$_metaPrefix$id');
+
+      final metaRaw = allKeys['$_metaPrefix$id'];
       final meta = metaRaw == null
           ? const <String, dynamic>{}
           : (jsonDecode(metaRaw) as Map).cast<String, dynamic>();
+
       out.add(VaultSecret(
         id: id,
         name: entry['name'] ?? '',
