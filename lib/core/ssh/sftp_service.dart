@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:dartssh2/dartssh2.dart';
 
 import '../storage/trusted_host_key_storage.dart';
@@ -31,6 +32,15 @@ class SftpService {
     }
 
     return client;
+  }
+
+
+
+
+  @visibleForTesting
+  void setClientForTesting(SSHClient? sshClient, SftpClient? sftpClient) {
+    _sshClient = sshClient;
+    _sftpClient = sftpClient;
   }
 
   Future<void> connect({
