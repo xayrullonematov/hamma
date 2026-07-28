@@ -32,6 +32,26 @@ void main() {
       expect(cpu, isNull);
       expect(procs, isEmpty);
     });
+
+    test('empty string yields nulls / empty list', () {
+      final (cpu, procs) = MetricParsers.parseTop('');
+      expect(cpu, isNull);
+      expect(procs, isEmpty);
+    });
+
+    test('malformed headers yields nulls / empty list without throwing', () {
+      final (cpu, procs) = MetricParsers.parseTop(
+        '%Cpu(s): 10.0 us, 90.0 id\n'
+        'PID USER COMMAND\n'
+        '1234 root init\n'
+      );
+      // cpu parses fine
+      expect(cpu, isNotNull);
+      expect(cpu!.usagePercent, closeTo(10.0, 0.01));
+
+      // but without %CPU and %MEM in headers, it won't parse any processes
+      expect(procs, isEmpty);
+    });
   });
 
   group('parseFree', () {
