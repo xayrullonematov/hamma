@@ -294,8 +294,9 @@ class SftpService {
   }
 
   bool _isPermissionDeniedError(Object error) {
-    if (error is SftpStatusError) {
-      return error.code == SftpStatusCode.permissionDenied;
+    if (error is SftpStatusError &&
+        error.code == SftpStatusCode.permissionDenied) {
+      return true;
     }
 
     return error.toString().toLowerCase().contains('permission denied');
