@@ -41,14 +41,13 @@ void main() {
     );
     return all.where((v) {
       if (!v.visible) return false;
-      final child = v.child;
-      if (child is! Padding) return false;
-      final pad = child.padding;
-      return pad is EdgeInsets &&
-          pad.bottom == 20 &&
-          pad.top == 0 &&
-          pad.left == 0 &&
-          pad.right == 0;
+      if (v.child case Padding(padding: EdgeInsets pad)) {
+        return pad.bottom == 20 &&
+            pad.top == 0 &&
+            pad.left == 0 &&
+            pad.right == 0;
+      }
+      return false;
     }).length;
   }
 
