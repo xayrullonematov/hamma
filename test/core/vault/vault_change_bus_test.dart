@@ -38,7 +38,7 @@ void main() {
       bus.notify();
 
       // Allow the event loop to process the microtask
-      await Future.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
 
       expect(count1, 1);
       expect(count2, 1);
