@@ -144,12 +144,11 @@ class TerminalSessionStore {
 
   Future<void> clearServer({required String serverId}) async {
     final sessions = await listSessions(serverId: serverId);
-    for (final metadata in sessions) {
-      await _secureStorage.delete(
-        key: _sessionKey(serverId, metadata.sessionId),
-      );
-    }
-    await _secureStorage.delete(key: _indexKey(serverId));
+    await Future.wait([
+      for (final metadata in sessions)
+        _secureStorage.delete(key: _sessionKey(serverId, metadata.sessionId)),
+      _secureStorage.delete(key: _indexKey(serverId)),
+    ]);
   }
 
   Future<void> _upsertMetadata(TerminalSession session) async {
