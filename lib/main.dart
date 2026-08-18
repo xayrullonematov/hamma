@@ -10,7 +10,6 @@ import 'package:window_manager/window_manager.dart';
 import 'core/ai/ai_command_service.dart';
 import 'core/ai/ai_provider.dart';
 import 'core/ai/command_risk_assessor.dart';
-import 'core/ai/inference_engine.dart';
 import 'core/background/background_keepalive.dart';
 import 'core/audit/execution_audit_entry.dart';
 import 'core/audit/execution_audit_service.dart';
@@ -97,17 +96,19 @@ void main() {
           CrashApp(
             error: error,
             stackTrace: stack,
-            hint: canRestart
-                ? 'Hamma failed to start.'
-                : 'Hamma failed to start, and automatic restart has been '
-                      'disabled after $_restartAttempts attempts. Please quit '
-                      'and relaunch.',
-            onRestart: canRestart
-                ? () {
-                    _restartAttempts++;
-                    main();
-                  }
-                : null,
+            hint:
+                canRestart
+                    ? 'Hamma failed to start.'
+                    : 'Hamma failed to start, and automatic restart has been '
+                        'disabled after $_restartAttempts attempts. Please quit '
+                        'and relaunch.',
+            onRestart:
+                canRestart
+                    ? () {
+                      _restartAttempts++;
+                      main();
+                    }
+                    : null,
           ),
         );
       }
@@ -324,9 +325,10 @@ Future<void> _bootstrapAndRun() async {
       if (event.message != null) {
         event.message = SentryMessage(
           s(event.message!.formatted),
-          template: event.message!.template == null
-              ? null
-              : s(event.message!.template),
+          template:
+              event.message!.template == null
+                  ? null
+                  : s(event.message!.template),
           params: event.message!.params
               ?.map((p) => scrubAny(p))
               .toList(growable: false),
@@ -533,14 +535,15 @@ class _AiServerAppState extends State<AiServerApp>
 
     final profile = _servers.firstWhere(
       (s) => s.name.toLowerCase() == targetName || s.id == targetName,
-      orElse: () => ServerProfile(
-        id: '',
-        name: '',
-        host: '',
-        port: 22,
-        username: '',
-        password: '',
-      ),
+      orElse:
+          () => ServerProfile(
+            id: '',
+            name: '',
+            host: '',
+            port: 22,
+            username: '',
+            password: '',
+          ),
     );
 
     if (profile.id.isEmpty) {
@@ -726,9 +729,10 @@ class _AiServerAppState extends State<AiServerApp>
     BuildContext context,
   ) async {
     final intent = CommandIntent(
-      action: entry.naturalLanguageIntent.trim().isEmpty
-          ? 'Run recent command'
-          : entry.naturalLanguageIntent,
+      action:
+          entry.naturalLanguageIntent.trim().isEmpty
+              ? 'Run recent command'
+              : entry.naturalLanguageIntent,
       command: entry.proposedCommand,
       explanation: 'Recent command from ${entry.serverName}.',
       targetServer: entry.serverName,
@@ -743,53 +747,54 @@ class _AiServerAppState extends State<AiServerApp>
     final analysis = const CommandRiskAssessor().assess(intent.command);
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('REVIEW COMMAND'),
-        content: SizedBox(
-          width: 560,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                intent.action,
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.25),
-                  border: Border.all(color: AppColors.border),
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: SelectableText(
-                  intent.command,
-                  style: const TextStyle(
-                    fontFamily: AppColors.monoFamily,
-                    fontFamilyFallback: AppColors.monoFallback,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('REVIEW COMMAND'),
+            content: SizedBox(
+              width: 560,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    intent.action,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      border: Border.all(color: AppColors.border),
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    child: SelectableText(
+                      intent.command,
+                      style: const TextStyle(
+                        fontFamily: AppColors.monoFamily,
+                        fontFamilyFallback: AppColors.monoFallback,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('Risk: ${analysis.riskLevel.name.toUpperCase()}'),
+                  const SizedBox(height: 4),
+                  Text(analysis.explanation),
+                ],
               ),
-              const SizedBox(height: 12),
-              Text('Risk: ${analysis.riskLevel.name.toUpperCase()}'),
-              const SizedBox(height: 4),
-              Text(analysis.explanation),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('CANCEL'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('RUN'),
+              ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('CANCEL'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('RUN'),
-          ),
-        ],
-      ),
     );
     if (confirmed != true) return;
     await _handleExecuteIntent(intent);
@@ -808,11 +813,12 @@ class _AiServerAppState extends State<AiServerApp>
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => RunbookRunScreen(
-          runbook: runbook,
-          sshService: SshService.forServer(server.id),
-          aiSettings: _currentAiSettings,
-        ),
+        builder:
+            (_) => RunbookRunScreen(
+              runbook: runbook,
+              sshService: SshService.forServer(server.id),
+              aiSettings: _currentAiSettings,
+            ),
       ),
     );
   }
@@ -830,8 +836,8 @@ class _AiServerAppState extends State<AiServerApp>
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            FileExplorerScreen(server: server, initialPath: file.path),
+        builder:
+            (_) => FileExplorerScreen(server: server, initialPath: file.path),
       ),
     );
   }
@@ -878,16 +884,19 @@ class _AiServerAppState extends State<AiServerApp>
 
     final selected = await showDialog<ServerProfile>(
       context: context,
-      builder: (dialogContext) => SimpleDialog(
-        title: Text(title),
-        children: [
-          for (final server in _servers)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(dialogContext).pop(server),
-              child: Text('${server.name} · ${server.username}@${server.host}'),
-            ),
-        ],
-      ),
+      builder:
+          (dialogContext) => SimpleDialog(
+            title: Text(title),
+            children: [
+              for (final server in _servers)
+                SimpleDialogOption(
+                  onPressed: () => Navigator.of(dialogContext).pop(server),
+                  child: Text(
+                    '${server.name} · ${server.username}@${server.host}',
+                  ),
+                ),
+            ],
+          ),
     );
     return selected;
   }
@@ -906,16 +915,17 @@ class _AiServerAppState extends State<AiServerApp>
   ) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ServerDashboardScreen(
-          server: server,
-          aiProvider: _aiProvider,
-          apiKey: _apiKey,
-          openRouterModel: _openRouterModel,
-          localEndpoint: _localEndpoint,
-          localModel: _localModel,
-          onSaveAiSettings: _saveAiSettings,
-          onBackupImported: _loadServers,
-        ),
+        builder:
+            (_) => ServerDashboardScreen(
+              server: server,
+              aiProvider: _aiProvider,
+              apiKey: _apiKey,
+              openRouterModel: _openRouterModel,
+              localEndpoint: _localEndpoint,
+              localModel: _localModel,
+              onSaveAiSettings: _saveAiSettings,
+              onBackupImported: _loadServers,
+            ),
       ),
     );
   }
@@ -923,15 +933,16 @@ class _AiServerAppState extends State<AiServerApp>
   Future<void> _openSettingsFromPalette(BuildContext context) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => SettingsScreen(
-          initialProvider: _aiProvider,
-          initialApiKey: _apiKey,
-          initialOpenRouterModel: _openRouterModel,
-          initialLocalEndpoint: _localEndpoint,
-          initialLocalModel: _localModel,
-          onSaveAiSettings: _saveAiSettings,
-          onBackupImported: _loadServers,
-        ),
+        builder:
+            (_) => SettingsScreen(
+              initialProvider: _aiProvider,
+              initialApiKey: _apiKey,
+              initialOpenRouterModel: _openRouterModel,
+              initialLocalEndpoint: _localEndpoint,
+              initialLocalModel: _localModel,
+              onSaveAiSettings: _saveAiSettings,
+              onBackupImported: _loadServers,
+            ),
       ),
     );
   }
@@ -986,22 +997,23 @@ class _AiServerAppState extends State<AiServerApp>
       startupWarning: widget.initialAiSettingsLoadError,
     );
 
-    final initialScreen = _isOnboardingComplete
-        ? (widget.initialHasAppPin
-              ? AppLockScreen(
+    final initialScreen =
+        _isOnboardingComplete
+            ? (widget.initialHasAppPin
+                ? AppLockScreen(
                   mode: AppLockMode.verify,
                   appLockStorage: widget.appLockStorage,
                   nextScreen: serverListScreen,
                 )
-              : serverListScreen)
-        : OnboardingScreen(
-            appPrefsStorage: widget.appPrefsStorage,
-            onComplete: () {
-              setState(() {
-                _isOnboardingComplete = true;
-              });
-            },
-          );
+                : serverListScreen)
+            : OnboardingScreen(
+              appPrefsStorage: widget.appPrefsStorage,
+              onComplete: () {
+                setState(() {
+                  _isOnboardingComplete = true;
+                });
+              },
+            );
 
     final aiCommandService = AiCommandService.forProvider(
       provider: _aiProvider,
@@ -1344,14 +1356,16 @@ class _AiServerAppState extends State<AiServerApp>
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? AppColors.onPrimary
-              : AppColors.textMuted,
+          (states) =>
+              states.contains(WidgetState.selected)
+                  ? AppColors.onPrimary
+                  : AppColors.textMuted,
         ),
         trackColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? AppColors.primary
-              : AppColors.panel,
+          (states) =>
+              states.contains(WidgetState.selected)
+                  ? AppColors.primary
+                  : AppColors.panel,
         ),
         trackOutlineColor: const WidgetStatePropertyAll(AppColors.border),
       ),
@@ -1359,17 +1373,19 @@ class _AiServerAppState extends State<AiServerApp>
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         side: const BorderSide(color: AppColors.borderStrong, width: 1),
         fillColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? AppColors.primary
-              : Colors.transparent,
+          (states) =>
+              states.contains(WidgetState.selected)
+                  ? AppColors.primary
+                  : Colors.transparent,
         ),
         checkColor: const WidgetStatePropertyAll(AppColors.onPrimary),
       ),
       radioTheme: RadioThemeData(
         fillColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected)
-              ? AppColors.textPrimary
-              : AppColors.textMuted,
+          (states) =>
+              states.contains(WidgetState.selected)
+                  ? AppColors.textPrimary
+                  : AppColors.textMuted,
         ),
       ),
       tabBarTheme: const TabBarThemeData(
