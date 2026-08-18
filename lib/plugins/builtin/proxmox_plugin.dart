@@ -350,6 +350,9 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
         .toList(growable: false);
   }
 
+  @visibleForTesting
+  List<_Resource> parseResources(String body) => _parseResources(body);
+
   List<_Resource> _parseResources(String body) {
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) return const [];
