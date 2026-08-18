@@ -24,7 +24,7 @@ class GeminiService {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data['candidates'][0]['content']['parts'][0]['text'];
+      return data['candidates'][0]['content']['parts'][0]['text'] as String;
     } else {
       throw Exception('Failed to generate content: ${response.statusCode}');
     }
