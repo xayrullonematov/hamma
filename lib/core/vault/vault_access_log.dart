@@ -70,9 +70,9 @@ class VaultAccessLog {
   }
 
   Future<List<VaultAccessEvent>> _loadAll() async {
-    final raw = await _storage.read(key: _storageKey);
-    if (raw == null) return [];
     try {
+      final raw = await _storage.read(key: _storageKey);
+      if (raw == null) return [];
       final decoded = jsonDecode(raw);
       if (decoded is! List) return [];
       return decoded
@@ -85,9 +85,13 @@ class VaultAccessLog {
   }
 
   Future<void> _saveAll(List<VaultAccessEvent> events) async {
-    await _storage.write(
-      key: _storageKey,
-      value: jsonEncode(events.map((e) => e.toJson()).toList()),
-    );
+    try {
+      await _storage.write(
+        key: _storageKey,
+        value: jsonEncode(events.map((e) => e.toJson()).toList()),
+      );
+    } catch (_) {
+      // Ignore write errors to remain resilient
+    }
   }
 }

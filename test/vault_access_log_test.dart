@@ -79,5 +79,55 @@ void main() {
        // The first one should be the last one logged (s549)
        expect(all.first.secretId, 's549');
     });
+
+    test('handles storage read/write errors gracefully', () async {
+      final errorStorage = _ErrorThrowingStorage();
+      final accessLog = VaultAccessLog(storage: errorStorage);
+
+      // Should not crash the app
+      await expectLater(
+        accessLog.log(VaultAccessEvent(
+          secretId: 's1',
+          action: VaultAccessAction.copied,
+          timestamp: DateTime.now(),
+        )),
+        completes,
+      );
+
+      final last = await accessLog.lastAccessed('s1');
+      expect(last, isNull);
+
+      final recent = await accessLog.recentEvents();
+      expect(recent, isEmpty);
+    });
   });
+}
+
+class _ErrorThrowingStorage extends Fake implements FlutterSecureStorage {
+  @override
+  Future<String?> read({
+    required String key,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    throw Exception('Simulated read error');
+  }
+
+  @override
+  Future<void> write({
+    required String key,
+    required String? value,
+    AppleOptions? iOptions,
+    AndroidOptions? aOptions,
+    LinuxOptions? lOptions,
+    WebOptions? webOptions,
+    AppleOptions? mOptions,
+    WindowsOptions? wOptions,
+  }) async {
+    throw Exception('Simulated write error');
+  }
 }
