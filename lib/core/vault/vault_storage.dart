@@ -22,20 +22,23 @@ class VaultSyncMeta {
   final Map<String, DateTime> tombstones;
   final Map<String, DateTime> groupTombstones;
 
-  static const VaultSyncMeta empty =
-      VaultSyncMeta(updatedAt: {}, tombstones: {}, groupTombstones: {});
+  static const VaultSyncMeta empty = VaultSyncMeta(
+    updatedAt: {},
+    tombstones: {},
+    groupTombstones: {},
+  );
 
   Map<String, dynamic> toJson() => {
-        'updatedAt': {
-          for (final e in updatedAt.entries) e.key: e.value.toIso8601String(),
-        },
-        'tombstones': {
-          for (final e in tombstones.entries) e.key: e.value.toIso8601String(),
-        },
-        'groupTombstones': {
-          for (final e in groupTombstones.entries) e.key: e.value.toIso8601String(),
-        },
-      };
+    'updatedAt': {
+      for (final e in updatedAt.entries) e.key: e.value.toIso8601String(),
+    },
+    'tombstones': {
+      for (final e in tombstones.entries) e.key: e.value.toIso8601String(),
+    },
+    'groupTombstones': {
+      for (final e in groupTombstones.entries) e.key: e.value.toIso8601String(),
+    },
+  };
 
   factory VaultSyncMeta.fromJson(Map<String, dynamic> json) {
     Map<String, DateTime> parse(Object? raw) {
@@ -73,7 +76,7 @@ class VaultSyncMeta {
 /// (sync uploader + redaction pipeline) react without polling.
 class VaultStorage {
   VaultStorage({FlutterSecureStorage? secureStorage})
-      : _secureStorage = secureStorage ?? const FlutterSecureStorage();
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   static const _indexKey = 'vault_index';
   static const _syncMetaKey = 'vault_sync_meta';
@@ -90,27 +93,37 @@ class VaultStorage {
   /// included; callers MUST treat the return value as sensitive.
   Future<List<VaultSecret>> loadAll() async {
     final index = await _readIndex();
+    if (index.isEmpty) return [];
+
+    final allData = await _secureStorage.readAll();
     final out = <VaultSecret>[];
+
     for (final entry in index) {
       final id = entry['id']!;
-      final value = await _secureStorage.read(key: '$_valuePrefix$id');
+      final value = allData['$_valuePrefix$id'];
       if (value == null) continue; // index/value drift — skip
-      final metaRaw = await _secureStorage.read(key: '$_metaPrefix$id');
-      final meta = metaRaw == null
-          ? const <String, dynamic>{}
-          : (jsonDecode(metaRaw) as Map).cast<String, dynamic>();
-      out.add(VaultSecret(
-        id: id,
-        name: entry['name'] ?? '',
-        value: value,
-        scope: entry['scope'] == '' ? null : entry['scope'],
-        description: (meta['description'] ?? '').toString(),
-        updatedAt: DateTime.tryParse((meta['updatedAt'] ?? '').toString()) ??
-            DateTime.fromMillisecondsSinceEpoch(0),
-        groupId: meta['groupId']?.toString(),
-        lastUsedAt: DateTime.tryParse((meta['lastUsedAt'] ?? '').toString()),
-        rotateBy: DateTime.tryParse((meta['rotateBy'] ?? '').toString()),
-      ));
+
+      final metaRaw = allData['$_metaPrefix$id'];
+      final meta =
+          metaRaw == null
+              ? const <String, dynamic>{}
+              : (jsonDecode(metaRaw) as Map).cast<String, dynamic>();
+
+      out.add(
+        VaultSecret(
+          id: id,
+          name: entry['name'] ?? '',
+          value: value,
+          scope: entry['scope'] == '' ? null : entry['scope'],
+          description: (meta['description'] ?? '').toString(),
+          updatedAt:
+              DateTime.tryParse((meta['updatedAt'] ?? '').toString()) ??
+              DateTime.fromMillisecondsSinceEpoch(0),
+          groupId: meta['groupId']?.toString(),
+          lastUsedAt: DateTime.tryParse((meta['lastUsedAt'] ?? '').toString()),
+          rotateBy: DateTime.tryParse((meta['rotateBy'] ?? '').toString()),
+        ),
+      );
     }
     return out;
   }
@@ -168,10 +181,7 @@ class VaultStorage {
     final id = normalised.id.isEmpty ? _generateId() : normalised.id;
     final updated = normalised.copyWith(id: id);
 
-    await _secureStorage.write(
-      key: '$_valuePrefix$id',
-      value: updated.value,
-    );
+    await _secureStorage.write(key: '$_valuePrefix$id', value: updated.value);
     await _secureStorage.write(
       key: '$_metaPrefix$id',
       value: jsonEncode({
@@ -183,12 +193,9 @@ class VaultStorage {
       }),
     );
 
-    final newIndex = index.where((e) => e['id'] != id).toList()
-      ..add({
-        'id': id,
-        'name': updated.name,
-        'scope': updated.scope ?? '',
-      });
+    final newIndex =
+        index.where((e) => e['id'] != id).toList()
+          ..add({'id': id, 'name': updated.name, 'scope': updated.scope ?? ''});
     await _writeIndex(newIndex);
 
     // Sync meta: bump updatedAt, clear any stale tombstone.
@@ -230,10 +237,14 @@ class VaultStorage {
   /// Returns every group in the store.
   Future<List<VaultGroup>> loadAllGroups() async {
     final index = await _readGroupIndex();
+    if (index.isEmpty) return [];
+
+    final allData = await _secureStorage.readAll();
     final out = <VaultGroup>[];
+
     for (final entry in index) {
       final id = entry['id']!;
-      final raw = await _secureStorage.read(key: '$_groupPrefix$id');
+      final raw = allData['$_groupPrefix$id'];
       if (raw == null) continue;
       try {
         final decoded = jsonDecode(raw);
@@ -252,10 +263,7 @@ class VaultStorage {
   /// Insert or update [group].
   Future<VaultGroup> upsertGroup(VaultGroup group) async {
     final id = group.id.isEmpty ? _generateId() : group.id;
-    final updated = group.copyWith(
-      id: id,
-      updatedAt: DateTime.now().toUtc(),
-    );
+    final updated = group.copyWith(id: id, updatedAt: DateTime.now().toUtc());
 
     await _secureStorage.write(
       key: '$_groupPrefix$id',
@@ -263,13 +271,13 @@ class VaultStorage {
     );
 
     final index = await _readGroupIndex();
-    final newIndex = index.where((e) => e['id'] != id).toList()
-      ..add({
-        'id': id,
-        'name': updated.name,
-        'type': updated.type.name,
-        'tags': updated.tags.join(','),
-      });
+    final newIndex =
+        index.where((e) => e['id'] != id).toList()..add({
+          'id': id,
+          'name': updated.name,
+          'type': updated.type.name,
+          'tags': updated.tags.join(','),
+        });
     await _writeGroupIndex(newIndex);
 
     // Sync meta: bump updatedAt, clear any stale group tombstone.
@@ -363,11 +371,7 @@ class VaultStorage {
           'rotateBy': s.rotateBy?.toIso8601String(),
         }),
       );
-      newIndex.add({
-        'id': s.id,
-        'name': s.name,
-        'scope': s.scope ?? '',
-      });
+      newIndex.add({'id': s.id, 'name': s.name, 'scope': s.scope ?? ''});
     }
     await _writeIndex(newIndex);
 
@@ -414,8 +418,9 @@ class VaultStorage {
       if (decoded is! List) return [];
       return decoded
           .whereType<Map<dynamic, dynamic>>()
-          .map((e) =>
-              e.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')))
+          .map(
+            (e) => e.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')),
+          )
           .toList();
     } catch (_) {
       return [];
@@ -423,10 +428,7 @@ class VaultStorage {
   }
 
   Future<void> _writeIndex(List<Map<String, String>> index) async {
-    await _secureStorage.write(
-      key: _indexKey,
-      value: jsonEncode(index),
-    );
+    await _secureStorage.write(key: _indexKey, value: jsonEncode(index));
   }
 
   Future<List<Map<String, String>>> _readGroupIndex() async {
@@ -437,8 +439,9 @@ class VaultStorage {
       if (decoded is! List) return [];
       return decoded
           .whereType<Map<dynamic, dynamic>>()
-          .map((e) =>
-              e.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')))
+          .map(
+            (e) => e.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')),
+          )
           .toList();
     } catch (_) {
       return [];
@@ -446,10 +449,7 @@ class VaultStorage {
   }
 
   Future<void> _writeGroupIndex(List<Map<String, String>> index) async {
-    await _secureStorage.write(
-      key: _groupIndexKey,
-      value: jsonEncode(index),
-    );
+    await _secureStorage.write(key: _groupIndexKey, value: jsonEncode(index));
   }
 
   static String _canonicaliseName(String input) {
