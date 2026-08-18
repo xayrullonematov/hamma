@@ -160,7 +160,8 @@ void main() {
         adapter: s3,
         deviceId: 'dev-1',
         prefix: 'hamma/',
-        // Bug-injection: identity "encrypter" — would leak plaintext.
+        // Testing strategy: use an identity "encrypter" to verify that the engine
+        // handles encryption failures correctly and refuses to leak plaintext.
         encrypter: (p) => p,
         decrypter: (c) => c,
       );
