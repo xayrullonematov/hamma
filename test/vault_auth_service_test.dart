@@ -1,7 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:local_auth/local_auth.dart';
 import 'package:hamma/core/vault/vault_auth_service.dart';
 import 'package:hamma/core/storage/app_lock_storage.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+class _ThrowingLocalAuth extends Fake implements LocalAuthentication {
+  @override
+  Future<bool> get canCheckBiometrics async => throw Exception('error');
+
+  @override
+  Future<bool> isDeviceSupported() async => throw Exception('error');
+
+  @override
+  Future<List<BiometricType>> getAvailableBiometrics() async => throw Exception('error');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #authenticate) {
+      return Future<bool>.error(Exception('error'));
+    }
+    return super.noSuchMethod(invocation);
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +37,28 @@ void main() {
       appLockStorage: appLockStorage,
       gracePeriodDuration: const Duration(seconds: 1),
     );
+  });
+
+  group('VaultAuthService Error Handling', () {
+    test('canUseBiometrics catches exceptions and returns false', () async {
+      final errorService = VaultAuthService(
+        localAuth: _ThrowingLocalAuth(),
+        appLockStorage: appLockStorage,
+      );
+
+      final result = await errorService.canUseBiometrics();
+      expect(result, isFalse);
+    });
+
+    test('authenticate catches exceptions and returns false (falls back to PIN)', () async {
+      final errorService = VaultAuthService(
+        localAuth: _ThrowingLocalAuth(),
+        appLockStorage: appLockStorage,
+      );
+
+      final result = await errorService.authenticate('test reason');
+      expect(result, isFalse);
+    });
   });
 
   group('VaultAuthService Lockout', () {
