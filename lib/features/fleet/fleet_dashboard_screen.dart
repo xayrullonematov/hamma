@@ -32,7 +32,7 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
   Map<String, ServerMetrics> _metricsByServerId = const {};
 
   bool _isExecutingBulkCommand = false;
-  Map<String, String> _bulkCommandResults = {};
+  final Map<String, String> _bulkCommandResults = {};
 
   bool _isSearching = false;
   String _searchQuery = '';
