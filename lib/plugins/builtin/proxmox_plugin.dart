@@ -106,15 +106,16 @@ class _ProxmoxPanel extends StatefulWidget {
   final HammaApi api;
 
   @override
-  State<_ProxmoxPanel> createState() => _ProxmoxPanelState();
+  State<_ProxmoxPanel> createState() => ProxmoxPanelState();
 }
 
-class _ProxmoxPanelState extends State<_ProxmoxPanel> {
+@visibleForTesting
+class ProxmoxPanelState extends State<_ProxmoxPanel> {
   _ProxmoxConfig? _config;
   bool _loading = true;
   String? _error;
-  List<_Node> _nodes = const [];
-  List<_Resource> _resources = const [];
+  List<ProxmoxNode> _nodes = const [];
+  List<ProxmoxResource> _resources = const [];
 
   @override
   void initState() {
@@ -176,8 +177,8 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
           'Proxmox /cluster/resources returned HTTP ${resourcesResp.statusCode}.',
         );
       }
-      final nodes = _parseNodes(nodesResp.body);
-      final resources = _parseResources(resourcesResp.body);
+      final nodes = parseNodes(nodesResp.body);
+      final resources = parseResources(resourcesResp.body);
       if (!mounted) return;
       setState(() {
         _nodes = nodes;
@@ -333,14 +334,15 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
     );
   }
 
-  List<_Node> _parseNodes(String body) {
+  @visibleForTesting
+  List<ProxmoxNode> parseNodes(String body) {
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) return const [];
     final data = decoded['data'];
     if (data is! List) return const [];
     return data
         .whereType<Map<String, dynamic>>()
-        .map((m) => _Node(
+        .map((m) => ProxmoxNode(
               name: (m['node'] ?? '?').toString(),
               status: (m['status'] ?? 'unknown').toString(),
               // CPU is reported as 0..1; surface as a percentage.
@@ -350,7 +352,8 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
         .toList(growable: false);
   }
 
-  List<_Resource> _parseResources(String body) {
+  @visibleForTesting
+  List<ProxmoxResource> parseResources(String body) {
     final decoded = jsonDecode(body);
     if (decoded is! Map<String, dynamic>) return const [];
     final data = decoded['data'];
@@ -361,7 +364,7 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
           final t = m['type'];
           return t == 'qemu' || t == 'lxc';
         })
-        .map((m) => _Resource(
+        .map((m) => ProxmoxResource(
               type: (m['type'] ?? '?').toString(),
               vmid: (m['vmid'] ?? '?').toString(),
               name: (m['name'] ?? '?').toString(),
@@ -541,8 +544,9 @@ class _Row extends StatelessWidget {
   }
 }
 
-class _Node {
-  const _Node({
+@visibleForTesting
+class ProxmoxNode {
+  const ProxmoxNode({
     required this.name,
     required this.status,
     required this.cpu,
@@ -555,8 +559,9 @@ class _Node {
   final int memMb;
 }
 
-class _Resource {
-  const _Resource({
+@visibleForTesting
+class ProxmoxResource {
+  const ProxmoxResource({
     required this.type,
     required this.vmid,
     required this.name,
