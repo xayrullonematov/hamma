@@ -9,17 +9,12 @@ import 'package:fllama/fllama.dart';
 class InferenceEngine {
   InferenceEngine();
 
-  /// Deprecated: fllama handles native library loading automatically.
-  /// Kept for compatibility with existing code.
-  static void ensureNativeLibraryLoaded() {}
-
   bool _modelLoaded = false;
   String? _currentModelPath;
 
   /// Validates model path and marks the engine as ready.
   /// Actual loading happens on first inference in fllama.
   Future<bool> loadModel(String modelPath) async {
-    ensureNativeLibraryLoaded();
     final file = File(modelPath);
     if (!await file.exists()) {
       throw Exception('Model file not found at: $modelPath');

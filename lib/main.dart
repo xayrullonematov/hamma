@@ -74,9 +74,6 @@ void main() {
     () async {
       WidgetsFlutterBinding.ensureInitialized();
 
-      // Ensure native LLM libraries are loaded on desktop before bootstrap.
-      InferenceEngine.ensureNativeLibraryLoaded();
-
       // Install our error hooks (FlutterError.onError, PlatformDispatcher
       // .instance.onError, ErrorWidget.builder) BEFORE SentryFlutter.init
       // so Sentry's own integrations layer on top and chain to ours
