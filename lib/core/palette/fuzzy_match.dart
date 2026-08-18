@@ -46,3 +46,9 @@ double fuzzyBestScore(String input, Iterable<String> candidates) {
   }
   return best;
 }
+
+/// Compatibility wrapper matching the requested signature.
+/// Scales the double score [0.0, 1.0] to an integer range, typically [0, 100].
+int score(String query, String target) {
+  return (fuzzyScore(query, target) * 100).round();
+}
