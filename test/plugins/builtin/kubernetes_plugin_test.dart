@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hamma/core/ai/command_risk_assessor.dart';
 import 'package:hamma/plugins/builtin/kubernetes_plugin.dart';
 import 'package:hamma/plugins/hamma_api.dart';
-import 'package:hamma/plugins/hamma_plugin.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockHammaApi extends Mock implements HammaApi {}
