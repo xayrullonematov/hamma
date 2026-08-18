@@ -70,4 +70,31 @@ Here you go:
       throwsA(isA<RunbookDrafterException>()),
     );
   });
+
+  test('throws ArgumentError if prompt is empty or whitespace', () async {
+    final drafter = RunbookAiDrafter(
+      aiSettings: settings,
+      overrideCall: (_) async => '{}',
+    );
+    await expectLater(
+      drafter.draftFromGoal(''),
+      throwsA(isA<ArgumentError>().having((e) => e.message, 'message', 'Prompt cannot be empty')),
+    );
+    await expectLater(
+      drafter.draftFromGoal('   \n  '),
+      throwsA(isA<ArgumentError>().having((e) => e.message, 'message', 'Prompt cannot be empty')),
+    );
+  });
+
+  test('throws ArgumentError if prompt is longer than 1000 characters', () async {
+    final drafter = RunbookAiDrafter(
+      aiSettings: settings,
+      overrideCall: (_) async => '{}',
+    );
+    final longPrompt = 'a' * 1001;
+    await expectLater(
+      drafter.draftFromGoal(longPrompt),
+      throwsA(isA<ArgumentError>().having((e) => e.message, 'message', 'Prompt cannot be longer than 1000 characters')),
+    );
+  });
 }
