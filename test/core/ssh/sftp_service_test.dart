@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hamma/core/ssh/sftp_service.dart';
-import 'package:hamma/core/ssh/ssh_service.dart';
 import 'package:hamma/core/storage/trusted_host_key_storage.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -182,7 +181,6 @@ void main() {
     test('writeFileWithSudoFallback triggers sudo fallback on permission denied', () async {
       service.setClientsForTest(mockSSHClient, mockSftpClient);
 
-      final mockFile = MockSftpFile();
       final mockTempFile = MockSftpFile();
       final mockSession = MockSSHSession();
 
