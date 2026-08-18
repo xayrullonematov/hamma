@@ -125,4 +125,47 @@ void main() {
     expect(sessions.map((s) => s.sessionId), ['new']);
     expect(old, isNull);
   });
+
+  test('clearServer removes all sessions and index for a server', () async {
+    const store = TerminalSessionStore();
+    await store.save(
+      const TerminalSession(
+        serverId: 'srv-1',
+        sessionId: 'term-1',
+        serverName: 'prod',
+        scrollback: 'data',
+        createdAtMs: 1,
+        updatedAtMs: 10,
+      ),
+    );
+    await store.save(
+      const TerminalSession(
+        serverId: 'srv-1',
+        sessionId: 'term-2',
+        serverName: 'prod',
+        scrollback: 'data',
+        createdAtMs: 2,
+        updatedAtMs: 20,
+      ),
+    );
+
+    var sessions = await store.listSessions(serverId: 'srv-1');
+    expect(sessions.length, 2);
+
+    await store.clearServer(serverId: 'srv-1');
+
+    sessions = await store.listSessions(serverId: 'srv-1');
+    expect(sessions.length, 0);
+
+    final session1 = await store.loadSession(
+      serverId: 'srv-1',
+      sessionId: 'term-1',
+    );
+    final session2 = await store.loadSession(
+      serverId: 'srv-1',
+      sessionId: 'term-2',
+    );
+    expect(session1, isNull);
+    expect(session2, isNull);
+  });
 }
