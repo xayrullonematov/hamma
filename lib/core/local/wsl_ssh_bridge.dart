@@ -21,9 +21,9 @@ class WslSshBridge {
         'wsl.exe', ['bash', '-c', 'echo \$USER']);
     final wslUser = (userResult.stdout as String).trim();
 
-    // Run the full setup as a single bash script piped to wsl.
+    // Run the full setup as a single bash script.
     // This installs sshd, sets a known password, enables PasswordAuth,
-    // sets port, and adds NOPASSWD sudo — all in one shot.
+    // and sets port — all in one shot as root.
     const setupScript = r'''
 set -e
 # Install openssh-server if missing
@@ -34,24 +34,21 @@ grep -q "Port 2299" /etc/ssh/sshd_config || echo "Port 2299" >> /etc/ssh/sshd_co
 grep -q "PasswordAuthentication yes" /etc/ssh/sshd_config || echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
 sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
 sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-# Set a known password for the WSL user so SSH can auth
-echo "${USER}:hamma_local_bridge_2024" | chpasswd
-# Passwordless sudo
-echo "${USER} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/hamma
-chmod 0440 /etc/sudoers.d/hamma
+# Set a known password for the WSL user ($1) so SSH can auth
+echo "$1:hamma_local_bridge_2024" | chpasswd
 # Regenerate host keys if missing
 [ -f /etc/ssh/ssh_host_rsa_key ] || ssh-keygen -A
 ''';
 
-    await Process.run('wsl.exe', ['bash', '-c', 'sudo bash -c "\$@"', '--', setupScript]);
+    await Process.run('wsl.exe', ['-u', 'root', 'bash', '-c', setupScript, '--', wslUser]);
     return wslUser;
   }
 
   /// Starts sshd inside WSL on _wsldPort (if not already running).
   static Future<void> startSshd() async {
     await Process.run('wsl.exe', [
-      'bash', '-c',
-      'pgrep -f "sshd.*2299" >/dev/null || sudo /usr/sbin/sshd -p 2299'
+      '-u', 'root', 'bash', '-c',
+      'pgrep -f "sshd.*2299" >/dev/null || /usr/sbin/sshd -p 2299'
     ]);
   }
 

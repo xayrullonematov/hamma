@@ -84,12 +84,6 @@ class LocalShellService implements ShellService {
         _workingDirectory = (homeR.stdout as String).trim();
         final userR = await Process.run('wsl.exe', ['bash', '-c', 'echo \$USER']);
         _wslUser = (userR.stdout as String).trim();
-
-        // Passwordless sudo setup
-        await Process.run('wsl.exe', [
-          'bash', '-c',
-          'echo "\$USER ALL=(ALL) NOPASSWD:ALL" | sudo SUDO_ASKPASS=/bin/true sudo -A tee /etc/sudoers.d/hamma-nopasswd >/dev/null 2>&1 || true'
-        ], environment: {'USER': _wslUser});
       } else {
         _workingDirectory = workingDirectory ?? Platform.environment['HOME'] ?? Directory.current.path;
       }
