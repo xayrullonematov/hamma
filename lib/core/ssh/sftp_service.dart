@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
+import 'package:meta/meta.dart';
 
 import '../storage/trusted_host_key_storage.dart';
 import 'ssh_service.dart'
@@ -23,6 +24,12 @@ class SftpService {
   final TrustedHostKeyStorage _trustedHostKeyStorage;
 
   bool get isConnected => _sshClient != null && _sftpClient != null;
+
+  @visibleForTesting
+  void setClientsForTest(SSHClient sshClient, SftpClient sftpClient) {
+    _sshClient = sshClient;
+    _sftpClient = sftpClient;
+  }
 
   SftpClient get client {
     final client = _sftpClient;
