@@ -76,7 +76,8 @@ dev_dependencies:
   # state-machine integration tests to advance auto-reconnect timers
   # without sleeping in real time. Already pulled transitively by
   # flutter_test, listed here so the dependency is explicit and pinned.
-  fake_async: ^1.3.1
+  fake_async: ^1.3.3
+  mocktail: ^1.0.5
 
 dependency_overrides:
   fllama:

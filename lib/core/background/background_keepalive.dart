@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
 import 'package:workmanager/workmanager.dart';
 
 import '../backup/backup_service.dart';
@@ -14,9 +15,9 @@ void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     try {
       if (task == BackgroundKeepalive.healthTaskName) {
-        return await _handleHealthTask();
+        return await handleHealthTask();
       } else if (task == BackgroundKeepalive.backupTaskName) {
-        return await _handleBackupTask();
+        return await handleBackupTask();
       }
       return true;
     } catch (e) {
@@ -25,7 +26,8 @@ void callbackDispatcher() {
   });
 }
 
-Future<bool> _handleHealthTask() async {
+@visibleForTesting
+Future<bool> handleHealthTask() async {
   final prefs = const AppPrefsStorage();
   if (!await prefs.isHealthMonitoringEnabled()) {
     return true;
@@ -104,7 +106,8 @@ Future<bool> _handleHealthTask() async {
   return true;
 }
 
-Future<bool> _handleBackupTask() async {
+@visibleForTesting
+Future<bool> handleBackupTask() async {
   try {
     final backupService = BackupService();
     await backupService.backupToDestination();
