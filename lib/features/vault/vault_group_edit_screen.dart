@@ -101,7 +101,7 @@ class _VaultGroupEditScreenState extends State<VaultGroupEditScreen> {
 
     final savedGroup = await _storage.upsertGroup(group);
 
-    for (final f in _fields) {
+    await Future.wait(_fields.map((f) {
       final secret = VaultSecret(
         id: f.secretId ?? '',
         name: f.nameController.text.trim(),
@@ -109,8 +109,8 @@ class _VaultGroupEditScreenState extends State<VaultGroupEditScreen> {
         groupId: savedGroup.id,
         updatedAt: DateTime.now(),
       );
-      await _storage.upsert(secret);
-    }
+      return _storage.upsert(secret);
+    }));
 
     if (mounted) {
       Navigator.of(context).popUntil((route) => route.isFirst);
