@@ -110,7 +110,7 @@ void main() {
         adapter: adapter,
         deviceId: 'dev-1',
         prefix: 'hamma/',
-        // Bug: encrypter is a no-op — returns plaintext.
+        // Intentional fault: encrypter is a no-op — returns plaintext.
         encrypter: (p) => p,
         decrypter: (c) => c,
         clock: () => DateTime.utc(2026, 5, 2, 12, 0, 0),
