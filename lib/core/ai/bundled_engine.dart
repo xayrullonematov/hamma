@@ -69,15 +69,7 @@ class LlamaCppBackend implements InferenceBackend {
   @override
   bool get isAvailable {
     if (kIsWeb) return false;
-    if (Platform.isAndroid || Platform.isIOS) return true;
-
-    // Desktop: check the native lib exists next to the executable
-    try {
-      InferenceEngine.ensureNativeLibraryLoaded();
-      return true;
-    } catch (_) {
-      return false;
-    }
+    return true;
   }
 
   @override
@@ -91,9 +83,6 @@ class LlamaCppBackend implements InferenceBackend {
     if (!File(modelPath).existsSync()) {
       throw StateError('Model file not found: $modelPath');
     }
-
-    // Set library path before FFI calls on desktop
-    InferenceEngine.ensureNativeLibraryLoaded();
 
     // We try to load the model. This will throw if the native library is missing.
     try {
