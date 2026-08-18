@@ -67,58 +67,62 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
     final controller = TextEditingController();
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: _surfaceColor,
-        elevation: 0,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(color: AppColors.borderStrong, width: 1),
-        ),
-        title: const Text(
-          'BULK COMMAND',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontFamily: AppColors.monoFamily,
-            fontFamilyFallback: AppColors.monoFallback,
-            letterSpacing: 1.5,
-            fontWeight: FontWeight.w800,
-            fontSize: 14,
-          ),
-        ),
-        content: TextField(
-          controller: controller,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontFamily: AppColors.monoFamily,
-            fontFamilyFallback: AppColors.monoFallback,
-          ),
-          decoration: const InputDecoration(
-            hintText: '\$ enter command (e.g. uptime)',
-            hintStyle: TextStyle(
-              color: AppColors.textFaint,
-              fontFamily: AppColors.monoFamily,
-              fontFamilyFallback: AppColors.monoFallback,
+      builder:
+          (context) => AlertDialog(
+            backgroundColor: _surfaceColor,
+            elevation: 0,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.zero,
+              side: BorderSide(color: AppColors.borderStrong, width: 1),
             ),
+            title: const Text(
+              'BULK COMMAND',
+              style: TextStyle(
+                color: AppColors.textPrimary,
+                fontFamily: AppColors.monoFamily,
+                fontFamilyFallback: AppColors.monoFallback,
+                letterSpacing: 1.5,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+              ),
+            ),
+            content: TextField(
+              controller: controller,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontFamily: AppColors.monoFamily,
+                fontFamilyFallback: AppColors.monoFallback,
+              ),
+              decoration: const InputDecoration(
+                hintText: '\$ enter command (e.g. uptime)',
+                hintStyle: TextStyle(
+                  color: AppColors.textFaint,
+                  fontFamily: AppColors.monoFamily,
+                  fontFamilyFallback: AppColors.monoFallback,
+                ),
+              ),
+              autofocus: true,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'CANCEL',
+                  style: TextStyle(color: _mutedColor),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final cmd = controller.text.trim();
+                  if (cmd.isNotEmpty) {
+                    Navigator.pop(context);
+                    _executeBulkAction(cmd);
+                  }
+                },
+                child: const Text('EXECUTE'),
+              ),
+            ],
           ),
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL', style: TextStyle(color: _mutedColor)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final cmd = controller.text.trim();
-              if (cmd.isNotEmpty) {
-                Navigator.pop(context);
-                _executeBulkAction(cmd);
-              }
-            },
-            child: const Text('EXECUTE'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -129,28 +133,33 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
 
     setState(() {
       _isExecutingBulkCommand = true;
-      _bulkCommandResults = {for (var s in _servers) s.id: 'Executing...'};
+      _bulkCommandResults.clear();
+      for (var s in _servers) {
+        _bulkCommandResults[s.id] = 'Executing...';
+      }
     });
 
     _showBulkResultsSheet(command);
 
-    _fleetService.executeBulkCommand(
-      _servers,
-      command,
-      onServerResult: (serverId, result) {
-        if (mounted) {
-          setState(() {
-            _bulkCommandResults[serverId] = result;
-          });
-        }
-      },
-    ).then((_) {
-      if (mounted) {
-        setState(() {
-          _isExecutingBulkCommand = false;
+    _fleetService
+        .executeBulkCommand(
+          _servers,
+          command,
+          onServerResult: (serverId, result) {
+            if (mounted) {
+              setState(() {
+                _bulkCommandResults[serverId] = result;
+              });
+            }
+          },
+        )
+        .then((_) {
+          if (mounted) {
+            setState(() {
+              _isExecutingBulkCommand = false;
+            });
+          }
         });
-      }
-    });
   }
 
   void _showBulkResultsSheet(String command) {
@@ -158,12 +167,13 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _BulkResultsOverlay(
-        command: command,
-        servers: _servers,
-        resultsProvider: () => _bulkCommandResults,
-        isExecutingProvider: () => _isExecutingBulkCommand,
-      ),
+      builder:
+          (context) => _BulkResultsOverlay(
+            command: command,
+            servers: _servers,
+            resultsProvider: () => _bulkCommandResults,
+            isExecutingProvider: () => _isExecutingBulkCommand,
+          ),
     );
   }
 
@@ -411,12 +421,13 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
                         metricColorBuilder: _metricColor,
                       );
                     }, childCount: filteredServers.length),
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 450,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      mainAxisExtent: 286,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 450,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 16,
+                          mainAxisExtent: 286,
+                        ),
                   ),
                 ),
             ],
@@ -442,7 +453,10 @@ class _FleetDashboardScreenState extends State<FleetDashboardScreen> {
                     border: InputBorder.none,
                     hintStyle: TextStyle(color: _mutedColor),
                   ),
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 18),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                  ),
                   onChanged: (value) {
                     setState(() {
                       _searchQuery = value;
@@ -563,143 +577,149 @@ class _BulkResultsOverlayState extends State<_BulkResultsOverlay> {
           initialChildSize: 0.7,
           minChildSize: 0.4,
           maxChildSize: 0.95,
-          builder: (context, scrollController) => Container(
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.zero,
-              border: Border(
-                top: BorderSide(color: AppColors.borderStrong, width: 1),
-                left: BorderSide(color: AppColors.borderStrong, width: 1),
-                right: BorderSide(color: AppColors.borderStrong, width: 1),
-              ),
-            ),
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                Container(
-                  width: 40,
-                  height: 2,
-                  color: AppColors.borderStrong,
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.bolt, color: AppColors.textPrimary),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'BULK_RESULTS',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: AppColors.textPrimary,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.6,
-                                fontFamily: AppColors.monoFamily,
-                                fontFamilyFallback: AppColors.monoFallback,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '\$ ${widget.command}',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: AppColors.textMuted,
-                                fontFamily: AppColors.monoFamily,
-                                fontFamilyFallback: AppColors.monoFallback,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (isExecuting)
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                    ],
+          builder:
+              (context, scrollController) => Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.zero,
+                  border: Border(
+                    top: BorderSide(color: AppColors.borderStrong, width: 1),
+                    left: BorderSide(color: AppColors.borderStrong, width: 1),
+                    right: BorderSide(color: AppColors.borderStrong, width: 1),
                   ),
                 ),
-                Expanded(
-                  child: ListView.separated(
-                    controller: scrollController,
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-                    itemCount: widget.servers.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final server = widget.servers[index];
-                      final result = results[server.id] ?? 'Pending...';
-                      final isError = result.startsWith('Error:');
-                      final isPending =
-                          result == 'Executing...' || result == 'Pending...';
-
-                      return Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.scaffoldBackground,
-                          borderRadius: BorderRadius.zero,
-                          border: Border.all(
-                            color: isError
-                                ? AppColors.danger
-                                : isPending
-                                    ? AppColors.border
-                                    : AppColors.borderStrong,
-                            width: 1,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                child: Column(
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 40,
+                      height: 2,
+                      color: AppColors.borderStrong,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.bolt, color: AppColors.textPrimary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  server.name.toUpperCase(),
-                                  style: const TextStyle(
+                                  'BULK_RESULTS',
+                                  style: theme.textTheme.titleMedium?.copyWith(
                                     color: AppColors.textPrimary,
                                     fontWeight: FontWeight.w800,
-                                    letterSpacing: 1.2,
+                                    letterSpacing: 1.6,
                                     fontFamily: AppColors.monoFamily,
                                     fontFamilyFallback: AppColors.monoFallback,
                                   ),
                                 ),
-                                const Spacer(),
-                                if (!isPending)
-                                  Icon(
-                                    isError
-                                        ? Icons.error_outline
-                                        : Icons.check_box_outline_blank,
-                                    size: 16,
-                                    color: isError
-                                        ? AppColors.danger
-                                        : AppColors.textPrimary,
+                                const SizedBox(height: 4),
+                                Text(
+                                  '\$ ${widget.command}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: AppColors.textMuted,
+                                    fontFamily: AppColors.monoFamily,
+                                    fontFamilyFallback: AppColors.monoFallback,
                                   ),
+                                ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              result,
-                              style: TextStyle(
-                                color: isError
-                                    ? AppColors.danger
-                                    : isPending
-                                        ? AppColors.textMuted
-                                        : AppColors.textPrimary,
-                                fontSize: 13,
-                                fontFamily: AppColors.monoFamily,
-                                fontFamilyFallback: AppColors.monoFallback,
+                          ),
+                          if (isExecuting)
+                            const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.separated(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                        itemCount: widget.servers.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final server = widget.servers[index];
+                          final result = results[server.id] ?? 'Pending...';
+                          final isError = result.startsWith('Error:');
+                          final isPending =
+                              result == 'Executing...' ||
+                              result == 'Pending...';
+
+                          return Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.scaffoldBackground,
+                              borderRadius: BorderRadius.zero,
+                              border: Border.all(
+                                color:
+                                    isError
+                                        ? AppColors.danger
+                                        : isPending
+                                        ? AppColors.border
+                                        : AppColors.borderStrong,
+                                width: 1,
                               ),
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      server.name.toUpperCase(),
+                                      style: const TextStyle(
+                                        color: AppColors.textPrimary,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.2,
+                                        fontFamily: AppColors.monoFamily,
+                                        fontFamilyFallback:
+                                            AppColors.monoFallback,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    if (!isPending)
+                                      Icon(
+                                        isError
+                                            ? Icons.error_outline
+                                            : Icons.check_box_outline_blank,
+                                        size: 16,
+                                        color:
+                                            isError
+                                                ? AppColors.danger
+                                                : AppColors.textPrimary,
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  result,
+                                  style: TextStyle(
+                                    color:
+                                        isError
+                                            ? AppColors.danger
+                                            : isPending
+                                            ? AppColors.textMuted
+                                            : AppColors.textPrimary,
+                                    fontSize: 13,
+                                    fontFamily: AppColors.monoFamily,
+                                    fontFamilyFallback: AppColors.monoFallback,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
         ),
       ),
     );
@@ -783,9 +803,7 @@ class _FleetMetricsCard extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: isAvailable
-                        ? Colors.transparent
-                        : AppColors.danger,
+                    color: isAvailable ? Colors.transparent : AppColors.danger,
                     borderRadius: BorderRadius.zero,
                     border: Border.all(
                       color: isAvailable ? _successColor : AppColors.danger,
@@ -795,9 +813,8 @@ class _FleetMetricsCard extends StatelessWidget {
                   child: Text(
                     isAvailable ? 'ONLINE' : 'OFFLINE',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: isAvailable
-                          ? _successColor
-                          : AppColors.textPrimary,
+                      color:
+                          isAvailable ? _successColor : AppColors.textPrimary,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.6,
                       fontFamily: AppColors.monoFamily,
