@@ -51,12 +51,20 @@ class TerminalSessionStore {
 
   Future<TerminalSession?> loadLatest({required String serverId}) async {
     final sessions = await listSessions(serverId: serverId);
-    for (final metadata in sessions) {
-      final session = await loadSession(
-        serverId: serverId,
-        sessionId: metadata.sessionId,
+    if (sessions.isEmpty) return null;
+
+    const batchSize = 5;
+    for (var i = 0; i < sessions.length; i += batchSize) {
+      final batch = sessions.skip(i).take(batchSize);
+      final results = await Future.wait(
+        batch.map(
+          (metadata) =>
+              loadSession(serverId: serverId, sessionId: metadata.sessionId),
+        ),
       );
-      if (session != null) return session;
+      for (final session in results) {
+        if (session != null) return session;
+      }
     }
     return null;
   }
