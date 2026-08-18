@@ -136,10 +136,16 @@ class ApiKeyStorage {
     );
     final apiKeys = <AiProvider, String>{};
 
-    for (final provider in AiProvider.values) {
-      final storedKey = await loadApiKey(provider);
-      if (storedKey != null) {
-        apiKeys[provider] = storedKey;
+    final loadedKeys = await Future.wait(
+      AiProvider.values.map((provider) async {
+        final key = await loadApiKey(provider);
+        return (provider, key);
+      }),
+    );
+
+    for (final (provider, key) in loadedKeys) {
+      if (key != null) {
+        apiKeys[provider] = key;
       }
     }
 
