@@ -58,9 +58,14 @@ class _VaultGroupDetailScreenState extends State<VaultGroupDetailScreen> {
 
   Future<void> _loadSecrets() async {
     final secrets = await _storage.loadByGroup(widget.group.id);
+
+    final accessedTimesList = await Future.wait(
+      secrets.map((s) => _accessLog.lastAccessed(s.id))
+    );
+
     final times = <String, DateTime?>{};
-    for (final s in secrets) {
-      times[s.id] = await _accessLog.lastAccessed(s.id);
+    for (int i = 0; i < secrets.length; i++) {
+      times[secrets[i].id] = accessedTimesList[i];
     }
     
     if (mounted) {
