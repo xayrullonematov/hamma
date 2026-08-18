@@ -43,6 +43,41 @@ class AiCliScreen extends StatefulWidget {
 }
 
 class _AiCliScreenState extends State<AiCliScreen> {
+  List<String> _parseCommand(String command) {
+    final args = <String>[];
+    var current = StringBuffer();
+    var inQuotes = false;
+
+    for (var i = 0; i < command.length; i++) {
+      final c = command[i];
+      if (c == '"') {
+        inQuotes = !inQuotes;
+      } else if (c == ' ' && !inQuotes) {
+        if (current.isNotEmpty) {
+          args.add(current.toString());
+          current.clear();
+        }
+      } else {
+        current.write(c);
+      }
+    }
+
+    if (current.isNotEmpty) {
+      args.add(current.toString());
+    }
+
+    return args;
+  }
+
+  String _getActualExecutable(String executable) {
+    if (!Platform.isWindows) return executable;
+    if (executable == 'npm') return 'npm.cmd';
+    if (executable == 'claude') return 'claude.cmd';
+    if (executable == 'codex') return 'codex.cmd';
+    if (executable == 'gemini') return 'gemini.cmd';
+    return executable;
+  }
+
   static const _clis = [
     _AiCli(
       id: 'claude',
@@ -107,12 +142,19 @@ class _AiCliScreenState extends State<AiCliScreen> {
           final out = await widget.sshService!.execute('command -v ${cli.checkCommand.split(' ').first} >/dev/null 2>&1 && echo 1 || echo 0');
           _installed[cli.id] = out.trim() == '1';
         } else {
-          final result = await Process.run(
-            cli.checkCommand.split(' ').first,
-            [cli.checkCommand.split(' ').last],
-            runInShell: true,
-          );
-          _installed[cli.id] = result.exitCode == 0;
+          final parts = _parseCommand(cli.checkCommand);
+          if (parts.isNotEmpty) {
+            final executable = _getActualExecutable(parts.first);
+            final arguments = parts.length > 1 ? parts.sublist(1) : <String>[];
+            final result = await Process.run(
+              executable,
+              arguments,
+              runInShell: false,
+            );
+            _installed[cli.id] = result.exitCode == 0;
+          } else {
+             _installed[cli.id] = false;
+          }
         }
       } catch (_) {
         _installed[cli.id] = false;
@@ -166,9 +208,18 @@ class _AiCliScreenState extends State<AiCliScreen> {
         if (widget.sshService != null) {
           await widget.sshService!.execute(cli.installCommand);
         } else {
-          final installResult = await (Platform.isWindows
-              ? Process.run('cmd', ['/c', cli.installCommand], runInShell: false, workingDirectory: dir)
-              : Process.run('/bin/sh', ['-c', cli.installCommand], runInShell: false, workingDirectory: dir));
+          final parts = _parseCommand(cli.installCommand);
+          if (parts.isEmpty) throw Exception('Invalid install command');
+
+          final executable = _getActualExecutable(parts.first);
+          final arguments = parts.length > 1 ? parts.sublist(1) : <String>[];
+
+          final installResult = await Process.run(
+            executable,
+            arguments,
+            runInShell: false,
+            workingDirectory: dir,
+          );
 
           if (installResult.exitCode != 0) {
             if (mounted) {
@@ -591,11 +642,53 @@ class _AiCliTerminalScreenState extends State<_AiCliTerminalScreen> {
           }
         });
       } else {
+        // Simple manual parsing since we cannot easily access the State method from here,
+        // but for safety we want to ensure spaces in args are handled minimally.
+        // For production scale, _parseCommand and _getActualExecutable should be in a utility class.
+
+        final commandStr = widget.cli.command;
+        final args = <String>[];
+        var current = StringBuffer();
+        var inQuotes = false;
+        for (var i = 0; i < commandStr.length; i++) {
+          final c = commandStr[i];
+          if (c == '"') {
+            inQuotes = !inQuotes;
+          } else if (c == ' ' && !inQuotes) {
+            if (current.isNotEmpty) {
+              args.add(current.toString());
+              current.clear();
+            }
+          } else {
+            current.write(c);
+          }
+        }
+        if (current.isNotEmpty) {
+          args.add(current.toString());
+        }
+
+        if (args.isEmpty) return;
+
+        var executable = args.first;
+        if (Platform.isWindows) {
+           if (executable == 'npm') {
+             executable = 'npm.cmd';
+           } else if (executable == 'claude') {
+             executable = 'claude.cmd';
+           } else if (executable == 'codex') {
+             executable = 'codex.cmd';
+           } else if (executable == 'gemini') {
+             executable = 'gemini.cmd';
+           }
+        }
+
+        final arguments = args.length > 1 ? args.sublist(1) : <String>[];
+
         _process = await Process.start(
-          widget.cli.command,
-          [],
+          executable,
+          arguments,
           workingDirectory: widget.workingDirectory,
-          runInShell: true,
+          runInShell: false,
           environment: Platform.environment,
         );
 
