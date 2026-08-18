@@ -254,6 +254,15 @@ class VaultStorage {
   }
 
   /// Returns secrets belonging to [groupId].
+  /// Returns secrets visible to [serverId] (global secrets + secrets scoped to it).
+  Future<List<VaultSecret>> loadVisibleTo(String? serverId) async {
+    final all = await loadAll();
+    return all
+        .where((s) => s.isGlobal || (serverId != null && s.scope == serverId))
+        .toList();
+  }
+
+  /// Returns secrets belonging to [groupId].
   Future<List<VaultSecret>> loadByGroup(String groupId) async {
     final all = await loadAll();
     return all.where((s) => s.groupId == groupId).toList();
