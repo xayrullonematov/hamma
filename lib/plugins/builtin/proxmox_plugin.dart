@@ -33,28 +33,28 @@ class ProxmoxPlugin extends HammaPlugin {
 
   @override
   PluginManifest get manifest => const PluginManifest(
-        id: pluginId,
-        name: 'Proxmox',
-        version: '1.0.0',
-        author: 'Hamma core team',
-        description:
-            'Lists nodes, VMs and containers from a Proxmox VE cluster '
-            'over the HTTPS API using a user-provided API token.',
-        icon: Icons.dns_rounded,
-      );
+    id: pluginId,
+    name: 'Proxmox',
+    version: '1.0.0',
+    author: 'Hamma core team',
+    description:
+        'Lists nodes, VMs and containers from a Proxmox VE cluster '
+        'over the HTTPS API using a user-provided API token.',
+    icon: Icons.dns_rounded,
+  );
 
   @override
   PluginCapabilities get capabilities => const PluginCapabilities(
-        needsNetworkPort: true,
-        // No static hosts; the configured cluster host is merged in
-        // via [resolveDynamicAllowedHosts] at runtime.
-        allowedHosts: <String>[],
-        permissionsSummary:
-            'Reaches your Proxmox VE host on HTTPS (default port 8006). '
-            'The host you configure is the only destination this plugin '
-            'is allowed to call. The API token you enter is stored '
-            'encrypted on this device only.',
-      );
+    needsNetworkPort: true,
+    // No static hosts; the configured cluster host is merged in
+    // via [resolveDynamicAllowedHosts] at runtime.
+    allowedHosts: <String>[],
+    permissionsSummary:
+        'Reaches your Proxmox VE host on HTTPS (default port 8006). '
+        'The host you configure is the only destination this plugin '
+        'is allowed to call. The API token you enter is stored '
+        'encrypted on this device only.',
+  );
 
   @override
   Widget buildPanel(BuildContext context, HammaApi api) =>
@@ -94,8 +94,7 @@ class _ProxmoxConfig {
   bool get isComplete =>
       host.isNotEmpty && tokenId.isNotEmpty && tokenSecret.isNotEmpty;
 
-  Uri buildUri(String path) =>
-      Uri.parse('https://$host:$port/api2/json$path');
+  Uri buildUri(String path) => Uri.parse('https://$host:$port/api2/json$path');
 
   String get authHeader => 'PVEAPIToken=$tokenId=$tokenSecret';
 }
@@ -113,8 +112,8 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
   _ProxmoxConfig? _config;
   bool _loading = true;
   String? _error;
-  List<_Node> _nodes = const [];
-  List<_Resource> _resources = const [];
+  List<ProxmoxNode> _nodes = const [];
+  List<ProxmoxResource> _resources = const [];
 
   @override
   void initState() {
@@ -126,8 +125,12 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
     final host = await widget.api.readConfig(ProxmoxPlugin._hostKey);
     final port = await widget.api.readConfig(ProxmoxPlugin._portKey);
     final tokenId = await widget.api.readConfig(ProxmoxPlugin._tokenIdKey);
-    final tokenSecret = await widget.api.readConfig(ProxmoxPlugin._tokenSecretKey);
-    final allowInsecureStr = await widget.api.readConfig(ProxmoxPlugin._allowInsecureKey);
+    final tokenSecret = await widget.api.readConfig(
+      ProxmoxPlugin._tokenSecretKey,
+    );
+    final allowInsecureStr = await widget.api.readConfig(
+      ProxmoxPlugin._allowInsecureKey,
+    );
     final config = _ProxmoxConfig(
       host: host ?? '',
       port: int.tryParse(port ?? '8006') ?? 8006,
@@ -176,8 +179,8 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
           'Proxmox /cluster/resources returned HTTP ${resourcesResp.statusCode}.',
         );
       }
-      final nodes = _parseNodes(nodesResp.body);
-      final resources = _parseResources(resourcesResp.body);
+      final nodes = parseProxmoxNodes(nodesResp.body);
+      final resources = parseProxmoxResources(resourcesResp.body);
       if (!mounted) return;
       setState(() {
         _nodes = nodes;
@@ -200,10 +203,19 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
     );
     if (updated == null) return;
     await widget.api.writeConfig(ProxmoxPlugin._hostKey, updated.host);
-    await widget.api.writeConfig(ProxmoxPlugin._portKey, updated.port.toString());
+    await widget.api.writeConfig(
+      ProxmoxPlugin._portKey,
+      updated.port.toString(),
+    );
     await widget.api.writeConfig(ProxmoxPlugin._tokenIdKey, updated.tokenId);
-    await widget.api.writeConfig(ProxmoxPlugin._tokenSecretKey, updated.tokenSecret);
-    await widget.api.writeConfig(ProxmoxPlugin._allowInsecureKey, updated.allowInsecure.toString());
+    await widget.api.writeConfig(
+      ProxmoxPlugin._tokenSecretKey,
+      updated.tokenSecret,
+    );
+    await widget.api.writeConfig(
+      ProxmoxPlugin._allowInsecureKey,
+      updated.allowInsecure.toString(),
+    );
     // The configured host feeds the dynamic allow-list; refresh it
     // in place so the very next request sees the new whitelist.
     await widget.api.refreshAllowedHosts();
@@ -224,7 +236,11 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                const Icon(Icons.dns_rounded, color: AppColors.textPrimary, size: 18),
+                const Icon(
+                  Icons.dns_rounded,
+                  color: AppColors.textPrimary,
+                  size: 18,
+                ),
                 const SizedBox(width: 10),
                 Text(
                   'PROXMOX'
@@ -296,7 +312,11 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded, color: AppColors.danger, size: 32),
+              const Icon(
+                Icons.error_outline_rounded,
+                color: AppColors.danger,
+                size: 32,
+              ),
               const SizedBox(height: 12),
               Text(
                 _error!,
@@ -321,7 +341,8 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
         for (final n in _nodes)
           _Row(
             primary: n.name,
-            secondary: 'status: ${n.status}  ·  cpu: ${n.cpu.toStringAsFixed(1)}%  ·  mem: ${n.memMb} MiB',
+            secondary:
+                'status: ${n.status}  ·  cpu: ${n.cpu.toStringAsFixed(1)}%  ·  mem: ${n.memMb} MiB',
           ),
         _Section(title: 'GUESTS', count: _resources.length),
         for (final r in _resources)
@@ -331,44 +352,6 @@ class _ProxmoxPanelState extends State<_ProxmoxPanel> {
           ),
       ],
     );
-  }
-
-  List<_Node> _parseNodes(String body) {
-    final decoded = jsonDecode(body);
-    if (decoded is! Map<String, dynamic>) return const [];
-    final data = decoded['data'];
-    if (data is! List) return const [];
-    return data
-        .whereType<Map<String, dynamic>>()
-        .map((m) => _Node(
-              name: (m['node'] ?? '?').toString(),
-              status: (m['status'] ?? 'unknown').toString(),
-              // CPU is reported as 0..1; surface as a percentage.
-              cpu: ((m['cpu'] as num?)?.toDouble() ?? 0) * 100,
-              memMb: ((m['mem'] as num?)?.toInt() ?? 0) ~/ (1024 * 1024),
-            ))
-        .toList(growable: false);
-  }
-
-  List<_Resource> _parseResources(String body) {
-    final decoded = jsonDecode(body);
-    if (decoded is! Map<String, dynamic>) return const [];
-    final data = decoded['data'];
-    if (data is! List) return const [];
-    return data
-        .whereType<Map<String, dynamic>>()
-        .where((m) {
-          final t = m['type'];
-          return t == 'qemu' || t == 'lxc';
-        })
-        .map((m) => _Resource(
-              type: (m['type'] ?? '?').toString(),
-              vmid: (m['vmid'] ?? '?').toString(),
-              name: (m['name'] ?? '?').toString(),
-              status: (m['status'] ?? 'unknown').toString(),
-              node: (m['node'] ?? '-').toString(),
-            ))
-        .toList(growable: false);
   }
 }
 
@@ -392,9 +375,13 @@ class _ProxmoxConfigDialogState extends State<_ProxmoxConfigDialog> {
   void initState() {
     super.initState();
     _host = TextEditingController(text: widget.initial?.host ?? '');
-    _port = TextEditingController(text: (widget.initial?.port ?? 8006).toString());
+    _port = TextEditingController(
+      text: (widget.initial?.port ?? 8006).toString(),
+    );
     _tokenId = TextEditingController(text: widget.initial?.tokenId ?? '');
-    _tokenSecret = TextEditingController(text: widget.initial?.tokenSecret ?? '');
+    _tokenSecret = TextEditingController(
+      text: widget.initial?.tokenSecret ?? '',
+    );
     _allowInsecure = widget.initial?.allowInsecure ?? false;
   }
 
@@ -436,9 +423,7 @@ class _ProxmoxConfigDialogState extends State<_ProxmoxConfigDialog> {
             TextField(
               controller: _tokenSecret,
               obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'API token secret',
-              ),
+              decoration: const InputDecoration(labelText: 'API token secret'),
             ),
             const SizedBox(height: 8),
             CheckboxListTile(
@@ -541,8 +526,9 @@ class _Row extends StatelessWidget {
   }
 }
 
-class _Node {
-  const _Node({
+@visibleForTesting
+class ProxmoxNode {
+  const ProxmoxNode({
     required this.name,
     required this.status,
     required this.cpu,
@@ -555,8 +541,9 @@ class _Node {
   final int memMb;
 }
 
-class _Resource {
-  const _Resource({
+@visibleForTesting
+class ProxmoxResource {
+  const ProxmoxResource({
     required this.type,
     required this.vmid,
     required this.name,
@@ -569,4 +556,48 @@ class _Resource {
   final String name;
   final String status;
   final String node;
+}
+
+@visibleForTesting
+List<ProxmoxNode> parseProxmoxNodes(String body) {
+  final decoded = jsonDecode(body);
+  if (decoded is! Map<String, dynamic>) return const [];
+  final data = decoded['data'];
+  if (data is! List) return const [];
+  return data
+      .whereType<Map<String, dynamic>>()
+      .map(
+        (m) => ProxmoxNode(
+          name: (m['node'] ?? '?').toString(),
+          status: (m['status'] ?? 'unknown').toString(),
+          // CPU is reported as 0..1; surface as a percentage.
+          cpu: ((m['cpu'] as num?)?.toDouble() ?? 0) * 100,
+          memMb: ((m['mem'] as num?)?.toInt() ?? 0) ~/ (1024 * 1024),
+        ),
+      )
+      .toList(growable: false);
+}
+
+@visibleForTesting
+List<ProxmoxResource> parseProxmoxResources(String body) {
+  final decoded = jsonDecode(body);
+  if (decoded is! Map<String, dynamic>) return const [];
+  final data = decoded['data'];
+  if (data is! List) return const [];
+  return data
+      .whereType<Map<String, dynamic>>()
+      .where((m) {
+        final t = m['type'];
+        return t == 'qemu' || t == 'lxc';
+      })
+      .map(
+        (m) => ProxmoxResource(
+          type: (m['type'] ?? '?').toString(),
+          vmid: (m['vmid'] ?? '?').toString(),
+          name: (m['name'] ?? '?').toString(),
+          status: (m['status'] ?? 'unknown').toString(),
+          node: (m['node'] ?? '-').toString(),
+        ),
+      )
+      .toList(growable: false);
 }
