@@ -44,6 +44,42 @@ class VaultExportService {
   static const int _nonceLength = 12;
   static const int _keyLength = 32;
 
+  Future<String> exportToCsv() async {
+    final secrets = await _storage.loadAll();
+    final groups = await _storage.loadAllGroups();
+
+    final buffer = StringBuffer();
+    // Headers
+    buffer.writeln('ID,Name,Value,Group ID,Updated At');
+
+    // Groups lookup
+    final groupLookup = {for (final g in groups) g.id: g.name};
+
+    for (final secret in secrets) {
+      final groupId = secret.groupId ?? '';
+      final groupName = groupLookup[groupId] ?? groupId;
+
+      final row = [
+        _csvEscape(secret.id),
+        _csvEscape(secret.name),
+        _csvEscape(secret.value),
+        _csvEscape(groupName),
+        _csvEscape(secret.updatedAt.toUtc().toIso8601String()),
+      ];
+      buffer.writeln(row.join(','));
+    }
+
+    return buffer.toString();
+  }
+
+  String _csvEscape(String value) {
+    if (value.isEmpty) return '';
+    final needsQuotes = value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r');
+    if (!needsQuotes) return value;
+    final escapedQuotes = value.replaceAll('"', '""');
+    return '"$escapedQuotes"';
+  }
+
   Future<Uint8List> export(String passphrase) async {
     if (passphrase.isEmpty) {
       throw VaultExportException('Passphrase cannot be empty.');
