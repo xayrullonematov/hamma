@@ -144,11 +144,13 @@ class TerminalSessionStore {
 
   Future<void> clearServer({required String serverId}) async {
     final sessions = await listSessions(serverId: serverId);
-    for (final metadata in sessions) {
-      await _secureStorage.delete(
-        key: _sessionKey(serverId, metadata.sessionId),
-      );
-    }
+    await Future.wait(
+      sessions.map(
+        (metadata) => _secureStorage.delete(
+          key: _sessionKey(serverId, metadata.sessionId),
+        ),
+      ),
+    );
     await _secureStorage.delete(key: _indexKey(serverId));
   }
 
@@ -170,11 +172,13 @@ class TerminalSessionStore {
     final keepCount = _maxSessionsPerServer < 1 ? 1 : _maxSessionsPerServer;
     final keep = next.take(keepCount).toList(growable: false);
     final evict = next.skip(keepCount);
-    for (final metadata in evict) {
-      await _secureStorage.delete(
-        key: _sessionKey(metadata.serverId, metadata.sessionId),
-      );
-    }
+    await Future.wait(
+      evict.map(
+        (metadata) => _secureStorage.delete(
+          key: _sessionKey(metadata.serverId, metadata.sessionId),
+        ),
+      ),
+    );
     await _writeIndex(session.serverId, keep);
   }
 
