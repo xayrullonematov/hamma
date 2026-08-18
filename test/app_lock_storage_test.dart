@@ -54,6 +54,22 @@ void main() {
     });
   });
 
+  group('verifyPin', () {
+    test('returns true when PIN matches', () async {
+      await storage.savePin('1234');
+      expect(await storage.verifyPin('1234'), isTrue);
+    });
+
+    test('returns false when PIN does not match', () async {
+      await storage.savePin('1234');
+      expect(await storage.verifyPin('4321'), isFalse);
+    });
+
+    test('returns false when no PIN is saved', () async {
+      expect(await storage.verifyPin('1234'), isFalse);
+    });
+  });
+
   group('deletePin', () {
     test('removes a saved PIN', () async {
       await storage.savePin('4321');
