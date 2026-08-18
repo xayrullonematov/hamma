@@ -10,7 +10,6 @@ import 'package:window_manager/window_manager.dart';
 import 'core/ai/ai_command_service.dart';
 import 'core/ai/ai_provider.dart';
 import 'core/ai/command_risk_assessor.dart';
-import 'core/ai/inference_engine.dart';
 import 'core/background/background_keepalive.dart';
 import 'core/audit/execution_audit_entry.dart';
 import 'core/audit/execution_audit_service.dart';
@@ -73,9 +72,6 @@ void main() {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
-
-      // Ensure native LLM libraries are loaded on desktop before bootstrap.
-      InferenceEngine.ensureNativeLibraryLoaded();
 
       // Install our error hooks (FlutterError.onError, PlatformDispatcher
       // .instance.onError, ErrorWidget.builder) BEFORE SentryFlutter.init
