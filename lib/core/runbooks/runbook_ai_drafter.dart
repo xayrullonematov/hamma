@@ -19,6 +19,12 @@ class RunbookAiDrafter {
   /// Returns a fresh-id, team:false draft. Throws
   /// [RunbookDrafterException] on non-JSON / schema-invalid output.
   Future<Runbook> draftFromGoal(String goal, {String? serverContext}) async {
+    if (goal.trim().isEmpty) {
+      throw ArgumentError('Prompt cannot be empty');
+    }
+    if (goal.length > 1000) {
+      throw ArgumentError('Prompt cannot be longer than 1000 characters');
+    }
     final raw = await _call(_buildPrompt(goal, serverContext));
     final json = _extractJsonObject(raw);
     if (json == null) {
