@@ -9,17 +9,12 @@ import 'package:fllama/fllama.dart';
 class InferenceEngine {
   InferenceEngine();
 
-  /// Deprecated: fllama handles native library loading automatically.
-  /// Kept for compatibility with existing code.
-  static void ensureNativeLibraryLoaded() {}
-
   bool _modelLoaded = false;
   String? _currentModelPath;
 
   /// Validates model path and marks the engine as ready.
   /// Actual loading happens on first inference in fllama.
   Future<bool> loadModel(String modelPath) async {
-    ensureNativeLibraryLoaded();
     final file = File(modelPath);
     if (!await file.exists()) {
       throw Exception('Model file not found at: $modelPath');
@@ -42,31 +37,30 @@ class InferenceEngine {
 
     final request = OpenAiRequest(
       modelPath: modelPath,
-      messages: [
-        Message(Role.user, prompt),
-      ],
+      messages: [Message(Role.user, prompt)],
       maxTokens: 512,
       numGpuLayers: 99, // fllama auto-falls back to CPU if no GPU
     );
 
     // fllamaChat in the current git version uses this signature:
     // void Function(String response, String openaiResponseJsonString, bool done)
-    fllamaChat(
-      request,
-      (String response, String openaiResponseJsonString, bool done) {
-        if (response.isNotEmpty) {
-          if (!controller.isClosed) {
-            controller.add(response);
-          }
+    fllamaChat(request, (
+      String response,
+      String openaiResponseJsonString,
+      bool done,
+    ) {
+      if (response.isNotEmpty) {
+        if (!controller.isClosed) {
+          controller.add(response);
         }
-        
-        if (done) {
-          if (!controller.isClosed) {
-            controller.close();
-          }
+      }
+
+      if (done) {
+        if (!controller.isClosed) {
+          controller.close();
         }
-      },
-    ).catchError((Object e) {
+      }
+    }).catchError((Object e) {
       if (!controller.isClosed) {
         controller.addError(e);
         controller.close();

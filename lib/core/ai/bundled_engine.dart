@@ -69,15 +69,7 @@ class LlamaCppBackend implements InferenceBackend {
   @override
   bool get isAvailable {
     if (kIsWeb) return false;
-    if (Platform.isAndroid || Platform.isIOS) return true;
-
-    // Desktop: check the native lib exists next to the executable
-    try {
-      InferenceEngine.ensureNativeLibraryLoaded();
-      return true;
-    } catch (_) {
-      return false;
-    }
+    return true;
   }
 
   @override
@@ -92,9 +84,6 @@ class LlamaCppBackend implements InferenceBackend {
       throw StateError('Model file not found: $modelPath');
     }
 
-    // Set library path before FFI calls on desktop
-    InferenceEngine.ensureNativeLibraryLoaded();
-
     // We try to load the model. This will throw if the native library is missing.
     try {
       await _engine.loadModel(modelPath);
@@ -104,10 +93,9 @@ class LlamaCppBackend implements InferenceBackend {
 
     _modelPath = modelPath;
     _modelLoaded = true;
-    _modelId =
-        modelId?.trim().isNotEmpty == true
-            ? modelId!.trim()
-            : _deriveModelId(modelPath);
+    _modelId = modelId?.trim().isNotEmpty == true
+        ? modelId!.trim()
+        : _deriveModelId(modelPath);
   }
 
   static String _deriveModelId(String path) {
@@ -182,10 +170,9 @@ class EchoBackend implements InferenceBackend {
     final text = (lastUser['content'] ?? '').toString();
     if (text.isEmpty) return;
     final reply = 'echo: $text';
-    final cap =
-        maxTokens != null && maxTokens > 0 && maxTokens < reply.length
-            ? maxTokens
-            : reply.length;
+    final cap = maxTokens != null && maxTokens > 0 && maxTokens < reply.length
+        ? maxTokens
+        : reply.length;
     var i = 0;
     while (i < cap) {
       final end = (i + chunkSize).clamp(0, cap);
